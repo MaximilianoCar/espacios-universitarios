@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%; /* Asegura que el body y root ocupen toda la altura */
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+.main-content {
+  flex-grow: 1; /* Hace que el contenido crezca y ocupe todo el espacio disponible */
+  background-image: url('./assets/ucvreloj.png'); /* Reemplaza con la URL de tu imagen */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  min-height: 100vh; /* Asegura que siempre cubra al menos la altura de la ventana */
+}
+
+footer {
+  flex-shrink: 0; /* Asegura que el footer esté al final */
+}

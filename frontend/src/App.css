@@ -1,0 +1,126 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+}
+
+.navbar {
+  background-color: #2e5796;
+  padding: 1rem;
+}
+
+.navbar-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.navbar-title {
+  color: white;
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+.navbar-links {
+  list-style: none;
+  display: flex;
+  margin: 0;
+  padding: 0;
+}
+
+.navbar-links li {
+  margin: 0 1rem;
+  color: white;
+  cursor: pointer;
+}
+
+/* Estilo para el menú activo */
+.navbar-links.active {
+  display: flex;
+  flex-direction: column; /* Cambia a columna para el menú móvil */
+}
+
+/* Ocultar enlaces en móviles por defecto */
+@media (max-width: 768px) {
+  .navbar-links {
+    display: none; /* Oculta los enlaces en móviles */
+  }
+
+  .menu-button {
+    display: block; /* Muestra el botón de menú en móviles */
+    background-color: white;
+    color: #2e5796;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+
+  /* Mostrar enlaces cuando el menú está activo */
+  .navbar-links.active {
+    display: flex;
+    flex-direction: column; /* Asegúrate de que se muestren en columna */
+    position: absolute; /* Para que se superpongan al contenido */
+    background-color: #2e5796;
+    top: 60px; /* Ajusta la posición según el navbar */
+    right: 0; /* Alinea a la derecha */
+    width: 100%; /* Ocupa el ancho completo */
+  }
+}
+
+@media (min-width: 769px) {
+  .menu-button {
+    display: none; /* Oculta el botón de menú en pantallas grandes */
+  }
+}
+
+/* Estilo del hero */
+.hero {
+  background-image: url('https://via.placeholder.com/1920x400');
+  background-size: cover;
+  background-position: center;
+  height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  text-align: center;
+}
+
+.hero-button {
+  background-color: #2e5796;
+  color: white;
+  border: none;
+  padding: 0.5rem 1.5rem;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+/* Estilos de las cards */
+.cards {
+  padding: 2rem;
+  text-align: center;
+}
+
+.card-container {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.card {
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 5px;
+  padding: 1rem;
+  margin: 1rem;
+  width: 200px; /* Ancho de las cards */
+  text-align: left;
+}
+
+.card h3 {
+  margin: 0 0 0.5rem 0;
+}
+
+.card p {
+  margin: 0;
+}

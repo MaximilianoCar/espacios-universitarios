@@ -1,0 +1,30 @@
+{
+    "semi": true,
+    "tabWidth": 2,
+    "singleQuote": true,
+    "trailingComma": "es5",
+    "printWidth": 80,
+    "useTabs": false,
+    "bracketSpacing": true,
+    "arrowParens": "avoid",
+    "htmlWhitespaceSensitivity": "ignore",
+    "endOfLine": "lf",
+    "jsxSingleQuote": false,
+    "quoteProps": "as-needed",
+    "proseWrap": "preserve",
+    "overrides": [
+      {
+        "files": "*.html",
+        "options": {
+          "printWidth": 120
+        }
+      },
+      {
+        "files": "*.css",
+        "options": {
+          "printWidth": 100
+        }
+      }
+    ]
+  }
+  
