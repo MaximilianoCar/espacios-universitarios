@@ -11,7 +11,8 @@ const Header = () => {
   const navigate = useNavigate();
 
   // Obtener datos del usuario y autenticación del estado de Redux
-  const { user, isAuthenticated } = useSelector(state => state.auth);
+  const { user, role, isAuthenticated } = useSelector(state => state.auth);
+  const showSpacesLink = role !== 'visitor' && role !== 'pending';
 
   // Manejar el cierre de sesión
   const handleLogout = () => {
@@ -37,9 +38,11 @@ const Header = () => {
           <Link to="/events" className="text-white hover:text-gray-300">
             Eventos
           </Link>
-          <Link to="/rooms" className="text-white hover:text-gray-300">
-            Espacios
-          </Link>
+          {showSpacesLink && (
+            <Link to="/rooms" className="text-white hover:text-gray-300">
+              Espacios
+            </Link>
+          )}
 
           {/* Mostrar links según el estado de autenticación */}
           {isAuthenticated ? (

@@ -24,12 +24,15 @@ const RoomsPage = () => {
     axiosInstance
       .get('/rooms')
       .then(response => {
+        console.log('Respuesta de /rooms:', response);
+        console.log('response.data:', response.data);
         setRooms(response.data);
         setFilteredRooms(response.data);
         setLoading(false);
       })
       .catch(error => {
         console.error('Error fetching rooms:', error);
+        console.error('Error response:', error.response);
         setLoading(false);
       });
   }, []);

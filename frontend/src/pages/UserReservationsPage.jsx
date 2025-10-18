@@ -5,6 +5,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SearchBar from '../components/SearchBar';
 import {
+  FaEye,
   FaUpload,
   FaEnvelope,
   FaCalendarAlt,
@@ -218,173 +219,216 @@ const UserReservationsPage = () => {
         </div>
         {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
         {filteredEvents.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full bg-white shadow-md rounded-lg overflow-hidden">
+          <div className="overflow-x-auto shadow-xl rounded-lg">
+            <table className="min-w-full bg-white">
               <thead>
-                <tr className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
-                  <th className="py-3 px-6 text-left">Nombre</th>
-                  <th className="py-2 px-4 text-left">Imagen</th>
-                  <th className="py-3 px-6 text-left">Descripción</th>
-                  <th className="py-3 px-6 text-left">Capacidad</th>
-                  <th className="py-3 px-6 text-left">Costo</th>
-                  <th className="py-3 px-6 text-left">Contacto</th>
-                  <th className="py-3 px-6 text-left">Fecha del Evento</th>
-                  <th className="py-3 px-6 text-left">Reserva</th>
-                  <th className="py-3 px-6 text-left">Estado</th>
-                  <th className="py-3 px-6 text-left">Programa</th>
-                  <th className="py-3 px-6 text-left">Contrato</th>
-                  <th className="py-3 px-6 text-left">X</th>
-                  {/* Nueva columna para acciones */}
+                <tr className="bg-blue-100">
+                  <th className="py-2 px-4 border-b text-left">Nombre</th>
+                  <th className="py-2 px-4 border-b text-left">Espacio</th>
+                  <th className="py-2 px-4 border-b text-left">Imagen</th>
+                  <th className="py-2 px-4 border-b text-left">Descripción</th>
+                  <th className="py-2 px-4 border-b text-left">Capacidad</th>
+                  <th className="py-2 px-4 border-b text-left">Costo</th>
+                  <th className="py-2 px-4 border-b text-left">Contacto</th>
+                  <th className="py-2 px-4 border-b text-left">
+                    Fecha del Evento
+                  </th>
+                  <th className="py-2 px-4 border-b text-left">Reserva</th>
+                  <th className="py-2 px-4 border-b text-left">Estado</th>
+                  <th className="py-2 px-4 border-b text-left">Programa</th>
+                  <th className="py-2 px-4 border-b text-left">Contrato</th>
+                  <th className="py-2 px-4 border-b text-left">Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredEvents.map((event, index) => (
-                  <tr
-                    key={event.id}
-                    className={`${
-                      index % 2 === 0 ? 'bg-gray-100' : 'bg-white'
-                    } hover:bg-gray-200 transition-colors`}
-                  >
-                    <td className="py-3 px-6 font-semibold text-gray-800">
-                      {event.name}
-                    </td>
-                    {/* Mostrar una miniatura de la imagen */}
-                    <td className="py-2 px-4">
-                      {event.imagePath ? (
-                        <img
-                          src={`http://localhost:3000/${event.imagePath}`}
-                          alt={event.name}
-                          className="w-16 h-16 object-cover rounded cursor-pointer hover:opacity-75 transition-opacity duration-200"
-                          onClick={() => handleImageClick(event.imagePath)}
-                        />
-                      ) : (
-                        'Sin imagen'
-                      )}
-                    </td>
-                    {/* Mostrar icono en lugar de descripción */}
-                    <td className="py-3 px-6">
-                      <button
-                        onClick={() => handleShowDescription(event.description)}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        <FaInfoCircle size={20} />
-                      </button>
-                    </td>
-                    <td className="py-3 px-6">{event.capacity}</td>
-                    <td className="py-3 px-6">{event.cost}</td>
-                    {/* Mostrar icono en lugar de contacto */}
-                    <td className="py-3 px-6">
-                      <button
-                        onClick={() => handleShowContact(event.contact)}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        <FaEnvelope size={20} />
-                      </button>
-                    </td>
-                    {/* Fecha del Evento */}
-                    <td className="py-3 px-6">
-                      <button
-                        onClick={() =>
-                          handleShowEventDate({
-                            eventFrom: event.eventFrom,
-                            eventTo: event.eventTo,
-                          })
-                        }
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        <FaCalendarAlt size={20} />
-                      </button>
-                    </td>
-                    {/* Reserva */}
-                    <td className="py-3 px-6">
-                      <button
-                        onClick={() =>
-                          handleShowReservationDate({
-                            reservationFrom: event.reservationFrom,
-                            reservationTo: event.reservationTo,
-                          })
-                        }
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        <FaCalendarAlt size={20} />
-                      </button>
-                    </td>
-                    {/* Estado */}
-                    <td className="py-3 px-6">
-                      {event.status === 'approved'
-                        ? 'Aprobado'
-                        : event.status === 'denied'
-                        ? 'Denegado'
-                        : 'Pendiente'}
-                    </td>
-                    {/* Programa */}
-                    <td className="py-3 px-6">
-                      {event.programPath ? (
-                        <a
-                          href={`http://localhost:3000/${event.programPath}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 underline"
+                {filteredEvents.length > 0 ? (
+                  filteredEvents.map((event, index) => (
+                    <tr key={event.id} className="hover:bg-gray-50">
+                      <td className="py-2 px-4 border-b font-semibold text-gray-800">
+                        {event.name}
+                      </td>
+                      <td className="py-2 px-4 border-b font-semibold text-gray-800">
+                        {event.room?.name || 'N/A'}
+                      </td>
+
+                      {/* Imagen */}
+                      <td className="py-2 px-4 border-b">
+                        {event.imagePath ? (
+                          <img
+                            src={`http://localhost:3000/${event.imagePath}`}
+                            alt={event.name}
+                            className="w-16 h-16 object-cover rounded cursor-pointer hover:opacity-75 transition-opacity duration-200"
+                            onClick={() => handleImageClick(event.imagePath)}
+                          />
+                        ) : (
+                          <span className="text-gray-500 text-sm">
+                            Sin imagen
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Descripción */}
+                      <td className="py-2 px-4 border-b text-center">
+                        <button
+                          onClick={() =>
+                            handleShowDescription(event.description)
+                          }
+                          className="text-blue-600 hover:text-blue-800 transition-colors"
                         >
-                          Ver
-                        </a>
-                      ) : (
-                        <>
-                          {uploadingProgramId === event.id ? (
-                            <div className="flex items-center">
-                              <input
-                                type="file"
-                                onChange={e =>
-                                  handleProgramFileChange(e, event.id)
-                                }
-                                className="text-sm"
-                              />
-                              {programFiles[event.id] && (
-                                <button
-                                  onClick={() => handleUploadProgram(event.id)}
-                                  className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded ml-2 text-sm"
-                                >
-                                  Subir
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setUploadingProgramId(event.id)}
-                              className="flex items-center bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-sm"
-                            >
-                              <FaUpload className="mr-1" /> Cargar
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </td>
-                    {/* Contrato */}
-                    <td className="py-3 px-6">
-                      {event.agreementPath ? (
-                        <a
-                          href={`http://localhost:3000/${event.agreementPath}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 underline"
+                          <FaInfoCircle size={18} />
+                        </button>
+                      </td>
+
+                      <td className="py-2 px-4 border-b">{event.capacity}</td>
+                      <td className="py-2 px-4 border-b">{event.cost}</td>
+
+                      {/* Contacto */}
+                      <td className="py-2 px-4 border-b text-center">
+                        <button
+                          onClick={() => handleShowContact(event.contact)}
+                          className="text-blue-600 hover:text-blue-800 transition-colors"
                         >
-                          Ver
-                        </a>
-                      ) : (
-                        'No disponible'
-                      )}
-                    </td>
-                    {/* Acciones */}
-                    <td className="py-3 px-6">
-                      <button
-                        onClick={() => handleShowDeleteModal(event)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        <FaTrash size={20} />
-                      </button>
+                          <FaEnvelope size={18} />
+                        </button>
+                      </td>
+
+                      {/* Fecha del Evento */}
+                      <td className="py-2 px-4 border-b text-center">
+                        <button
+                          onClick={() =>
+                            handleShowEventDate({
+                              eventFrom: event.eventFrom,
+                              eventTo: event.eventTo,
+                            })
+                          }
+                          className="text-blue-600 hover:text-blue-800 transition-colors"
+                        >
+                          <FaCalendarAlt size={18} />
+                        </button>
+                      </td>
+
+                      {/* Reserva */}
+                      <td className="py-2 px-4 border-b text-center">
+                        <button
+                          onClick={() =>
+                            handleShowReservationDate({
+                              reservationFrom: event.reservationFrom,
+                              reservationTo: event.reservationTo,
+                            })
+                          }
+                          className="text-blue-600 hover:text-blue-800 transition-colors"
+                        >
+                          <FaCalendarAlt size={18} />
+                        </button>
+                      </td>
+
+                      {/* Estado */}
+                      <td className="py-2 px-4 border-b">
+                        <span
+                          className={`px-2 py-1 text-xs font-semibold rounded ${
+                            event.status === 'approved'
+                              ? 'bg-green-100 text-green-800'
+                              : event.status === 'denied'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}
+                        >
+                          {event.status === 'approved'
+                            ? 'Aprobado'
+                            : event.status === 'denied'
+                            ? 'Denegado'
+                            : 'Pendiente'}
+                        </span>
+                      </td>
+
+                      {/* Programa */}
+                      <td className="py-2 px-4 border-b">
+                        {event.programPath ? (
+                          <a
+                            href={`http://localhost:3000/${event.programPath}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs transition-colors w-20"
+                          >
+                            <FaEye className="mr-1" size={12} />
+                            Ver
+                          </a>
+                        ) : (
+                          <>
+                            {uploadingProgramId === event.id ? (
+                              <div className="flex flex-col space-y-1 w-20">
+                                <input
+                                  type="file"
+                                  onChange={e =>
+                                    handleProgramFileChange(e, event.id)
+                                  }
+                                  className="text-xs border rounded p-1 w-full"
+                                />
+                                {programFiles[event.id] && (
+                                  <button
+                                    onClick={() =>
+                                      handleUploadProgram(event.id)
+                                    }
+                                    className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs transition-colors w-full flex items-center justify-center"
+                                  >
+                                    <FaUpload className="mr-1" size={12} />
+                                    Subir
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setUploadingProgramId(event.id)}
+                                className="flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs transition-colors w-20"
+                              >
+                                <FaUpload className="mr-1" size={12} />
+                                Subir
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </td>
+
+                      {/* Contrato */}
+                      <td className="py-2 px-4 border-b">
+                        {event.agreementPath ? (
+                          <a
+                            href={`http://localhost:3000/${event.agreementPath}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs transition-colors w-20"
+                          >
+                            <FaEye className="mr-1" size={12} />
+                            Ver
+                          </a>
+                        ) : (
+                          <span className="text-gray-500 text-sm">
+                            No disponible
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Acciones */}
+                      <td className="py-2 px-4 border-b">
+                        <div className="flex justify-center">
+                          <button
+                            onClick={() => handleShowDeleteModal(event)}
+                            className="flex items-center justify-center bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs transition-colors"
+                          >
+                            <FaTrash className="mr-1" size={12} />
+                            Eliminar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="13" className="py-8 text-center text-gray-500">
+                      No hay eventos disponibles.
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

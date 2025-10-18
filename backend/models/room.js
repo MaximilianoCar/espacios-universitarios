@@ -12,6 +12,13 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'roomId',
         as: 'events', // Alias para los eventos asociados
       });
+
+      Room.belongsToMany(models.User, {
+        through: models.CoordinatorRooms,
+        foreignKey: 'RoomId',
+        otherKey: 'UserId',
+        as: 'coordinators',
+      });
     }
   }
   Room.init(
