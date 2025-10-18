@@ -10,7 +10,7 @@ const SearchBar = ({ placeholder, onSearch }) => {
   };
 
   return (
-    <div className="flex justify-center mt-4">
+    <div className="mt-4">
       <div className="relative w-11/12 max-w-lg">
         <input
           type="text"

@@ -27,18 +27,18 @@ router.get('/events', protect, eventController.getApprovedEvents);
 router.get(
   '/admin/events',
   protect,
-  restrictTo('admin'),
+  restrictTo('admin', 'coordinator'),
   eventController.getAllEvents
 );
 
 // Obtener un evento por ID
-router.get('/events/:eventId', eventController.getEventById);
+router.get('/events/:eventId', protect, eventController.getEventById);
 
 // Actualizar un evento existente con imagen
 router.put(
   '/events/:eventId',
   protect,
-  restrictTo('admin'),
+  restrictTo('admin', 'coordinator', 'requester'),
   uploadImages.single('imageFile'), // Nombre del campo de imagen en el formulario
   eventController.updateEvent
 );
@@ -47,7 +47,7 @@ router.put(
 router.delete(
   '/events/:eventId',
   protect,
-  restrictTo('admin'),
+  restrictTo('requester', 'admin', 'coordinator'),
   eventController.deleteEvent
 );
 
@@ -55,7 +55,7 @@ router.delete(
 router.get(
   '/my-events',
   protect,
-  restrictTo('admin'),
+  restrictTo('requester', 'admin', 'coordinator'),
   eventController.getEventsByUser
 );
 

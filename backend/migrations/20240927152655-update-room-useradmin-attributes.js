@@ -8,12 +8,6 @@ module.exports = {
       unique: true,
       allowNull: false,
     });
-
-    await queryInterface.addColumn('Users', 'ci', {
-      type: Sequelize.STRING,
-      unique: true,
-      allowNull: true, // Puedes ajustar esto según tus necesidades
-    });
   },
 
   async down(queryInterface, Sequelize) {

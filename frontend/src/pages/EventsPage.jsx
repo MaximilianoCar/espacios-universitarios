@@ -22,10 +22,8 @@ const EventsPage = () => {
     axiosInstance
       .get('/events')
       .then(response => {
-        // Filtrar solo los eventos con estado "approved"
-        const approvedEvents = response.data.filter(
-          event => event.status === 'approved'
-        );
+        const approvedEvents = response.data;
+        console.log('Approved Events:', approvedEvents);
         setEvents(approvedEvents);
         setFilteredEvents(approvedEvents);
         setLoading(false);

@@ -27,7 +27,7 @@ const UpdateRoomForm = ({ room, onRoomSaved }) => {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">Actualizar Sala</h2>
+      <h2 className="text-2xl font-bold mb-4 text-center">Actualizar Sala</h2>
       {error && <p className="text-red-500 mb-4">{error}</p>}
       <form onSubmit={handleSubmit}>
         {/* Campos del formulario */}
@@ -90,12 +90,14 @@ const UpdateRoomForm = ({ room, onRoomSaved }) => {
           />
         </div>
         {/* Botón de envío */}
-        <button
-          type="submit"
-          className="bg-blue-600 text-white px-4 py-2 rounded"
-        >
-          Actualizar Sala
-        </button>
+        <div className="flex justify-center">
+          <button
+            type="submit"
+            className="bg-blue-600 text-white px-4 py-2 rounded"
+          >
+            Actualizar Sala
+          </button>
+        </div>
       </form>
     </div>
   );

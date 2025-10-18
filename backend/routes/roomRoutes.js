@@ -18,16 +18,16 @@ router.post(
 );
 
 // Obtener todas las salas
-router.get('/rooms', roomController.getRooms);
+router.get('/rooms', protect, roomController.getRooms);
 
 // Obtener una sala por ID
-router.get('/rooms/:id', roomController.getRoomById);
+router.get('/rooms/:id', protect, roomController.getRoomById);
 
 // Actualizar una sala existente con imagen
 router.put(
   '/rooms/:id',
   protect,
-  restrictTo('admin'),
+  restrictTo('admin', 'coordinator'),
   upload.single('image'), // Aplicar el middleware de subida de imagen
   roomController.updateRoom
 );
