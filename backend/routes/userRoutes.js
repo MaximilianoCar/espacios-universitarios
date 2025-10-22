@@ -25,6 +25,16 @@ router.post(
   userController.createAdmin
 );
 
+//paaara notis de admin
+router.get(
+  '/users/pending-count',
+  protect,
+  restrictTo('admin'),
+  userController.getPendingUsersCount
+);
+
+// Asegúrate de que esta ruta esté ANTES de rutas como '/users/:id'
+
 // Rutas protegidas para el modelo User
 router.get('/users', protect, restrictTo('admin'), userController.getUsers);
 router.get(

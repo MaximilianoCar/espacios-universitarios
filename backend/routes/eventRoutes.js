@@ -31,6 +31,21 @@ router.get(
   eventController.getAllEvents
 );
 
+// para las notificaciones
+router.get(
+  '/events/pending-count',
+  protect,
+  restrictTo('admin', 'coordinator'),
+  eventController.getPendingEventsCount
+);
+
+router.get(
+  '/events/user/count',
+  protect,
+  restrictTo('requester', 'admin', 'coordinator'),
+  eventController.getUserEventsCount
+);
+
 // Obtener un evento por ID
 router.get('/events/:eventId', protect, eventController.getEventById);
 

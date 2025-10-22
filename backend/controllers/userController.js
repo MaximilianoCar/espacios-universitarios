@@ -6,6 +6,7 @@ const bcrypt = require('bcrypt');
 const { addToBlacklist } = require('../utils/blacklist');
 const path = require('path');
 const fs = require('fs').promises;
+const emailService = require('../services/emailService');
 require('dotenv').config();
 
 // Controlador para crear un usuario normal
@@ -314,6 +315,27 @@ exports.requestUpgrade = async (req, res) => {
     user.role = User.ROLES.PENDING;
     await user.save();
 
+    //  notidicacion obtener admins y enviar correos
+    try {
+      const admins = await User.findAll({
+        where: { role: User.ROLES.ADMINISTRATOR },
+      });
+
+      if (admins.length > 0) {
+        const adminEmails = admins.map(admin => admin.email);
+        await emailService.notifyUpgradeRequest(
+          adminEmails,
+          user.email,
+          user.name
+        );
+        console.log(
+          `Notificaciones enviadas a ${adminEmails.length} administradores`
+        );
+      }
+    } catch (emailError) {
+      console.error('Error enviando notificaciones:', emailError);
+    }
+
     res.status(200).json({
       message:
         'Solicitud enviada con éxito. Un administrador revisará tu documento pronto.',
@@ -337,7 +359,6 @@ exports.requestUpgrade = async (req, res) => {
 };
 
 //aprueba solicitud pendiente
-
 exports.approveRequest = async (req, res) => {
   const userId = req.params.id;
 
@@ -376,6 +397,14 @@ exports.approveRequest = async (req, res) => {
     // Usar el método del modelo para cambiar de rol y validar
     await user.upgradeToRequester();
 
+    // notificacion al usuario aprobado
+    try {
+      await emailService.notifyUpgradeResult(user.email, user.name, true, '');
+      console.log(`Notificación de aprobación enviada a: ${user.email}`);
+    } catch (emailError) {
+      console.error('Error enviando notificación de aprobación:', emailError);
+    }
+
     res.status(200).json({
       message:
         'Solicitud aprobada con éxito. El usuario ahora es Solicitante (Requester).',
@@ -409,12 +438,10 @@ exports.rejectRequest = async (req, res) => {
 
     // 1. Eliminar el archivo físico (si existe)
     if (filePath) {
-      // La lógica de eliminación similar a deleteRoom
       const absolutePath = path.join(process.cwd(), filePath);
 
       try {
         await fs.unlink(absolutePath); // Borrar el archivo
-        // Opcional: console.log(`Archivo de certificación eliminado: ${absolutePath}`);
       } catch (fileError) {
         if (fileError.code === 'ENOENT') {
           console.warn(
@@ -425,13 +452,24 @@ exports.rejectRequest = async (req, res) => {
             `Error al eliminar el archivo físico para el usuario ${userId}:`,
             fileError
           );
-          // Opcional: No detener el proceso si el archivo no se puede borrar, solo registrar el error
         }
       }
     }
 
-    // 2. Cambiar el rol a 'visitor' y limpiar el campo en la BD
     await user.changeToVisitor();
+    // notificacion al usuario rechazado
+    try {
+      const comments = req.body.comments || ''; // Opcional: comentarios del admin
+      await emailService.notifyUpgradeResult(
+        user.email,
+        user.name,
+        false,
+        comments
+      );
+      console.log(`Notificación de rechazo enviada a: ${user.email}`);
+    } catch (emailError) {
+      console.error('Error enviando notificación de rechazo:', emailError);
+    }
 
     res.status(200).json({
       message:
@@ -439,7 +477,6 @@ exports.rejectRequest = async (req, res) => {
       user: user,
     });
   } catch (error) {
-    // Captura el error de validación del modelo (ej: si el rol no es 'pending')
     if (error.message.includes('Only pending users can apply.')) {
       return res.status(400).json({ error: error.message });
     }
@@ -563,5 +600,28 @@ exports.refreshToken = async (req, res) => {
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: 'Error al renovar el token.' });
+  }
+};
+
+// notis de usuarios pendientes a ser solicitantes
+exports.getPendingUsersCount = async (req, res) => {
+  try {
+    console.log('getPendingUsersCount llamado para admin:', req.user.id);
+
+    const count = await User.count({
+      where: {
+        role: 'pending', //
+      },
+    });
+
+    console.log(`📊 Usuarios pendientes encontrados: ${count}`);
+    res.status(200).json({ count });
+  } catch (error) {
+    console.error('error en getPendingUsersCount:', error);
+    res.status(500).json({
+      error: 'Error al obtener el conteo de usuarios pendientes.',
+      details:
+        process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
   }
 };

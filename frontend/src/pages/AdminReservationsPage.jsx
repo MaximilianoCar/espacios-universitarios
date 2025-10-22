@@ -222,8 +222,8 @@ const AdminReservationsPage = () => {
                     Fecha del Evento
                   </th>
                   <th className="py-2 px-4 border-b text-left">Reserva</th>
-                  <th className="py-2 px-4 border-b text-left">Estado</th>{' '}
-                  <th className="py-2 px-4 border-b text-left">Programa</th>{' '}
+                  <th className="py-2 px-4 border-b text-left">Estado</th>
+                  <th className="py-2 px-4 border-b text-left">Programa</th>
                   <th className="py-2 px-4 border-b text-left">Contrato</th>
                   <th className="py-2 px-4 border-b text-left">Acciones</th>
                 </tr>
@@ -310,7 +310,7 @@ const AdminReservationsPage = () => {
                         </button>
                       </td>
 
-                      {/* ESTADO - Esta es la columna que estaba mal */}
+                      {/* ESTADO*/}
                       <td className="py-2 px-4 border-b">
                         <div className="flex justify-center items-center h-full">
                           <span
@@ -331,7 +331,7 @@ const AdminReservationsPage = () => {
                         </div>
                       </td>
 
-                      {/* PROGRAMA - Esta columna faltaba */}
+                      {/* PROGRAMA */}
                       <td className="py-2 px-4 border-b">
                         <div className="flex justify-center items-center h-full">
                           {event.programPath ? (
