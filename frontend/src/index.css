@@ -25,3 +25,38 @@ body,
 footer {
   flex-shrink: 0; /* Asegura que el footer esté al final */
 }
+
+/* Efectos de animación suaves */
+@keyframes gentle-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-gentle-pulse {
+  animation: gentle-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.menu-card-hover {
+  transition: all 0.3s ease;
+}
+
+.menu-card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+/* Estilos personalizados para badges */
+.notification-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+}
+
+.notification-badge-ping {
+  animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}

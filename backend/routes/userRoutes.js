@@ -17,12 +17,20 @@ router.post(
   userController.createAnyUser
 );
 
-// Ruta para crear un administrador (solo accesible por administradores autenticados)
+// Ruta para crear un administrador (ya no se usa)
 router.post(
   '/users/admin',
   protect,
   restrictTo('admin'),
   userController.createAdmin
+);
+
+//paaara notis de admin
+router.get(
+  '/users/pending-count',
+  protect,
+  restrictTo('admin'),
+  userController.getPendingUsersCount
 );
 
 // Rutas protegidas para el modelo User

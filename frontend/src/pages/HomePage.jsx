@@ -8,20 +8,31 @@ import Footer from '../components/Footer';
 import HeroSection from '../components/HeroSection';
 import Modal from '../components/Modal';
 import RequestUpgradeForm from '../components/RequestUpgradeForm';
+import MenuCard from '../components/MenuCard';
+import { usePendingReservations } from '../hooks/usePendingReservations';
+import { usePendingUsers } from '../hooks/usePendingUsers';
+import { useUserEventsCount } from '../hooks/useUserEventsCount';
+import { updateUserRole } from '../features/auth/authSlice';
+import Swal from 'sweetalert2';
 
 import backgroundImage from '../assets/ucvfondo.jpg';
 
 const HomePage = () => {
   const { user, role, isAuthenticated } = useSelector(state => state.auth);
   const navigate = useNavigate();
-  const dispatch = useDispatch(); // Inicializar dispatch
+  const dispatch = useDispatch();
 
-  // estado para controlar el modal de solicitud de ascenso
+  // Estado para controlar el modal de solicitud de ascenso
   const [showRequestUpgradeModal, setShowRequestUpgradeModal] = useState(false);
 
-  const [hasRequestedUpgrade, setHasRequestedUpgrade] = useState(
-    localStorage.getItem('hasRequestedUpgrade') === 'true'
-  );
+  // hook para obtener las reservas pendientes
+  const { pendingCount, loading: pendingLoading } = usePendingReservations();
+
+  // hook para obtener usuarios pendientes
+  const { pendingUsersCount, loading: pendingUsersLoading } = usePendingUsers();
+
+  // hook para obtener conteo de eventos del usuario
+  const { eventsCount, loading: eventsLoading } = useUserEventsCount();
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -30,12 +41,25 @@ const HomePage = () => {
   }, [isAuthenticated, navigate]);
 
   if (!role || !user) {
-    return <div>Cargando...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
   }
 
   const handleUpgradeSuccess = () => {
-    localStorage.setItem('hasRequestedUpgrade', 'true');
+    // Actualizar el estado de Redux inmediatamente
+    dispatch(updateUserRole({ role: 'pending' }));
+    console.log(role);
     setShowRequestUpgradeModal(false);
+
+    Swal.fire({
+      title: '¡Solicitud enviada!',
+      text: 'Tu solicitud ha sido enviada y está en revisión.',
+      icon: 'success',
+      timer: 3000,
+    });
   };
 
   // --- Definición de Tarjetas por Rol ---
@@ -54,6 +78,8 @@ const HomePage = () => {
         description="Revisa y gestiona las reservas de todos los usuarios."
         link="/reservations"
         icon="📑"
+        badgeCount={pendingCount}
+        badgeLoading={pendingLoading}
       />
       <MenuCard
         title="Gestionar Usuarios"
@@ -65,7 +91,9 @@ const HomePage = () => {
         title="Gestionar Solicitudes de Usuarios"
         description="Revisa las solicitudes pendientes y aprueba/rechaza."
         link="/pending"
-        icon="👤"
+        icon="📋"
+        badgeCount={pendingUsersCount}
+        badgeLoading={pendingUsersLoading}
       />
     </>
   );
@@ -84,6 +112,8 @@ const HomePage = () => {
         description="Revisa y gestiona las reservas de los usuarios en tu área."
         link="/reservations"
         icon="✅"
+        badgeCount={pendingCount}
+        badgeLoading={pendingLoading}
       />
     </>
   );
@@ -102,6 +132,10 @@ const HomePage = () => {
         description="Revisa las reservas que has realizado y su estado."
         link="/my-reservations"
         icon="🔍"
+        showMultipleBadges={true}
+        approvedCount={eventsCount.approved}
+        deniedCount={eventsCount.denied}
+        pendingCount={eventsCount.pending}
       />
     </>
   );
@@ -116,24 +150,15 @@ const HomePage = () => {
         icon="📅"
       />
       <MenuCard
-        title={hasRequestedUpgrade ? 'Solicitud Enviada' : '¡Quiero Reservar!'}
-        description={
-          hasRequestedUpgrade
-            ? 'Tu solicitud ha sido enviada.'
-            : "Haz clic para obtener el rol de 'Solicitante'."
-        }
-        onClick={
-          hasRequestedUpgrade
-            ? undefined
-            : () => setShowRequestUpgradeModal(true)
-        }
-        icon={hasRequestedUpgrade ? '🕙' : '🔑'}
+        title="¡Quiero Reservar!"
+        description="Haz clic para obtener el rol de 'Solicitante' y poder reservar espacios."
+        onClick={() => setShowRequestUpgradeModal(true)}
+        icon="🔑"
         isButton={true}
-        disabled={hasRequestedUpgrade}
+        disabled={false}
       />
     </>
   );
-
   // PENDING
   const PendingCards = (
     <>
@@ -145,9 +170,9 @@ const HomePage = () => {
       />
       <MenuCard
         title="Solicitud en proceso"
-        description="Se le notificara cuando se termine de procesar su solicitud."
+        description="Se le notificará cuando se termine de procesar su solicitud."
         link="/#"
-        icon="🕙"
+        icon="⏳"
         disabled={true}
       />
     </>
@@ -157,32 +182,32 @@ const HomePage = () => {
     switch (role) {
       case 'admin':
         return {
-          title: 'Panel de Administración (Admin)',
+          title: `Panel de Administración - ${user}`,
           cards: AdminCards,
-          gridCols: 'lg:grid-cols-4',
+          gridCols: 'lg:grid-cols-2 xl:grid-cols-4',
         };
       case 'coordinator':
         return {
-          title: 'Panel de Coordinación',
+          title: `Panel de Coordinación - ${user}`,
           cards: CoordinatorCards,
           gridCols: 'lg:grid-cols-2',
         };
       case 'requester':
         return {
-          title: 'Panel de Solicitante',
+          title: `Panel de Solicitante - ${user}`,
           cards: RequesterCards,
           gridCols: 'lg:grid-cols-2',
         };
       case 'pending':
         return {
-          title: 'Panel de Visitante',
+          title: `Panel de Visitante - ${user}`,
           cards: PendingCards,
           gridCols: 'lg:grid-cols-2',
         };
       case 'visitor':
       default:
         return {
-          title: 'Panel de Visitante',
+          title: `Panel de Visitante - ${user}`,
           cards: VisitorCards,
           gridCols: 'lg:grid-cols-2',
         };
@@ -192,18 +217,26 @@ const HomePage = () => {
   const { title, cards, gridCols } = renderCards();
 
   return (
-    <div className="min-h-screen grid grid-rows-[auto_auto_1fr_auto]">
+    <div className="min-h-screen grid grid-rows-[auto_auto_1fr_auto] bg-gray-50">
       <Header />
       <HeroSection
-        title={`Bienvenido(a), ${user}`}
-        subtitle="En este panel encontrarás tus opciones principales"
+        title={`¡Bienvenido(a), ${user}!`}
+        subtitle="Encuentra todas tus opciones principales en el panel de control"
         backgroundImage={backgroundImage}
       />
 
       {/* Main Content */}
-      <div className="container mx-auto p-4">
-        <h2 className="text-2xl font-semibold mb-6 text-center">{title}</h2>
-        <div className={`grid grid-cols-1 md:grid-cols-2 ${gridCols} gap-6`}>
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-gray-800 mb-2">{title}</h2>
+          <p className="text-gray-600 max-w-2xl mx-auto">
+            Selecciona una de las opciones disponibles para comenzar
+          </p>
+        </div>
+
+        <div
+          className={`grid grid-cols-1 md:grid-cols-2 ${gridCols} gap-6 max-w-7xl mx-auto`}
+        >
           {cards}
         </div>
       </div>
@@ -213,7 +246,6 @@ const HomePage = () => {
       {/* Modal para la Solicitud de Ascenso de Rol */}
       {showRequestUpgradeModal && (
         <Modal onClose={() => setShowRequestUpgradeModal(false)}>
-          {/* Se elimina la prop onSuccess */}
           <RequestUpgradeForm
             onClose={() => setShowRequestUpgradeModal(false)}
             onSuccess={handleUpgradeSuccess}
@@ -221,62 +253,6 @@ const HomePage = () => {
         </Modal>
       )}
     </div>
-  );
-};
-
-// Componente MenuCard
-const MenuCard = ({
-  title,
-  description,
-  link,
-  icon,
-  onClick,
-  isButton,
-  disabled,
-}) => {
-  const cardClasses = `bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transform transition-transform min-h-[215px] flex flex-col justify-between ${
-    disabled
-      ? 'opacity-50 cursor-not-allowed'
-      : 'hover:-translate-y-1 cursor-pointer'
-  }`;
-
-  const CardContent = (
-    <div className="flex flex-col justify-between h-full">
-      <div className="text-4xl mb-4">{icon}</div>
-      <h3 className="text-xl font-semibold mb-2">{title}</h3>
-      <p className="text-gray-600 flex-grow">{description}</p>
-    </div>
-  );
-
-  if (isButton && (onClick || disabled)) {
-    return (
-      <button
-        onClick={disabled ? undefined : onClick}
-        className={`${cardClasses} text-left w-full`}
-        disabled={disabled}
-      >
-        {CardContent}
-      </button>
-    );
-  }
-
-  // Si no es botón, usa <a> como enlace tradicional
-  return (
-    <a
-      href={disabled ? '#' : link}
-      onClick={e => {
-        if (disabled) {
-          e.preventDefault();
-        }
-
-        if (!disabled && onClick) {
-          onClick(e);
-        }
-      }}
-      className={cardClasses}
-    >
-      {CardContent}
-    </a>
   );
 };
 

@@ -13,6 +13,7 @@ import {
   FaInfoCircle, // Importar el icono de información
 } from 'react-icons/fa';
 import Modal from '../components/Modal'; // Asegúrate de que el componente Modal esté creado
+import Swal from 'sweetalert2';
 
 const AdminReservationsPage = () => {
   const [events, setEvents] = useState([]);
@@ -107,14 +108,37 @@ const AdminReservationsPage = () => {
   };
 
   // Función para actualizar el estado del evento
-  const handleUpdateStatus = (eventId, newStatus) => {
-    if (
-      window.confirm(`¿Estás seguro de que deseas ${newStatus} esta reserva?`)
-    ) {
-      axiosInstance
-        .put(`/events/${eventId}`, { status: newStatus })
-        .then(response => {
-          // Actualizar 'events' y 'filteredEvents'
+  const handleUpdateStatus = async (eventId, eventName, newStatus) => {
+    // Para aprobación - confirmación simple
+    if (newStatus === 'approved') {
+      const result = await Swal.fire({
+        title: '¿Estás seguro?',
+        text: `¿Deseas APROBAR la reserva "${eventName}"?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Sí, aprobar',
+        cancelButtonText: 'Cancelar',
+      });
+
+      if (result.isConfirmed) {
+        // Mostrar loader en el mismo modal
+        Swal.fire({
+          title: 'Procesando...',
+          text: 'Por favor espere mientras se aprueba la reserva',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          willOpen: () => {
+            Swal.showLoading();
+          },
+        });
+
+        try {
+          await axiosInstance.put(`/events/${eventId}`, { status: newStatus });
+
+          // Actualizar el estado local
           setEvents(prevEvents =>
             prevEvents.map(event =>
               event.id === eventId ? { ...event, status: newStatus } : event
@@ -125,13 +149,132 @@ const AdminReservationsPage = () => {
               event.id === eventId ? { ...event, status: newStatus } : event
             )
           );
-        })
-        .catch(error => {
-          console.error('Error updating event status:', error);
-          alert(
-            'Error al actualizar el estado del evento. Por favor, intente nuevamente.'
+
+          Swal.fire(
+            '¡Aprobado!',
+            'La reserva ha sido aprobada exitosamente.',
+            'success'
           );
+        } catch (error) {
+          console.error('Error updating event status:', error);
+          Swal.fire(
+            'Error',
+            'Error al aprobar la reserva. Por favor, intente nuevamente.',
+            'error'
+          );
+        }
+      }
+    }
+    // Para rechazo - modal con comentario
+    else if (newStatus === 'denied') {
+      const { value: formValues } = await Swal.fire({
+        title: `¿Estás seguro de rechazar la reserva "${eventName}"?`,
+        html: `
+        <p class="text-left mb-4">Esta acción no se puede deshacer.</p>
+        <div class="text-left">
+          <label for="swal-comment" class="block text-sm font-medium text-gray-700 mb-1">
+            Comentario (opcional):
+          </label>
+          <textarea 
+            id="swal-comment" 
+            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+            placeholder="Explica brevemente el motivo del rechazo..." 
+            rows="4"
+            maxlength="500"
+          ></textarea>
+          <div class="text-right text-xs text-gray-500 mt-1">
+            <span id="swal-char-count">0</span>/500 caracteres
+          </div>
+        </div>
+      `,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Sí, rechazar',
+        cancelButtonText: 'Cancelar',
+        focusConfirm: false,
+        preConfirm: () => {
+          const comment = document.getElementById('swal-comment').value;
+
+          // Validación de longitud
+          if (comment && comment.length > 500) {
+            Swal.showValidationMessage(
+              'El comentario no puede exceder los 500 caracteres'
+            );
+            return false;
+          }
+
+          return {
+            comments: comment || '',
+          };
+        },
+        didOpen: () => {
+          const textarea = document.getElementById('swal-comment');
+          const charCount = document.getElementById('swal-char-count');
+
+          textarea.addEventListener('input', () => {
+            const length = textarea.value.length;
+            charCount.textContent = length;
+
+            // Cambiar color si se acerca al límite
+            if (length > 450) {
+              charCount.className = 'text-right text-xs text-red-500 mt-1';
+            } else if (length > 400) {
+              charCount.className = 'text-right text-xs text-orange-500 mt-1';
+            } else {
+              charCount.className = 'text-right text-xs text-gray-500 mt-1';
+            }
+          });
+        },
+      });
+
+      // Si el usuario confirmó el rechazo
+      if (formValues) {
+        // Mostrar loader en el mismo modal
+        Swal.fire({
+          title: 'Procesando...',
+          text: 'Por favor espere mientras se rechaza la reserva',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          showConfirmButton: false,
+          willOpen: () => {
+            Swal.showLoading();
+          },
         });
+
+        try {
+          await axiosInstance.put(`/events/${eventId}`, {
+            status: newStatus,
+            comments: formValues.comments,
+          });
+
+          // Actualizar el estado local
+          setEvents(prevEvents =>
+            prevEvents.map(event =>
+              event.id === eventId ? { ...event, status: newStatus } : event
+            )
+          );
+          setFilteredEvents(prevFilteredEvents =>
+            prevFilteredEvents.map(event =>
+              event.id === eventId ? { ...event, status: newStatus } : event
+            )
+          );
+
+          Swal.fire(
+            '¡Rechazado!',
+            'La reserva ha sido rechazada y se notificó al usuario.',
+            'success'
+          );
+        } catch (error) {
+          console.error('Error updating event status:', error);
+          Swal.fire(
+            'Error',
+            'Error al rechazar la reserva. Por favor, intente nuevamente.',
+            'error'
+          );
+        }
+      }
     }
   };
 
@@ -222,8 +365,8 @@ const AdminReservationsPage = () => {
                     Fecha del Evento
                   </th>
                   <th className="py-2 px-4 border-b text-left">Reserva</th>
-                  <th className="py-2 px-4 border-b text-left">Estado</th>{' '}
-                  <th className="py-2 px-4 border-b text-left">Programa</th>{' '}
+                  <th className="py-2 px-4 border-b text-left">Estado</th>
+                  <th className="py-2 px-4 border-b text-left">Programa</th>
                   <th className="py-2 px-4 border-b text-left">Contrato</th>
                   <th className="py-2 px-4 border-b text-left">Acciones</th>
                 </tr>
@@ -310,7 +453,7 @@ const AdminReservationsPage = () => {
                         </button>
                       </td>
 
-                      {/* ESTADO - Esta es la columna que estaba mal */}
+                      {/* ESTADO*/}
                       <td className="py-2 px-4 border-b">
                         <div className="flex justify-center items-center h-full">
                           <span
@@ -331,7 +474,7 @@ const AdminReservationsPage = () => {
                         </div>
                       </td>
 
-                      {/* PROGRAMA - Esta columna faltaba */}
+                      {/* PROGRAMA */}
                       <td className="py-2 px-4 border-b">
                         <div className="flex justify-center items-center h-full">
                           {event.programPath ? (
@@ -400,7 +543,11 @@ const AdminReservationsPage = () => {
                         <div className="flex flex-col space-y-1">
                           <button
                             onClick={() =>
-                              handleUpdateStatus(event.id, 'approved')
+                              handleUpdateStatus(
+                                event.id,
+                                event.name,
+                                'approved'
+                              )
                             }
                             className="flex items-center justify-center bg-green-500 hover:bg-green-600 text-white font-semibold py-1 px-2 rounded text-xs transition-colors"
                           >
@@ -408,7 +555,7 @@ const AdminReservationsPage = () => {
                           </button>
                           <button
                             onClick={() =>
-                              handleUpdateStatus(event.id, 'denied')
+                              handleUpdateStatus(event.id, event.name, 'denied')
                             }
                             className="flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-semibold py-1 px-2 rounded text-xs transition-colors"
                           >

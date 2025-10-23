@@ -106,7 +106,7 @@ module.exports = (sequelize, DataTypes) => {
         );
       }
 
-      this.role = User.ROLES.PENDING;
+      this.role = User.ROLES.VISITOR;
 
       return this.save();
     }
