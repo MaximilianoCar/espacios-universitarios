@@ -5,6 +5,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SearchBar from '../components/SearchBar';
 import { FaEye, FaCheckCircle, FaTimesCircle } from 'react-icons/fa';
+import Swal from 'sweetalert2';
 
 const AdminPendingRequestsPage = () => {
   const [users, setUsers] = useState([]);
@@ -50,52 +51,158 @@ const AdminPendingRequestsPage = () => {
     }
   };
 
-  const handleApproveRequest = userId => {
-    if (
-      !window.confirm(
-        '¿Estás seguro de que deseas APROBAR esta solicitud? El usuario se convertirá en Solicitante (Requester).'
-      )
-    ) {
-      return;
-    }
+  const handleApproveRequest = async (userId, userName) => {
+    const result = await Swal.fire({
+      title: '¿Estás seguro?',
+      text: `¿Deseas APROBAR la solicitud de ${userName}? El usuario se convertirá en Solicitante (Requester).`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Sí, aprobar',
+      cancelButtonText: 'Cancelar',
+    });
 
-    axiosInstance
-      .put(`/users/approve/${userId}`) // Endpoint PUT para aprobar
-      .then(() => {
-        // Eliminar de la lista local (ya que el rol cambiará a 'requester')
+    if (result.isConfirmed) {
+      // Mostrar loader
+      Swal.fire({
+        title: 'Procesando...',
+        text: `Por favor espere mientras se aprueba la solicitud de ${userName}`,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        willOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      try {
+        await axiosInstance.put(`/users/approve/${userId}`);
+
+        // Eliminar de la lista local
         setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
         setFilteredUsers(prevUsers =>
           prevUsers.filter(user => user.id !== userId)
         );
-      })
-      .catch(error => {
+
+        Swal.fire(
+          '¡Aprobado!',
+          `La solicitud de ${userName} ha sido aprobada exitosamente.`,
+          'success'
+        );
+      } catch (error) {
         console.error('Error al aprobar la solicitud:', error);
-        alert('Error al aprobar la solicitud. Intente nuevamente.');
-      });
+        Swal.fire(
+          'Error',
+          `Error al aprobar la solicitud de ${userName}. Intente nuevamente.`,
+          'error'
+        );
+      }
+    }
   };
 
-  const handleRejectRequest = userId => {
-    if (
-      !window.confirm(
-        '¿Estás seguro de que deseas RECHAZAR esta solicitud? El usuario volverá al rol de Visitante (Visitor).'
-      )
-    ) {
-      return;
-    }
+  const handleRejectRequest = async (userId, userName) => {
+    const { value: formValues } = await Swal.fire({
+      title: `¿Estás seguro de rechazar la solicitud de ${userName}?`,
+      html: `
+      <p class="text-left mb-4">El usuario volverá al rol de Visitante (Visitor).</p>
+      <div class="text-left">
+        <label for="swal-comment" class="block text-sm font-medium text-gray-700 mb-1">
+          Comentario (opcional):
+        </label>
+        <textarea 
+          id="swal-comment" 
+          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+          placeholder="Explica brevemente el motivo del rechazo..." 
+          rows="4"
+          maxlength="500"
+        ></textarea>
+        <div class="text-right text-xs text-gray-500 mt-1">
+          <span id="swal-char-count">0</span>/500 caracteres
+        </div>
+      </div>
+    `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Sí, rechazar',
+      cancelButtonText: 'Cancelar',
+      focusConfirm: false,
+      preConfirm: () => {
+        const comment = document.getElementById('swal-comment').value;
 
-    axiosInstance
-      .put(`/users/reject/${userId}`) // Endpoint PUT para rechazar
-      .then(() => {
-        // Eliminar de la lista local (ya que el rol dejará de ser 'pending')
+        // Validación de longitud
+        if (comment && comment.length > 500) {
+          Swal.showValidationMessage(
+            'El comentario no puede exceder los 500 caracteres'
+          );
+          return false;
+        }
+
+        return {
+          comments: comment || '',
+        };
+      },
+      didOpen: () => {
+        const textarea = document.getElementById('swal-comment');
+        const charCount = document.getElementById('swal-char-count');
+
+        textarea.addEventListener('input', () => {
+          const length = textarea.value.length;
+          charCount.textContent = length;
+
+          // Cambiar color si se acerca al límite
+          if (length > 450) {
+            charCount.className = 'text-right text-xs text-red-500 mt-1';
+          } else if (length > 400) {
+            charCount.className = 'text-right text-xs text-orange-500 mt-1';
+          } else {
+            charCount.className = 'text-right text-xs text-gray-500 mt-1';
+          }
+        });
+      },
+    });
+
+    // Si el usuario confirmó el rechazo
+    if (formValues) {
+      // Mostrar loader
+      Swal.fire({
+        title: 'Procesando...',
+        text: `Por favor espere mientras se rechaza la solicitud de ${userName}`,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        willOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      try {
+        await axiosInstance.put(`/users/reject/${userId}`, {
+          comments: formValues.comments,
+        });
+
+        // Eliminar de la lista local
         setUsers(prevUsers => prevUsers.filter(user => user.id !== userId));
         setFilteredUsers(prevUsers =>
           prevUsers.filter(user => user.id !== userId)
         );
-      })
-      .catch(error => {
+
+        Swal.fire(
+          '¡Rechazado!',
+          `La solicitud de ${userName} ha sido rechazada y se notificó al usuario.`,
+          'success'
+        );
+      } catch (error) {
         console.error('Error al rechazar la solicitud:', error);
-        alert('Error al rechazar la solicitud. Intente nuevamente.');
-      });
+        Swal.fire(
+          'Error',
+          `Error al rechazar la solicitud de ${userName}. Intente nuevamente.`,
+          'error'
+        );
+      }
+    }
   };
 
   if (loading) {
@@ -173,7 +280,9 @@ const AdminPendingRequestsPage = () => {
                       <div className="flex justify-center space-x-3">
                         {/* Botón Aceptar */}
                         <button
-                          onClick={() => handleApproveRequest(user.id)}
+                          onClick={() =>
+                            handleApproveRequest(user.id, user.name)
+                          }
                           className="flex items-center bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded text-sm transition-colors"
                         >
                           <FaCheckCircle className="mr-2" size={16} /> Aprobar
@@ -181,7 +290,9 @@ const AdminPendingRequestsPage = () => {
 
                         {/* Botón Rechazar */}
                         <button
-                          onClick={() => handleRejectRequest(user.id)}
+                          onClick={() =>
+                            handleRejectRequest(user.id, user.name)
+                          }
                           className="flex items-center bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded text-sm transition-colors"
                         >
                           <FaTimesCircle className="mr-2" size={16} /> Rechazar

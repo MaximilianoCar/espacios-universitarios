@@ -12,6 +12,8 @@ import MenuCard from '../components/MenuCard';
 import { usePendingReservations } from '../hooks/usePendingReservations';
 import { usePendingUsers } from '../hooks/usePendingUsers';
 import { useUserEventsCount } from '../hooks/useUserEventsCount';
+import { updateUserRole } from '../features/auth/authSlice';
+import Swal from 'sweetalert2';
 
 import backgroundImage from '../assets/ucvfondo.jpg';
 
@@ -22,9 +24,6 @@ const HomePage = () => {
 
   // Estado para controlar el modal de solicitud de ascenso
   const [showRequestUpgradeModal, setShowRequestUpgradeModal] = useState(false);
-  const [hasRequestedUpgrade, setHasRequestedUpgrade] = useState(
-    localStorage.getItem('hasRequestedUpgrade') === 'true'
-  );
 
   // hook para obtener las reservas pendientes
   const { pendingCount, loading: pendingLoading } = usePendingReservations();
@@ -50,8 +49,17 @@ const HomePage = () => {
   }
 
   const handleUpgradeSuccess = () => {
-    localStorage.setItem('hasRequestedUpgrade', 'true');
+    // Actualizar el estado de Redux inmediatamente
+    dispatch(updateUserRole({ role: 'pending' }));
+    console.log(role);
     setShowRequestUpgradeModal(false);
+
+    Swal.fire({
+      title: '¡Solicitud enviada!',
+      text: 'Tu solicitud ha sido enviada y está en revisión.',
+      icon: 'success',
+      timer: 3000,
+    });
   };
 
   // --- Definición de Tarjetas por Rol ---
@@ -142,24 +150,15 @@ const HomePage = () => {
         icon="📅"
       />
       <MenuCard
-        title={hasRequestedUpgrade ? 'Solicitud Enviada' : '¡Quiero Reservar!'}
-        description={
-          hasRequestedUpgrade
-            ? 'Tu solicitud ha sido enviada y está en revisión.'
-            : "Haz clic para obtener el rol de 'Solicitante' y poder reservar espacios."
-        }
-        onClick={
-          hasRequestedUpgrade
-            ? undefined
-            : () => setShowRequestUpgradeModal(true)
-        }
-        icon={hasRequestedUpgrade ? '⏳' : '🔑'}
+        title="¡Quiero Reservar!"
+        description="Haz clic para obtener el rol de 'Solicitante' y poder reservar espacios."
+        onClick={() => setShowRequestUpgradeModal(true)}
+        icon="🔑"
         isButton={true}
-        disabled={hasRequestedUpgrade}
+        disabled={false}
       />
     </>
   );
-
   // PENDING
   const PendingCards = (
     <>
