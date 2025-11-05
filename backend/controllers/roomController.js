@@ -23,6 +23,24 @@ const checkRoomPermission = async (userId, userRole, roomId) => {
   return false;
 };
 
+exports.checkRoomPermission = async (req, res) => {
+  try {
+    const { roomId } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    if (userRole !== 'coordinator') {
+      return res.json({ hasPermission: false });
+    }
+
+    const hasPermission = await checkRoomPermission(userId, userRole, roomId);
+    res.json({ hasPermission });
+  } catch (error) {
+    console.error('Error checking room permission:', error);
+    res.status(500).json({ error: 'Error verificando permisos' });
+  }
+};
+
 exports.createRoom = async (req, res) => {
   try {
     let roomData = req.body;

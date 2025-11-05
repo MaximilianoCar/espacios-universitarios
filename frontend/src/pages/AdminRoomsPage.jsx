@@ -1,13 +1,14 @@
 // src/pages/AdminRoomsPage.jsx
 import React, { useEffect, useState } from 'react';
 import axiosInstance from '../axiosConfig';
-import { FaEdit, FaTrash, FaPlus } from 'react-icons/fa';
+import { FaEdit, FaTrash, FaPlus, FaArrowLeft } from 'react-icons/fa';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SearchBar from '../components/SearchBar';
 import Modal from '../components/Modal';
 import AddRoomForm from '../components/AddRoomForm';
 import UpdateRoomForm from '../components/UpdateRoomForm';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const AdminRoomsPage = () => {
   const [rooms, setRooms] = useState([]);
@@ -18,6 +19,16 @@ const AdminRoomsPage = () => {
   const [showAddRoomForm, setShowAddRoomForm] = useState(false);
   const [showUpdateRoomForm, setShowUpdateRoomForm] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleBack = () => {
+    if (location.key !== 'default') {
+      navigate(-1);
+    } else {
+      navigate('/home');
+    }
+  };
 
   // Obtener las salas desde la API
   useEffect(() => {
@@ -107,9 +118,18 @@ const AdminRoomsPage = () => {
     <div className="min-h-screen grid grid-rows-[auto_auto_1fr_auto]">
       <Header />
       <div className="container mx-auto my-8 px-4">
-        <h2 className="text-3xl font-bold mb-6 text-gray-800">
-          Gestionar Espacios
-        </h2>
+        <div className="flex items-center mb-6">
+          <button
+            onClick={handleBack}
+            className="flex items-center text-gray-800 hover:text-gray-600 transition-colors mr-4"
+            title="Volver al inicio"
+          >
+            <FaArrowLeft size={24} />
+          </button>
+          <h2 className="text-3xl font-bold text-gray-800">
+            Gestionar Espacios
+          </h2>
+        </div>
         {/* Agregar el SearchBar y el botón de añadir sala */}
         <div className="flex justify-between items-center mb-4">
           <SearchBar placeholder="Buscar Espacio..." onSearch={handleSearch} />

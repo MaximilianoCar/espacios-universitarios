@@ -15,6 +15,20 @@ import { useUserEventsCount } from '../hooks/useUserEventsCount';
 import { updateUserRole } from '../features/auth/authSlice';
 import Swal from 'sweetalert2';
 
+//iconos
+import {
+  BuildingOfficeIcon,
+  DocumentTextIcon,
+  UsersIcon,
+  ClipboardDocumentListIcon,
+  CheckCircleIcon,
+  PencilIcon,
+  MagnifyingGlassIcon,
+  CalendarIcon,
+  KeyIcon,
+  ClockIcon,
+} from '@heroicons/react/24/outline';
+
 import backgroundImage from '../assets/ucvfondo.jpg';
 
 const HomePage = () => {
@@ -71,13 +85,13 @@ const HomePage = () => {
         title="Gestionar Espacios"
         description="Configura y administra los espacios disponibles."
         link="/admin/rooms"
-        icon="🏠"
+        icon={<BuildingOfficeIcon className="w-12 h-12 text-blue-500" />}
       />
       <MenuCard
         title="Gestionar Reservas"
         description="Revisa y gestiona las reservas de todos los usuarios."
         link="/reservations"
-        icon="📑"
+        icon={<DocumentTextIcon className="w-12 h-12 text-blue-500" />}
         badgeCount={pendingCount}
         badgeLoading={pendingLoading}
       />
@@ -85,13 +99,13 @@ const HomePage = () => {
         title="Gestionar Usuarios"
         description="Revisa y gestiona la lista de usuarios registrados."
         link="/users"
-        icon="👤"
+        icon={<UsersIcon className="w-12 h-12 text-blue-500" />}
       />
       <MenuCard
         title="Gestionar Solicitudes de Usuarios"
         description="Revisa las solicitudes pendientes y aprueba/rechaza."
         link="/pending"
-        icon="📋"
+        icon={<ClipboardDocumentListIcon className="w-12 h-12 text-blue-500" />}
         badgeCount={pendingUsersCount}
         badgeLoading={pendingUsersLoading}
       />
@@ -105,13 +119,13 @@ const HomePage = () => {
         title="Gestionar Espacios"
         description="Configura y administra los espacios disponibles."
         link="/admin/rooms"
-        icon="🏠"
+        icon={<BuildingOfficeIcon className="w-12 h-12 text-blue-500" />}
       />
       <MenuCard
         title="Gestionar Reservas"
         description="Revisa y gestiona las reservas de los usuarios en tu área."
         link="/reservations"
-        icon="✅"
+        icon={<CheckCircleIcon className="w-12 h-12 text-blue-500" />}
         badgeCount={pendingCount}
         badgeLoading={pendingLoading}
       />
@@ -125,13 +139,13 @@ const HomePage = () => {
         title="Solicitar Reserva"
         description="Solicita una reserva para tu evento."
         link="/create-reservation"
-        icon="📝"
+        icon={<PencilIcon className="w-12 h-12 text-blue-500" />}
       />
       <MenuCard
         title="Consultar Mis Reservas"
         description="Revisa las reservas que has realizado y su estado."
         link="/my-reservations"
-        icon="🔍"
+        icon={<MagnifyingGlassIcon className="w-12 h-12 text-blue-500" />}
         showMultipleBadges={true}
         approvedCount={eventsCount.approved}
         deniedCount={eventsCount.denied}
@@ -147,18 +161,19 @@ const HomePage = () => {
         title="Eventos Próximos"
         description="Explora los eventos y actividades programadas."
         link="/events"
-        icon="📅"
+        icon={<CalendarIcon className="w-12 h-12 text-blue-500" />}
       />
       <MenuCard
         title="¡Quiero Reservar!"
         description="Haz clic para obtener el rol de 'Solicitante' y poder reservar espacios."
         onClick={() => setShowRequestUpgradeModal(true)}
-        icon="🔑"
+        icon={<KeyIcon className="w-12 h-12 text-blue-500" />}
         isButton={true}
         disabled={false}
       />
     </>
   );
+
   // PENDING
   const PendingCards = (
     <>
@@ -166,13 +181,13 @@ const HomePage = () => {
         title="Eventos Próximos"
         description="Explora los eventos y actividades programadas."
         link="/events"
-        icon="📅"
+        icon={<CalendarIcon className="w-12 h-12 text-blue-500" />}
       />
       <MenuCard
         title="Solicitud en proceso"
         description="Se le notificará cuando se termine de procesar su solicitud."
         link="/#"
-        icon="⏳"
+        icon={<ClockIcon className="w-12 h-12 text-blue-500" />}
         disabled={true}
       />
     </>
@@ -235,8 +250,12 @@ const HomePage = () => {
         </div>
 
         <div
-          className={`grid grid-cols-1 md:grid-cols-2 ${gridCols} gap-6 max-w-7xl mx-auto`}
+          className="grid gap-6 justify-center"
+          style={{
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 340px))',
+          }}
         >
+          {' '}
           {cards}
         </div>
       </div>

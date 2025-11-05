@@ -236,10 +236,104 @@ const emailTemplates = {
       </div>
     `,
   }),
+
+  // noti a todas las entidades externas
+  entitiesApproval: (
+    spaceName,
+    reservationFrom,
+    reservationTo,
+    eventFrom,
+    eventTo,
+    eventId,
+    eventName
+  ) => ({
+    subject: `Notificación de Reserva Aprobada - ${spaceName}`,
+    html: `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #28a745; text-align: center;">Notificación de Reserva Aprobada</h2>
+      <p>Buen día,</p>
+      <p>Se les informa que se ha aprobado una reserva para el evento "<strong>${eventName}</strong>" en el espacio <strong>${spaceName}</strong>.</p>
+      
+      <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+        <h3 style="color: #555; margin-top: 0;">Detalles de la Reserva:</h3>
+        <p><strong>Período de reserva:</strong> Desde ${new Date(
+          reservationFrom
+        ).toLocaleString()} hasta ${new Date(
+      reservationTo
+    ).toLocaleString()}</p>
+        <p><strong>Período del evento:</strong> Desde ${new Date(
+          eventFrom
+        ).toLocaleString()} hasta ${new Date(eventTo).toLocaleString()}</p>
+        <p><strong>Espacio:</strong> ${spaceName}</p>
+        <p><strong>Evento:</strong> ${eventName}</p>
+      </div>
+
+      <p>Para consultar más detalles sobre este evento, pueden acceder al siguiente enlace:</p>
+      <a href="${process.env.APP_URL}/events/${eventId}" 
+         style="background-color: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 0;">
+        Ver Detalles Completos del Evento
+      </a>
+      
+      <div style="margin-top: 20px; padding: 15px; background: #e9ecef; border-radius: 5px;">
+        <p style="margin: 0; color: #666; font-size: 14px;">
+          <strong>Nota:</strong> Este mensaje se envía de forma automática a todas las entidades involucradas en la gestión de espacios universitarios.
+        </p>
+      </div>
+      
+      <p style="margin-top: 20px; color: #666; font-size: 12px;">
+        Espacios Universitarios UCV - ${new Date().getFullYear()}
+      </p>
+    </div>
+  `,
+  }),
+
+  // Notificación a todas las entidades externas sobre evento cancelado
+  entitiesCancellation: (
+    spaceName,
+    reservationFrom,
+    reservationTo,
+    eventFrom,
+    eventTo,
+    eventId,
+    eventName
+  ) => ({
+    subject: `Notificación de Cancelación de Reserva - ${spaceName}`,
+    html: `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #dc3545; text-align: center;">Notificación de Cancelación de Reserva</h2>
+      <p>Buen día,</p>
+      <p>Se les informa que la reserva para el evento "<strong>${eventName}</strong>" en el espacio <strong>${spaceName}</strong> ha sido cancelada.</p>
+      
+      <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+        <h3 style="color: #555; margin-top: 0;">Detalles de la Reserva Cancelada:</h3>
+        <p><strong>Período de reserva:</strong> Desde ${new Date(
+          reservationFrom
+        ).toLocaleString()} hasta ${new Date(
+      reservationTo
+    ).toLocaleString()}</p>
+        <p><strong>Período del evento:</strong> Desde ${new Date(
+          eventFrom
+        ).toLocaleString()} hasta ${new Date(eventTo).toLocaleString()}</p>
+        <p><strong>Espacio:</strong> ${spaceName}</p>
+        <p><strong>Evento:</strong> ${eventName}</p>
+      </div>
+
+      <div style="margin-top: 20px; padding: 15px; background: #f8d7da; border-radius: 5px;">
+        <p style="margin: 0; color: #721c24; font-size: 14px;">
+          <strong>Nota:</strong> Este mensaje se envía de forma automática a todas las entidades involucradas en la gestión de espacios universitarios.
+        </p>
+      </div>
+      
+      <p style="margin-top: 20px; color: #666; font-size: 12px;">
+        Espacios Universitarios UCV - ${new Date().getFullYear()}
+      </p>
+    </div>
+  `,
+  }),
 };
 
 class EmailService {
-  async sendEmail(to, templateType, templateData) {
+  async sendEmail(to, templateType, templateData, bccEmails = []) {
     try {
       const template = emailTemplates[templateType](...templateData);
 
@@ -254,8 +348,18 @@ class EmailService {
           .trim(),
       };
 
+      if (bccEmails.length > 0) {
+        mailOptions.bcc = bccEmails;
+      }
+
       const result = await transporter.sendMail(mailOptions);
-      console.log(`Email enviado a ${to}: ${template.subject}`);
+      console.log(
+        `Email enviado a ${to} ${
+          bccEmails.length > 0
+            ? `y ${bccEmails.length} destinatarios en BCC`
+            : ''
+        }: ${template.subject}`
+      );
       return { success: true, result };
     } catch (error) {
       console.error('Error enviando email:', error);
@@ -318,13 +422,29 @@ class EmailService {
     approved,
     coordComments
   ) {
-    return this.sendEmail(userEmail, 'reservationResult', [
-      solicitanteName,
-      spaceName,
-      fecha,
-      approved,
-      coordComments,
-    ]);
+    try {
+      const result = await this.sendEmail(userEmail, 'reservationResult', [
+        solicitanteName,
+        spaceName,
+        fecha,
+        approved,
+        coordComments,
+      ]);
+
+      if (result.success) {
+        console.log(`Notificación de estado enviada a: ${userEmail}`);
+      } else {
+        console.error(
+          `Error enviando notificación a ${userEmail}:`,
+          result.error
+        );
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error en notifyReservationResult:', error);
+      return { success: false, error: error.message };
+    }
   }
 
   // notificar a coordinadores cuando usuario sube programa
@@ -367,6 +487,125 @@ class EmailService {
       fecha,
       eventId,
     ]);
+  }
+
+  // notificar a entidades sobre evento aprobado
+  async notifyAllEntitiesApproval(
+    spaceName,
+    reservationFrom,
+    reservationTo,
+    eventFrom,
+    eventTo,
+    eventId,
+    eventName
+  ) {
+    try {
+      const entityEmails = this.getEntityEmails();
+
+      if (entityEmails.length === 0) {
+        console.log('No hay emails de entidades configurados');
+        return {
+          success: false,
+          error: 'No hay emails de entidades configurados',
+        };
+      }
+
+      const result = await this.sendEmail(
+        process.env.EMAIL_FROM,
+        'entitiesApproval',
+        [
+          spaceName,
+          reservationFrom,
+          reservationTo,
+          eventFrom,
+          eventTo,
+          eventId,
+          eventName,
+        ],
+        entityEmails
+      );
+
+      if (result.success) {
+        console.log(
+          `Notificación de aprobación enviada a ${entityEmails.length} entidades`
+        );
+      } else {
+        console.error(
+          `Error enviando notificación de aprobación a entidades:`,
+          result.error
+        );
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error en notifyAllEntitiesApproval:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Notificar a todas las entidades sobre evento cancelado
+  async notifyAllEntitiesCancellation(
+    spaceName,
+    reservationFrom,
+    reservationTo,
+    eventFrom,
+    eventTo,
+    eventId,
+    eventName
+  ) {
+    try {
+      const entityEmails = this.getEntityEmails();
+
+      if (entityEmails.length === 0) {
+        console.log('No hay emails de entidades configurados');
+        return {
+          success: false,
+          error: 'No hay emails de entidades configurados',
+        };
+      }
+
+      const result = await this.sendEmail(
+        process.env.EMAIL_FROM,
+        'entitiesCancellation',
+        [
+          spaceName,
+          reservationFrom,
+          reservationTo,
+          eventFrom,
+          eventTo,
+          eventId,
+          eventName,
+        ],
+        entityEmails
+      );
+
+      if (result.success) {
+        console.log(
+          `Notificación de cancelación enviada a ${entityEmails.length} entidades`
+        );
+      } else {
+        console.error(
+          `Error enviando notificación de cancelación a entidades:`,
+          result.error
+        );
+      }
+
+      return result;
+    } catch (error) {
+      console.error('Error en notifyAllEntitiesCancellation:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // método auxiliar
+  getEntityEmails() {
+    return [
+      process.env.BomberosMail,
+      process.env.SeguridadMail,
+      process.env.mantenimientoMail,
+      process.env.JefeDeProtocoloMail,
+      process.env.COPREDMail,
+    ].filter(email => email && email.trim() !== ''); // Filtrar emails vacíos
   }
 }
 

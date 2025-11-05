@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useDispatch, useSelector } from 'react-redux'; // Importar Redux hooks
-import { logoutAndRedirect } from '../features/auth/authActions'; // Acción de cerrar sesión
+import { useDispatch, useSelector } from 'react-redux';
+import { logoutAndRedirect } from '../features/auth/authActions';
 
-import ucvlogo from '../assets/ucvlogo1.png'; // Actualizar la ruta al logo
+import ucvlogo from '../assets/ucvlogo1.png';
 
 const Header = () => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -21,8 +21,6 @@ const Header = () => {
 
   return (
     <nav className="bg-[#3969B1] p-4">
-      {' '}
-      {/* Cambia el fondo al color azul #3969B1 */}
       <div className="container mx-auto flex justify-between items-center">
         {/* Logo */}
         <div className="flex items-center">
@@ -32,86 +30,97 @@ const Header = () => {
           </span>
         </div>
 
-        {/* Menu */}
-        <div className="hidden md:flex space-x-4">
-          {/* Links que siempre se muestran */}
-          <Link to="/events" className="text-white hover:text-gray-300">
-            Eventos
-          </Link>
-          {showSpacesLink && (
-            <Link to="/rooms" className="text-white hover:text-gray-300">
-              Espacios
+        {/* Menu de escritorio - SOLO se muestra si está autenticado */}
+        {isAuthenticated && (
+          <div className="hidden md:flex space-x-4">
+            {/* Links que siempre se muestran para usuarios autenticados */}
+            <Link to="/events" className="text-white hover:text-gray-300">
+              Eventos
             </Link>
-          )}
-
-          {/* Mostrar links según el estado de autenticación */}
-          {isAuthenticated ? (
-            <>
-              <Link to="/home" className="text-white hover:text-gray-300">
-                Panel
+            {showSpacesLink && (
+              <Link to="/rooms" className="text-white hover:text-gray-300">
+                Espacios
               </Link>
-              <button
-                onClick={handleLogout}
-                className="text-white hover:text-gray-300 ml-4"
-              >
-                Cerrar Sesión
-              </button>
-            </>
-          ) : (
+            )}
+
+            {/* Links para usuarios autenticados */}
+            <Link to="/home" className="text-white hover:text-gray-300">
+              Panel
+            </Link>
+            <button
+              onClick={handleLogout}
+              className="text-white hover:text-gray-300 ml-4"
+            >
+              Cerrar Sesión
+            </button>
+          </div>
+        )}
+
+        {/* Si NO está autenticado, mostrar solo el botón de login en escritorio */}
+        {!isAuthenticated && (
+          <div className="hidden md:flex space-x-4">
             <Link to="/login" className="text-white hover:text-gray-300">
               Iniciar Sesión
             </Link>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Mobile Menu Button */}
-        <button
-          className="md:hidden text-white focus:outline-none"
-          onClick={() => setMenuOpen(!menuOpen)}
-        >
-          ☰
-        </button>
+        {/* Mobile Menu Button - SOLO se muestra si está autenticado */}
+        {isAuthenticated && (
+          <button
+            className="md:hidden text-white focus:outline-none"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            ☰
+          </button>
+        )}
+
+        {/* Si NO está autenticado, mostrar botón de login en móvil */}
+        {!isAuthenticated && (
+          <Link
+            to="/login"
+            className="md:hidden text-white hover:text-gray-300"
+          >
+            Iniciar Sesión
+          </Link>
+        )}
       </div>
-      {/* Mobile Menu */}
-      {menuOpen && (
+
+      {/* Mobile Menu - SOLO se muestra si está autenticado y el menú está abierto */}
+      {isAuthenticated && menuOpen && (
         <div className="md:hidden bg-[#3969B1]">
           <Link
             to="/events"
             className="block px-4 py-2 text-white hover:bg-blue-600"
+            onClick={() => setMenuOpen(false)}
           >
             Eventos
           </Link>
-          <Link
-            to="/rooms"
-            className="block px-4 py-2 text-white hover:bg-blue-600"
-          >
-            Espacios
-          </Link>
-
-          {/* Mostrar el enlace "Home" y "Cerrar Sesión" solo si está autenticado */}
-          {isAuthenticated ? (
-            <>
-              <Link
-                to="/home"
-                className="block px-4 py-2 text-white hover:bg-blue-600"
-              >
-                Panel
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="block px-4 py-2 text-white hover:bg-blue-600"
-              >
-                Cerrar Sesión
-              </button>
-            </>
-          ) : (
+          {showSpacesLink && (
             <Link
-              to="/login"
+              to="/rooms"
               className="block px-4 py-2 text-white hover:bg-blue-600"
+              onClick={() => setMenuOpen(false)}
             >
-              Iniciar Sesión
+              Espacios
             </Link>
           )}
+          <Link
+            to="/home"
+            className="block px-4 py-2 text-white hover:bg-blue-600"
+            onClick={() => setMenuOpen(false)}
+          >
+            Panel
+          </Link>
+          <button
+            onClick={() => {
+              handleLogout();
+              setMenuOpen(false);
+            }}
+            className="block w-full text-left px-4 py-2 text-white hover:bg-blue-600"
+          >
+            Cerrar Sesión
+          </button>
         </div>
       )}
     </nav>

@@ -87,6 +87,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true, // Puede ser nulo si no se sube imagen
       },
+      bannerPath: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
     },
     {
       sequelize,

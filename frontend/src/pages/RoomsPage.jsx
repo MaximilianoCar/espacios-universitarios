@@ -9,12 +9,24 @@ import SearchBar from '../components/SearchBar';
 import HeroSection from '../components/HeroSection';
 import AddRoomForm from '../components/AddRoomForm';
 import backgroundImage from '../assets/ucvfondo.jpg';
+import { FaArrowLeft } from 'react-icons/fa';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const RoomsPage = () => {
   const [rooms, setRooms] = useState([]);
   const [filteredRooms, setFilteredRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddRoomForm, setShowAddRoomForm] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleBack = () => {
+    if (location.key !== 'default') {
+      navigate(-1);
+    } else {
+      navigate('/home');
+    }
+  };
 
   // Obtener el rol del usuario desde Redux
   const { role } = useSelector(state => state.auth);
@@ -86,10 +98,21 @@ const RoomsPage = () => {
           // Mostrar el buscador, el botón y las tarjetas
           <>
             <div className="flex justify-between items-center">
-              <SearchBar
-                placeholder="Buscar espacios..."
-                onSearch={handleSearch}
-              />
+              <div className="flex items-center mb-6 flex-wrap">
+                <button
+                  onClick={handleBack}
+                  className="flex items-center text-gray-800 hover:text-gray-600 transition-colors mr-4 mt-3"
+                  title="Volver al inicio"
+                >
+                  <FaArrowLeft size={24} />
+                </button>
+                <div>
+                  <SearchBar
+                    placeholder="Buscar espacios..."
+                    onSearch={handleSearch}
+                  />
+                </div>
+              </div>
 
               {/* Mostrar el botón de "Añadir Sala" solo si el usuario es administrador */}
               {role === 'admin' && (
