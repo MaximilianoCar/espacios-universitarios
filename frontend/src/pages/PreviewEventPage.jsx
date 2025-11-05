@@ -23,7 +23,7 @@ const PreviewEventPage = () => {
         setEvent(resp.data);
         console.log('trayendo evento', resp.data);
         setLoading(false);
-        // si no es owner y tampoco admin/coordinator, redirigir al home
+        // si no es owner y tampoco admin/coordinator redirigir al home
         const isOwner = resp.data?.isOwner;
         if (
           !isOwner &&
