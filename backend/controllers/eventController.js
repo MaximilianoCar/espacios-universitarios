@@ -4,6 +4,40 @@ const upload = require('../middlewares/eventFileUploadMiddleware');
 const path = require('path');
 const emailService = require('../services/emailService');
 
+// Normalizar rutas para usar slashes y eliminar prefijos como './' (compatibilidad Windows)
+const normalizeFilePath = filePath => {
+  if (!filePath) return filePath;
+  // Reemplazar backslashes por slashes
+  let p = filePath.replace(/\\/g, '/');
+  p = p.replace(/^\.\//, '').replace(/^\//, '');
+  return p;
+};
+
+// Eliminar un archivo seguro
+const safeUnlink = async (relativePath, allowedSubPath) => {
+  if (!relativePath) return;
+  const normalized = normalizeFilePath(relativePath);
+  const projectRoot = path.resolve(__dirname, '..');
+  const fullPath = path.resolve(projectRoot, normalized);
+  const allowedRoot = path.resolve(projectRoot, allowedSubPath);
+
+  // Asegurar que el archivo esté dentro del directorio permitido
+  if (!fullPath.startsWith(allowedRoot)) {
+    console.warn(`Ruta de archivo no permitida para borrado: ${fullPath}`);
+    return;
+  }
+
+  try {
+    const fs = require('fs');
+    if (fs.existsSync(fullPath)) {
+      await fs.promises.unlink(fullPath);
+      console.log(`Archivo eliminado: ${fullPath}`);
+    }
+  } catch (err) {
+    console.error('Error al eliminar archivo:', err);
+  }
+};
+
 // Función auxiliar para verificar permisos de sala
 const checkRoomPermission = async (userId, userRole, roomId) => {
   if (userRole === 'admin') {
@@ -51,8 +85,8 @@ exports.createEvent = async (req, res) => {
     };
 
     if (req.file) {
-      // Si se subió una imagen, agregar la ruta a los datos
-      eventData.imagePath = req.file.path;
+      // Si se subió una imagen, agregar la ruta a los datos (normalizada)
+      eventData.imagePath = normalizeFilePath(req.file.path);
     }
 
     const newEvent = await Event.create(eventData);
@@ -206,14 +240,34 @@ exports.getApprovedEvents = async (req, res) => {
   }
 };
 
-// Obtener un evento por ID (Read - Get One)
+// Obtener un evento por ID
 exports.getEventById = async (req, res) => {
   try {
-    const event = await Event.findByPk(req.params.eventId); // Buscar evento por ID
+    const event = await Event.findByPk(req.params.eventId, {
+      include: [
+        {
+          model: Room,
+          as: 'room',
+          attributes: ['id', 'name'],
+        },
+      ],
+    });
+
     if (!event) {
       return res.status(404).json({ error: 'Evento no encontrado.' });
     }
-    res.status(200).json(event);
+
+    // Incluir bandera isOwner para el frontend
+    const isOwner = req.user && req.user.id && event.userId === req.user.id;
+
+    // Crear la respuesta incluyendo la información de la sala
+    const response = {
+      ...event.toJSON(),
+      isOwner,
+      roomName: event.room ? event.room.name : null,
+    };
+
+    res.status(200).json(response);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Error al obtener el evento.' });
@@ -267,14 +321,20 @@ exports.updateEvent = async (req, res) => {
       });
     }
 
-    // Si se subió una nueva imagen, actualizar la ruta
+    // guardar el estado anterior antes de actualizar
+    const previousStatus = event.status;
+
+    // Si se subió una nueva imagen, actualizar la ruta (normalizada)
     if (req.file) {
-      req.body.imagePath = req.file.path;
+      // borrar imagen anterior si existía
+      if (event.imagePath) {
+        await safeUnlink(event.imagePath, './uploads/events/images');
+      }
+      req.body.imagePath = normalizeFilePath(req.file.path);
     }
 
     await event.update(req.body);
 
-    // si el estado cambió a aprobado/rechazado se manda correo al usuario
     if (req.body.status) {
       if (
         req.body.status === Event.STATUS.APPROVED ||
@@ -301,6 +361,53 @@ exports.updateEvent = async (req, res) => {
             console.log(
               `Notificación de estado (${req.body.status}) enviada a: ${user.email}`
             );
+
+            // Notificar a las entidades según el estado
+            if (req.body.status === Event.STATUS.APPROVED) {
+              try {
+                await emailService.notifyAllEntitiesApproval(
+                  roomName,
+                  event.reservationFrom,
+                  event.reservationTo,
+                  event.eventFrom,
+                  event.eventTo,
+                  eventId,
+                  event.name
+                );
+                console.log(
+                  'Notificación de aprobación enviada a todas las entidades'
+                );
+              } catch (approvalError) {
+                console.error(
+                  'Error enviando notificación de aprobación a entidades:',
+                  approvalError
+                );
+              }
+            } else if (
+              req.body.status === Event.STATUS.DENIED &&
+              previousStatus === Event.STATUS.APPROVED
+            ) {
+              // solo enviar notificación de cancelación si el evento estaba previamente aprobado
+              try {
+                await emailService.notifyAllEntitiesCancellation(
+                  roomName,
+                  event.reservationFrom,
+                  event.reservationTo,
+                  event.eventFrom,
+                  event.eventTo,
+                  eventId,
+                  event.name
+                );
+                console.log(
+                  'Notificación de cancelación enviada a todas las entidades'
+                );
+              } catch (cancellationError) {
+                console.error(
+                  'Error enviando notificación de cancelación a entidades:',
+                  cancellationError
+                );
+              }
+            }
           }
         } catch (emailError) {
           console.error('Error enviando notificación de estado:', emailError);
@@ -337,7 +444,6 @@ exports.deleteEvent = async (req, res) => {
 };
 
 // Controlador para subir archivos
-// controllers/eventController.js - método uploadFiles mejorado
 exports.uploadFiles = async (req, res) => {
   try {
     const userRole = req.user.role;
@@ -397,20 +503,29 @@ exports.uploadFiles = async (req, res) => {
 
     // si se subieron los archivos, actualizar las rutas en el modelo
     if (req.files?.programPath) {
-      const newProgramPath = req.files.programPath[0].path;
+      const newProgramPath = normalizeFilePath(req.files.programPath[0].path);
       // verificar si es realmente un archivo nuevo
       if (!previousProgramPath || newProgramPath !== previousProgramPath) {
+        // borrar archivo anterior si existía
+        if (previousProgramPath) {
+          await safeUnlink(previousProgramPath, './uploads/events');
+        }
         event.programPath = newProgramPath;
         programChanged = true;
       }
     }
 
     if (req.files?.agreementPath) {
-      const newAgreementPath = req.files.agreementPath[0].path;
+      const newAgreementPath = normalizeFilePath(
+        req.files.agreementPath[0].path
+      );
       if (
         !previousAgreementPath ||
         newAgreementPath !== previousAgreementPath
       ) {
+        if (previousAgreementPath) {
+          await safeUnlink(previousAgreementPath, './uploads/events');
+        }
         event.agreementPath = newAgreementPath;
         agreementChanged = true;
       }
@@ -537,6 +652,132 @@ exports.uploadFiles = async (req, res) => {
     }
 
     res.status(500).json({ error: 'Error al procesar los archivos.' });
+  }
+};
+
+// Subir banner (opcional) para un evento y/o actualizar descripción
+exports.uploadBanner = async (req, res) => {
+  try {
+    const event = await Event.findByPk(req.params.eventId);
+    if (!event) {
+      return res.status(404).json({ error: 'Evento no encontrado.' });
+    }
+
+    // Permisos: si el usuario es requester, solo puede modificar sus propios eventos
+    if (req.user.role === 'requester' && event.userId !== req.user.id) {
+      return res
+        .status(403)
+        .json({ message: 'No tienes permisos para modificar este evento.' });
+    }
+
+    // Si se subió un banner, actualizar la ruta (normalizada) y borrar anterior
+    if (req.file) {
+      const newBannerPath = normalizeFilePath(req.file.path);
+      // borrar banner anterior si existía y no era el default
+      if (event.bannerPath) {
+        await safeUnlink(event.bannerPath, './uploads/events/banners');
+      }
+      event.bannerPath = newBannerPath; // Guardar ruta relativa
+    }
+
+    // Permitir actualizar la descripción en la misma petición (opcional)
+    if (req.body.description !== undefined) {
+      event.description = req.body.description;
+    }
+
+    await event.save();
+    res.status(200).json({ message: 'Banner/Descripción actualizados', event });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al subir el banner.' });
+  }
+};
+
+// Eliminar banner y restaurar comportamiento por defecto
+exports.removeBanner = async (req, res) => {
+  try {
+    const event = await Event.findByPk(req.params.eventId);
+    if (!event) {
+      return res.status(404).json({ error: 'Evento no encontrado.' });
+    }
+
+    // permisos: solo requester (dueño), admin o coordinator pueden eliminar
+    const userRole = req.user.role;
+    const userId = req.user.id;
+    if (userRole === 'requester' && event.userId !== userId) {
+      return res
+        .status(403)
+        .json({ message: 'No tienes permisos para modificar este evento.' });
+    }
+
+    if (event.bannerPath) {
+      await safeUnlink(event.bannerPath, './uploads/events/banners');
+      event.bannerPath = null;
+      await event.save();
+    }
+
+    res.status(200).json({ message: 'Banner eliminado', event });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al eliminar el banner.' });
+  }
+};
+
+// Subir o reemplazar imagen principal del evento
+exports.uploadEventImage = async (req, res) => {
+  try {
+    const event = await Event.findByPk(req.params.eventId);
+    if (!event) return res.status(404).json({ error: 'Evento no encontrado.' });
+
+    // permisos: solo requester (dueño), admin o coordinator pueden modificar
+    const userRole = req.user.role;
+    const userId = req.user.id;
+    if (userRole === 'requester' && event.userId !== userId) {
+      return res
+        .status(403)
+        .json({ message: 'No tienes permisos para modificar este evento.' });
+    }
+
+    if (req.file) {
+      const newImagePath = normalizeFilePath(req.file.path);
+      if (event.imagePath) {
+        await safeUnlink(event.imagePath, './uploads/events/images');
+      }
+      event.imagePath = newImagePath;
+      await event.save();
+    }
+
+    res.status(200).json({ message: 'Imagen de evento actualizada', event });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al subir la imagen del evento.' });
+  }
+};
+
+// Eliminar imagen principal del evento
+exports.removeEventImage = async (req, res) => {
+  try {
+    const event = await Event.findByPk(req.params.eventId);
+    if (!event) return res.status(404).json({ error: 'Evento no encontrado.' });
+
+    const userRole = req.user.role;
+    const userId = req.user.id;
+    if (userRole === 'requester' && event.userId !== userId) {
+      return res
+        .status(403)
+        .json({ message: 'No tienes permisos para modificar este evento.' });
+    }
+
+    if (event.imagePath) {
+      await safeUnlink(event.imagePath, './uploads/events/images');
+      event.imagePath = null;
+      await event.save();
+    }
+
+    res.status(200).json({ message: 'Imagen del evento eliminada', event });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error al eliminar la imagen del evento.' });
   }
 };
 

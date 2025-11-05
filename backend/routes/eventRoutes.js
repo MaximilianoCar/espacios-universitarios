@@ -9,6 +9,7 @@ const restrictTo = require('../middlewares/restrictTo'); //proteger act eventos
 // Renombrar las importaciones para evitar conflictos
 const uploadFiles = require('../middlewares/eventFileUploadMiddleware');
 const uploadImages = require('../middlewares/eventImageUploadMiddleware');
+const uploadBanner = require('../middlewares/eventBannerUploadMiddleware');
 
 // Rutas para el CRUD
 
@@ -84,5 +85,31 @@ router.post(
   ]),
   eventController.uploadFiles
 );
+
+// Subir banner opcional para el evento (carpeta uploads/events/banners)
+router.post(
+  '/events/:eventId/upload-banner',
+  protect,
+  uploadBanner.single('banner'),
+  eventController.uploadBanner
+);
+
+// Subir o reemplazar imagen principal del evento
+router.post(
+  '/events/:eventId/upload-image',
+  protect,
+  uploadImages.single('image'),
+  eventController.uploadEventImage
+);
+
+// Eliminar imagen principal del evento
+router.delete(
+  '/events/:eventId/image',
+  protect,
+  eventController.removeEventImage
+);
+
+// Eliminar banner (restaurar a default)
+router.delete('/events/:eventId/banner', protect, eventController.removeBanner);
 
 module.exports = router;

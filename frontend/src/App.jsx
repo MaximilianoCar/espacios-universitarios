@@ -15,6 +15,7 @@ import AdminRoomsPage from './pages/AdminRoomsPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import ProtectedRouteCoord from './components/ProtectedRouteCoord';
 import AdminPendingRequestsPage from './pages/AdminPendingRequestsPage';
+import PreviewEventPage from './pages/PreviewEventPage';
 import { useDispatch } from 'react-redux';
 import { refreshToken } from './features/auth/authActions';
 import Layout from './components/Layout';
@@ -44,6 +45,7 @@ function App() {
         {/* Rutas públicas */}
         <Route path="/events" element={<EventsPage />} />
         <Route path="/events/:id" element={<EventDetailsPage />} />
+        <Route path="/preview/:id" element={<PreviewEventPage />} />
         <Route path="/rooms" element={<RoomsPage />} />
         <Route path="/rooms/:id" element={<RoomDetailsPage />} />
 

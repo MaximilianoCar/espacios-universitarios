@@ -8,6 +8,14 @@ const upload = require('../middlewares/roomImageUploadMiddleware'); // Importar 
 
 // Rutas para el modelo Room
 
+//validar permisos
+router.get(
+  '/rooms/:roomId/check-permission',
+  protect,
+  restrictTo('admin', 'coordinator'),
+  roomController.checkRoomPermission
+);
+
 // Crear una nueva sala con imagen
 router.post(
   '/rooms',

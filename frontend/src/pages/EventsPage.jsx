@@ -8,14 +8,23 @@ import Footer from '../components/Footer';
 import SearchBar from '../components/SearchBar';
 import HeroSection from '../components/HeroSection';
 import backgroundImage from '../assets/ucvfondo.jpg';
+import { FaArrowLeft } from 'react-icons/fa';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const EventsPage = () => {
   const [events, setEvents] = useState([]);
   const [filteredEvents, setFilteredEvents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // Obtener el rol del usuario desde Redux
-  //const { role } = useSelector(state => state.auth);
+  const handleBack = () => {
+    if (location.key !== 'default') {
+      navigate(-1);
+    } else {
+      navigate('/home');
+    }
+  };
 
   // Obtener eventos de la API y filtrar solo los eventos aprobados
   useEffect(() => {
@@ -62,8 +71,20 @@ const EventsPage = () => {
         backgroundImage={backgroundImage}
       />
       <div className="container mx-auto my-8 px-4">
-        <div className="flex justify-between items-center">
-          <SearchBar placeholder="Buscar eventos..." onSearch={handleSearch} />
+        <div className="flex items-center mb-6 flex-wrap">
+          <button
+            onClick={handleBack}
+            className="flex items-center text-gray-800 hover:text-gray-600 transition-colors mr-4 mt-3"
+            title="Volver al inicio"
+          >
+            <FaArrowLeft size={24} />
+          </button>
+          <div>
+            <SearchBar
+              placeholder="Buscar eventos..."
+              onSearch={handleSearch}
+            />
+          </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
           {filteredEvents.length > 0 ? (
@@ -86,7 +107,7 @@ const EventsPage = () => {
                   <p className="mt-2 text-gray-600">{event.description}</p>
                   <Link
                     to={`/events/${event.id}`}
-                    className="mt-4 inline-block bg-blue-600 text-white px-4 py-2 rounded"
+                    className="mt-4 inline-block bg-blue-600 text-white hover:bg-blue-500 px-4 py-2 rounded"
                   >
                     Ver Detalles
                   </Link>

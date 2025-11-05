@@ -11,6 +11,8 @@ import {
   PhotoIcon,
   InformationCircleIcon,
 } from '@heroicons/react/24/outline';
+import { FaArrowLeft } from 'react-icons/fa';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const InputWithIcon = React.memo(({ icon: Icon, error, ...props }) => (
   <div className="relative">
@@ -63,6 +65,8 @@ const AddEventForm = ({ onEventCreated }) => {
   const [rooms, setRooms] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeSection, setActiveSection] = useState(0);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const sections = [
     { id: 'space', title: 'Espacio', icon: MapPinIcon },
@@ -71,6 +75,14 @@ const AddEventForm = ({ onEventCreated }) => {
     { id: 'image', title: 'Imagen', icon: PhotoIcon },
   ];
 
+  //manejar volver atras
+  const handleBack = () => {
+    if (location.key !== 'default') {
+      navigate(-1);
+    } else {
+      navigate('/home');
+    }
+  };
   // Fetch rooms
   useEffect(() => {
     axiosInstance
@@ -363,12 +375,21 @@ const AddEventForm = ({ onEventCreated }) => {
   const prevSection = () => setActiveSection(prev => Math.max(prev - 1, 0));
 
   return (
-    <div className="max-w-4xl mx-auto my-8 bg-white rounded-xl shadow-lg overflow-hidden">
+    <div className="max-w-4xl mx-auto my-5 bg-white rounded-xl shadow-lg overflow-hidden">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 sm:px-8 py-6">
-        <h2 className="text-2xl sm:text-3xl font-bold text-white text-center">
-          Solicitar Reserva de Espacio
-        </h2>
+        <div className="flex items-center mb-6">
+          <button
+            onClick={handleBack}
+            className="flex items-center text-white hover:text-gray-200 transition-colors mr-4"
+            title="Volver atrás"
+          >
+            <FaArrowLeft size={24} />
+          </button>
+          <h2 className="text-2xl sm:text-3xl font-bold text-white text-center flex-1">
+            Solicitar Reserva de Espacio
+          </h2>
+        </div>
       </div>
 
       {/* Progress Steps */}
