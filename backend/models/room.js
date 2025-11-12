@@ -45,6 +45,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true, // Puede ser nulo si no se sube imagen
       },
+      isInCUC: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false, // Valor por defecto
+      },
     },
     {
       sequelize,

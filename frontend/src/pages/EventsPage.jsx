@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from 'react';
 import axiosInstance from '../axiosConfig';
 import { Link } from 'react-router-dom';
-//import { useSelector } from 'react-redux'; // Para obtener el rol del usuario desde Redux
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SearchBar from '../components/SearchBar';
@@ -10,6 +9,7 @@ import HeroSection from '../components/HeroSection';
 import backgroundImage from '../assets/ucvfondo.jpg';
 import { FaArrowLeft } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
+import getMediaUrl from '../utils/media';
 
 const EventsPage = () => {
   const [events, setEvents] = useState([]);
@@ -96,7 +96,7 @@ const EventsPage = () => {
                 <img
                   src={
                     event.imagePath
-                      ? `http://localhost:3000/${event.imagePath}`
+                      ? getMediaUrl(event.imagePath)
                       : 'https://via.placeholder.com/600x400'
                   }
                   alt={event.name}

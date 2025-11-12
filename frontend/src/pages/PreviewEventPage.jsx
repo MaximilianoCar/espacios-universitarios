@@ -8,6 +8,7 @@ import Swal from 'sweetalert2';
 import { useSelector } from 'react-redux';
 import defaultBanner from '../assets/ucvfondo.jpg';
 import { CameraIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
+import getMediaUrl from '../utils/media';
 
 const PreviewEventPage = () => {
   const { id } = useParams();
@@ -245,9 +246,7 @@ const PreviewEventPage = () => {
         <HeroSection
           title={event.name}
           backgroundImage={
-            event.bannerPath
-              ? `http://localhost:3000/${event.bannerPath.replace(/\\/g, '/')}`
-              : defaultBanner
+            event.bannerPath ? getMediaUrl(event.bannerPath) : defaultBanner
           }
         />
         {event.isOwner && (
@@ -271,10 +270,7 @@ const PreviewEventPage = () => {
             <img
               src={
                 event.imagePath
-                  ? `http://localhost:3000/${event.imagePath.replace(
-                      /\\/g,
-                      '/'
-                    )}`
+                  ? getMediaUrl(event.imagePath)
                   : 'https://via.placeholder.com/600x400'
               }
               alt={event.name}
