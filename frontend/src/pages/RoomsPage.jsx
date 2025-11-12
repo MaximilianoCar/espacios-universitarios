@@ -11,6 +11,7 @@ import AddRoomForm from '../components/AddRoomForm';
 import backgroundImage from '../assets/ucvfondo.jpg';
 import { FaArrowLeft } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
+import getMediaUrl from '../utils/media';
 
 const RoomsPage = () => {
   const [rooms, setRooms] = useState([]);
@@ -92,8 +93,10 @@ const RoomsPage = () => {
       <div className="container mx-auto my-8 px-4">
         {/* Renderizado condicional */}
         {showAddRoomForm ? (
-          // Mostrar solo el formulario
-          <AddRoomForm onRoomCreated={handleRoomCreated} />
+          <AddRoomForm
+            onRoomCreated={handleRoomCreated}
+            onClose={() => setShowAddRoomForm(false)}
+          />
         ) : (
           // Mostrar el buscador, el botón y las tarjetas
           <>
@@ -134,7 +137,7 @@ const RoomsPage = () => {
                   <img
                     src={
                       room.imagePath
-                        ? `http://localhost:3000/${room.imagePath}`
+                        ? getMediaUrl(room.imagePath)
                         : 'https://via.placeholder.com/600x400'
                     }
                     alt={room.name}

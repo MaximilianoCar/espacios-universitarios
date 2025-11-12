@@ -9,6 +9,19 @@ import Swal from 'sweetalert2';
 import defaultBanner from '../assets/ucvfondo.jpg';
 import { CameraIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
 import { FaArrowLeft } from 'react-icons/fa';
+import getMediaUrl from '../utils/media';
+
+const formatDateForInput = dateString => {
+  if (!dateString) return '';
+
+  const date = new Date(dateString);
+
+  // Ajustar por la zona horaria local
+  const timezoneOffset = date.getTimezoneOffset() * 60000;
+  const adjustedDate = new Date(date.getTime() - timezoneOffset);
+
+  return adjustedDate.toISOString().slice(0, 16);
+};
 
 const EventDetailsPage = () => {
   const { id } = useParams();
@@ -511,9 +524,7 @@ const EventDetailsPage = () => {
         <HeroSection
           title={event?.name || ''}
           backgroundImage={
-            event?.bannerPath
-              ? `http://localhost:3000/${event.bannerPath.replace(/\\/g, '/')}`
-              : defaultBanner
+            event?.bannerPath ? getMediaUrl(event.bannerPath) : defaultBanner
           }
         />
         {canEdit && (
@@ -537,10 +548,7 @@ const EventDetailsPage = () => {
             <img
               src={
                 event?.imagePath
-                  ? `http://localhost:3000/${event.imagePath.replace(
-                      /\\/g,
-                      '/'
-                    )}`
+                  ? getMediaUrl(event.imagePath)
                   : 'https://via.placeholder.com/600x400'
               }
               alt={event?.name || 'Evento'}

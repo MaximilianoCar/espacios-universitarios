@@ -1,4 +1,3 @@
-// src/components/AddEventForm.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import axiosInstance from '../axiosConfig';
 import Swal from 'sweetalert2';
@@ -10,41 +9,13 @@ import {
   UserIcon,
   PhotoIcon,
   InformationCircleIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { FaArrowLeft } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
-
-const InputWithIcon = React.memo(({ icon: Icon, error, ...props }) => (
-  <div className="relative">
-    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-      <Icon className="h-5 w-5 text-gray-400" />
-    </div>
-    <input
-      {...props}
-      className={`block w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-        error ? 'border-red-500' : 'border-gray-300'
-      }`}
-    />
-  </div>
-));
-
-const SelectWithIcon = React.memo(
-  ({ icon: Icon, error, children, ...props }) => (
-    <div className="relative">
-      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-        <Icon className="h-5 w-5 text-gray-400" />
-      </div>
-      <select
-        {...props}
-        className={`block w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-          error ? 'border-red-500' : 'border-gray-300'
-        }`}
-      >
-        {children}
-      </select>
-    </div>
-  )
-);
+import InputWithIcon from './InputWithIcon';
+import SelectWithIcon from './SelectWithIcon';
+import ImageUploadArea from './ImageUploadArea';
 
 const AddEventForm = ({ onEventCreated }) => {
   const [formData, setFormData] = useState({
@@ -65,6 +36,7 @@ const AddEventForm = ({ onEventCreated }) => {
   const [rooms, setRooms] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeSection, setActiveSection] = useState(0);
+  const [selectedRoomIsCUC, setSelectedRoomIsCUC] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -75,7 +47,44 @@ const AddEventForm = ({ onEventCreated }) => {
     { id: 'image', title: 'Imagen', icon: PhotoIcon },
   ];
 
-  //manejar volver atras
+  // Protocolo CUC - Normas y prohibiciones
+  const protocoloCUC = {
+    titulo: '¡Atención! Está solicitando un espacio en un Patrimonio Mundial',
+    mensaje:
+      'Para preservar la CUC, su solicitud está sujeta al Protocolo de Uso. Por favor, lea atentamente las normas principales:',
+    permitido: [
+      'Actividades académicas de la UCV',
+      'Actividades culturales, artísticas y recreativas organizadas por la comunidad ucevista',
+      'Uso compartido y respetuoso de los espacios',
+    ],
+    prohibido: [
+      'Consumir o vender alcohol, tabaco o drogas',
+      'Portar armas de cualquier tipo',
+      'Encender fogatas o usar equipos que generen fuego',
+      'Generar ruidos excesivos',
+      'Dañar o intervenir el patrimonio (edificios, obras de arte, murales)',
+      'Restringir el libre tránsito de las personas',
+      'Instalar publicidad masiva (vallas, pendones) sin autorización',
+    ],
+    requisitos: [
+      'La mayoría de las actividades requieren que se gestionen con antelación (1 semana a 1 mes)',
+      'Sera necesario que suba la programacion del proyecto detallado de la actividad',
+    ],
+    compromiso:
+      'Al enviar esta solicitud, usted se compromete a cumplir con este protocolo.',
+  };
+
+  // Checklist de compromiso
+  const checklistCompromiso = [
+    'Confirmo que he leído y comprendo el Protocolo para el Uso de los Espacios Abiertos de la CUC',
+    'Declaro que mi actividad no interferirá con el normal desenvolvimiento de las actividades académicas',
+    'Acepto que está prohibido el consumo o venta de alcohol, tabaco y sustancias ilegales',
+    'Me comprometo a no dañar, alterar o intervenir en el patrimonio cultural de la CUC',
+    'Entiendo que mi actividad puede requerir un aval de COPRED y me comprometo a gestionarlo si es necesario',
+    'Acepto que el incumplimiento de estas normas puede acarrear la suspensión de mi actividad, sanciones y la prohibición de acceso futuro',
+  ];
+
+  // Manejar volver atrás
   const handleBack = () => {
     if (location.key !== 'default') {
       navigate(-1);
@@ -83,6 +92,7 @@ const AddEventForm = ({ onEventCreated }) => {
       navigate('/home');
     }
   };
+
   // Fetch rooms
   useEffect(() => {
     axiosInstance
@@ -96,12 +106,158 @@ const AddEventForm = ({ onEventCreated }) => {
   }, []);
 
   // Usar useCallback para evitar recrear la función en cada render
-  const handleChange = useCallback(e => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    setErrors(prev => ({ ...prev, [name]: '' }));
-    setError('');
-  }, []);
+  const handleChange = useCallback(
+    e => {
+      const { name, value } = e.target;
+      setFormData(prev => ({ ...prev, [name]: value }));
+      setErrors(prev => ({ ...prev, [name]: '' }));
+      setError('');
+
+      // Si se cambia el roomId, verificar si es un espacio en CUC
+      if (name === 'roomId' && value) {
+        const selectedRoom = rooms.find(room => room.id == value);
+        if (selectedRoom && selectedRoom.isInCUC) {
+          setSelectedRoomIsCUC(true);
+          // Mostrar modal de protocolo CUC
+          mostrarModalProtocoloCUC();
+        } else {
+          setSelectedRoomIsCUC(false);
+        }
+      }
+    },
+    [rooms]
+  );
+
+  // Función para mostrar modal de protocolo CUC
+  const mostrarModalProtocoloCUC = () => {
+    Swal.fire({
+      title: protocoloCUC.titulo,
+      html: `
+        <div class="text-left max-h-96 overflow-y-auto">
+          <p class="mb-4 text-gray-700">${protocoloCUC.mensaje}</p>
+          
+          <div class="mb-4">
+            <p class="font-semibold text-green-700 mb-2">Lo que está PERMITIDO priorizando:</p>
+            <ul class="list-disc list-inside ml-4 text-sm text-gray-600">
+              ${protocoloCUC.permitido.map(item => `<li>${item}</li>`).join('')}
+            </ul>
+          </div>
+
+          <div class="mb-4">
+            <p class="font-semibold text-red-700 mb-2">Lo que está PROHIBIDO:</p>
+            <ul class="list-disc list-inside ml-4 text-sm text-gray-600">
+              ${protocoloCUC.prohibido.map(item => `<li>${item}</li>`).join('')}
+            </ul>
+          </div>
+
+          <div class="mb-4">
+            <p class="font-semibold text-blue-700 mb-2">Requisitos Clave:</p>
+            <ul class="list-disc list-inside ml-4 text-sm text-gray-600">
+              ${protocoloCUC.requisitos
+                .map(item => `<li>${item}</li>`)
+                .join('')}
+            </ul>
+          </div>
+
+          <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mt-4">
+            <p class="text-sm text-yellow-700 font-semibold">${
+              protocoloCUC.compromiso
+            }</p>
+          </div>
+        </div>
+      `,
+      icon: 'warning',
+      confirmButtonColor: '#3085d6',
+      confirmButtonText: 'Entendido',
+      width: '600px',
+      customClass: {
+        container: 'z-50',
+      },
+    });
+  };
+
+  // Función para mostrar modal de confirmación final con checklist
+  const mostrarModalConfirmacionFinal = async () => {
+    const { value: formValues } = await Swal.fire({
+      title: 'Confirmación Final - Protocolo CUC',
+      html: `
+        <div class="text-left max-h-96 overflow-y-auto">
+          <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+            <div class="flex">
+              <div class="flex-shrink-0">
+                <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                </svg>
+              </div>
+              <div class="ml-3">
+                <p class="text-sm text-yellow-700">
+                  <strong>Resumen del Protocolo CUC</strong>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <p class="font-semibold text-green-700 mb-2 text-sm">PERMITIDO:</p>
+            <p class="text-xs text-gray-600 mb-2">Actividades académicas, culturales y uso respetuoso</p>
+            
+            <p class="font-semibold text-red-700 mb-2 text-sm">PROHIBIDO:</p>
+            <p class="text-xs text-gray-600 mb-2">Alcohol, armas, fogatas, ruido excesivo, daño al patrimonio</p>
+            
+            <p class="font-semibold text-blue-700 mb-2 text-sm">REQUISITOS:</p>
+            <p class="text-xs text-gray-600">Aval de COPRED puede ser requerido</p>
+          </div>
+
+          <div class="border-t pt-4">
+            <p class="font-semibold text-gray-700 mb-3">Checklist de Compromiso *</p>
+            <form id="checklistForm">
+              ${checklistCompromiso
+                .map(
+                  (item, index) => `
+                <div class="flex items-start mb-3">
+                  <input 
+                    type="checkbox" 
+                    id="check${index}" 
+                    name="check${index}" 
+                    class="mt-1 mr-3 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    required
+                  >
+                  <label for="check${index}" class="text-sm text-gray-700 flex-1">${item}</label>
+                </div>
+              `
+                )
+                .join('')}
+            </form>
+          </div>
+        </div>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Confirmar y Enviar Solicitud',
+      cancelButtonText: 'Revisar Datos',
+      focusConfirm: false,
+      width: '650px',
+      preConfirm: () => {
+        // Validar que todos los checkboxes estén marcados
+        const checkboxes = checklistCompromiso.map((_, index) =>
+          document.getElementById(`check${index}`)
+        );
+        const allChecked = checkboxes.every(checkbox => checkbox.checked);
+
+        if (!allChecked) {
+          Swal.showValidationMessage(
+            'Debe aceptar todos los puntos del checklist para continuar.'
+          );
+          return false;
+        }
+        return true;
+      },
+    });
+
+    return formValues;
+  };
 
   const handleImageChange = e => {
     const file = e.target.files[0];
@@ -173,39 +329,47 @@ const AddEventForm = ({ onEventCreated }) => {
     }
 
     if (validate()) {
-      // Mostrar modal de confirmación
-      const result = await Swal.fire({
-        title: '¿Confirmar reserva?',
-        html: `
-          <div class="text-left">
-            <p class="mb-4 text-gray-700">¿Estás seguro de continuar con esta reserva?</p>
-            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
-              <div class="flex">
-                <div class="flex-shrink-0">
-                  <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                  </svg>
-                </div>
-                <div class="ml-3">
-                  <p class="text-sm text-yellow-700">
-                    <strong>Asegúrate que los datos estén correctos</strong>, luego no se podrá editar.
-                  </p>
+      // Si el espacio seleccionado es en CUC, mostrar modal de confirmación final con checklist
+      let confirmResult = true;
+
+      if (selectedRoomIsCUC) {
+        confirmResult = await mostrarModalConfirmacionFinal();
+      } else {
+        // Para espacios no CUC, mostrar confirmación normal
+        confirmResult = await Swal.fire({
+          title: '¿Confirmar reserva?',
+          html: `
+            <div class="text-left">
+              <p class="mb-4 text-gray-700">¿Estás seguro de continuar con esta reserva?</p>
+              <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+                <div class="flex">
+                  <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
+                  <div class="ml-3">
+                    <p class="text-sm text-yellow-700">
+                      <strong>Asegúrate que los datos estén correctos</strong>, luego no se podrá editar.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        `,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
-        confirmButtonText: 'Sí, confirmar reserva',
-        cancelButtonText: 'Revisar datos',
-        focusConfirm: false,
-        width: '500px',
-      });
+          `,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonColor: '#3085d6',
+          cancelButtonColor: '#d33',
+          confirmButtonText: 'Sí, confirmar reserva',
+          cancelButtonText: 'Revisar datos',
+          focusConfirm: false,
+          width: '500px',
+        });
+        confirmResult = confirmResult.isConfirmed;
+      }
 
-      if (!result.isConfirmed) {
+      if (!confirmResult) {
         setIsSubmitting(false);
         return;
       }
@@ -247,6 +411,17 @@ const AddEventForm = ({ onEventCreated }) => {
                 </svg>
               </div>
               <p class="text-gray-700 mb-4">Tu reserva ha sido enviada para revisión.</p>
+              ${
+                selectedRoomIsCUC
+                  ? `
+                <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4 text-left">
+                  <p class="text-sm text-blue-700">
+                    <strong>Recordatorio:</strong> Para espacios en la CUC, recuerda gestionar el aval de COPRED si es requerido.
+                  </p>
+                </div>
+              `
+                  : ''
+              }
               <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4 text-left">
                 <p class="text-sm text-blue-700">
                   <strong>Puede subir la programación del evento</strong> para que se tenga en cuenta en su solicitud.
@@ -275,6 +450,7 @@ const AddEventForm = ({ onEventCreated }) => {
         });
         setImageFile(null);
         setActiveSection(0);
+        setSelectedRoomIsCUC(false);
         onEventCreated(response.data);
       } catch (error) {
         Swal.close(); // Cerrar loader en caso de error
@@ -446,6 +622,23 @@ const AddEventForm = ({ onEventCreated }) => {
               Selecciona el Espacio
             </h3>
 
+            {selectedRoomIsCUC && (
+              <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <ExclamationTriangleIcon className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm text-yellow-800 font-semibold mb-1">
+                      Espacio en Patrimonio Mundial - CUC
+                    </p>
+                    <p className="text-xs text-yellow-700">
+                      Este espacio está sujeto al Protocolo de Uso de la Ciudad
+                      Universitaria de Caracas
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Espacio para el Evento *
@@ -461,6 +654,7 @@ const AddEventForm = ({ onEventCreated }) => {
                 {rooms.map(room => (
                   <option key={room.id} value={room.id}>
                     {room.name} - Capacidad: {room.capacity} personas
+                    {room.isInCUC && ' (CUC)'}
                   </option>
                 ))}
               </SelectWithIcon>
@@ -477,11 +671,18 @@ const AddEventForm = ({ onEventCreated }) => {
                     <strong>Tip:</strong> Selecciona el espacio que mejor se
                     adapte al tamaño y necesidades de tu evento.
                   </p>
+                  <p className="text-xs sm:text-sm text-blue-800 mt-1">
+                    Los espacios marcados con <strong>(CUC)</strong> están en la
+                    Ciudad Universitaria y tienen normativas especiales.
+                  </p>
                 </div>
               </div>
             </div>
           </div>
         )}
+
+        {/* Resto del código del formulario se mantiene igual */}
+        {/* ... (las otras secciones permanecen sin cambios) ... */}
 
         {/* Sección 2: Información Básica */}
         {activeSection === 1 && (
@@ -721,41 +922,12 @@ const AddEventForm = ({ onEventCreated }) => {
               Imagen del Evento
             </h3>
 
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 sm:p-8 text-center hover:border-blue-400 transition-colors">
+            <div>
               <PhotoIcon className="w-12 h-12 sm:w-16 sm:h-16 text-gray-400 mx-auto mb-4" />
-
-              <div className="mb-4">
-                <label htmlFor="imageFile" className="cursor-pointer">
-                  <span className="bg-blue-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-medium text-sm sm:text-base hover:bg-blue-700 transition-colors">
-                    Seleccionar Imagen
-                  </span>
-                  <input
-                    type="file"
-                    name="imageFile"
-                    id="imageFile"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-
-              <p className="text-xs sm:text-sm text-gray-600">
-                PNG, JPG, JPEG hasta 5MB
-              </p>
-
-              {imageFile && (
-                <div className="mt-4">
-                  <p className="text-green-600 font-medium text-sm sm:text-base mb-2">
-                    ✓ Imagen seleccionada: {imageFile.name}
-                  </p>
-                  <img
-                    src={URL.createObjectURL(imageFile)}
-                    alt="Previsualización"
-                    className="w-32 h-24 sm:w-48 sm:h-32 object-cover rounded-lg mx-auto shadow-md"
-                  />
-                </div>
-              )}
+              <ImageUploadArea
+                imageFile={imageFile}
+                onFileChange={handleImageChange}
+              />
             </div>
 
             {!imageFile && (

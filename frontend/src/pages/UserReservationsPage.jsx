@@ -25,6 +25,7 @@ import ModalMobile from '../components/ModalMobile';
 
 import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
+import getMediaUrl from '../utils/media';
 
 const UserReservationsPage = () => {
   const [events, setEvents] = useState([]);
@@ -313,7 +314,7 @@ const UserReservationsPage = () => {
 
   // Manejador de clic en la imagen para mostrar el modal
   const handleImageClick = imagePath => {
-    setSelectedImage(`http://localhost:3000/${imagePath}`);
+    setSelectedImage(getMediaUrl(imagePath));
     setShowImageModal(true);
   };
 
@@ -436,7 +437,7 @@ const UserReservationsPage = () => {
                 {/* ACCIONES DE DOCUMENTOS */}
                 {event.programPath ? (
                   <a
-                    href={`http://localhost:3000/${event.programPath}`}
+                    href={getMediaUrl(event.programPath)}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => setOpenMenuId(null)}
@@ -454,7 +455,7 @@ const UserReservationsPage = () => {
                 )}
                 {event.agreementPath ? (
                   <a
-                    href={`http://localhost:3000/${event.agreementPath}`}
+                    href={getMediaUrl(event.agreementPath)}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => setOpenMenuId(null)}
@@ -559,7 +560,7 @@ const UserReservationsPage = () => {
                     <td className="py-2 px-4 border-b text-center">
                       {event.imagePath ? (
                         <img
-                          src={`http://localhost:3000/${event.imagePath}`}
+                          src={getMediaUrl(event.imagePath)}
                           alt={event.name}
                           className="w-12 h-12 object-cover rounded cursor-pointer hover:opacity-75 transition-opacity duration-200 inline-block"
                           onClick={() => handleImageClick(event.imagePath)}
@@ -718,7 +719,7 @@ const UserReservationsPage = () => {
                 {event.imagePath && (
                   <div className="mb-3">
                     <img
-                      src={`http://localhost:3000/${event.imagePath}`}
+                      src={getMediaUrl(event.imagePath)}
                       alt={event.name}
                       className="w-full h-40 object-cover rounded cursor-pointer"
                       onClick={() => handleImageClick(event.imagePath)}

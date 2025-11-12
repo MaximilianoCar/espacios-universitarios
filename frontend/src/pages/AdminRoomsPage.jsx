@@ -9,6 +9,8 @@ import Modal from '../components/Modal';
 import AddRoomForm from '../components/AddRoomForm';
 import UpdateRoomForm from '../components/UpdateRoomForm';
 import { useNavigate, useLocation } from 'react-router-dom';
+import Swal from 'sweetalert2';
+import getMediaUrl from '../utils/media';
 
 const AdminRoomsPage = () => {
   const [rooms, setRooms] = useState([]);
@@ -28,6 +30,14 @@ const AdminRoomsPage = () => {
     } else {
       navigate('/home');
     }
+  };
+
+  const handleCloseModal = () => {
+    setShowUpdateRoomForm(false);
+  };
+
+  const handleCloseAddModal = () => {
+    setShowAddRoomForm(false);
   };
 
   // Obtener las salas desde la API
@@ -56,7 +66,8 @@ const AdminRoomsPage = () => {
 
     const filtered = rooms.filter(room => {
       const lowerCaseTerm = term.toLowerCase();
-      const searchableFields = `${room.name} ${room.description}`.toLowerCase();
+      const searchableFields =
+        `${room.name} ${room.description} ${room.location} ${room.staffowner}`.toLowerCase();
 
       return searchableFields.includes(lowerCaseTerm);
     });
@@ -65,21 +76,53 @@ const AdminRoomsPage = () => {
   };
 
   // Manejar la eliminación de una sala
-  const handleDeleteRoom = roomId => {
-    if (window.confirm('¿Estás seguro de que deseas eliminar esta sala?')) {
-      axiosInstance
-        .delete(`/rooms/${roomId}`)
-        .then(() => {
-          // Actualizar la lista de salas
-          setRooms(prevRooms => prevRooms.filter(room => room.id !== roomId));
-          setFilteredRooms(prevRooms =>
-            prevRooms.filter(room => room.id !== roomId)
-          );
-        })
-        .catch(error => {
-          console.error('Error al eliminar la sala:', error);
-          alert('Error al eliminar la sala. Por favor, intente nuevamente.');
-        });
+  const handleDeleteRoom = async (roomId, roomName) => {
+    const result = await Swal.fire({
+      title: '¿Estás seguro?',
+      text: `Esta acción eliminará permanentemente la sala "${roomName}". Esta acción no se puede deshacer.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+    });
+
+    if (result.isConfirmed) {
+      // Mostrar loader
+      Swal.fire({
+        title: 'Eliminando sala...',
+        text: `Por favor espere mientras se elimina la sala "${roomName}"`,
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        willOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      try {
+        await axiosInstance.delete(`/rooms/${roomId}`);
+
+        // Actualizar la lista de salas
+        setRooms(prevRooms => prevRooms.filter(room => room.id !== roomId));
+        setFilteredRooms(prevRooms =>
+          prevRooms.filter(room => room.id !== roomId)
+        );
+
+        Swal.fire(
+          '¡Eliminada!',
+          `La sala "${roomName}" ha sido eliminada exitosamente.`,
+          'success'
+        );
+      } catch (error) {
+        console.error('Error al eliminar la sala:', error);
+        Swal.fire(
+          'Error',
+          'Error al eliminar la sala. Por favor, intente nuevamente.',
+          'error'
+        );
+      }
     }
   };
 
@@ -92,6 +135,59 @@ const AdminRoomsPage = () => {
   // Manejar la creación de una nueva sala
   const handleAddRoom = () => {
     setShowAddRoomForm(true);
+  };
+
+  // Manejar el envío del formulario de agregar sala
+  const handleAddRoomSubmit = async formData => {
+    setIsSubmitting(true);
+
+    // Mostrar loader
+    Swal.fire({
+      title: 'Creando espacio...',
+      text: 'Por favor espere mientras se crea el nuevo espacio',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      willOpen: () => {
+        Swal.showLoading();
+      },
+    });
+
+    try {
+      const response = await axiosInstance.post('/rooms', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      // Cerrar loader
+      Swal.close();
+
+      // Mostrar éxito
+      await Swal.fire(
+        '¡Creado!',
+        `El espacio "${formData.get('name')}" ha sido creado exitosamente.`,
+        'success'
+      );
+
+      // Actualizar la lista y cerrar modal
+      handleRoomSaved(response.data);
+      setIsSubmitting(false);
+    } catch (error) {
+      console.error('Error al crear el espacio:', error);
+
+      // Cerrar loader
+      Swal.close();
+
+      const errorMessage =
+        error.response?.data?.error ||
+        error.response?.data?.errors?.join(', ') ||
+        'Error al crear el espacio. Por favor, intente nuevamente.';
+
+      await Swal.fire('Error', errorMessage, 'error');
+
+      setIsSubmitting(false);
+    }
   };
 
   // Actualizar la lista de salas después de agregar o actualizar
@@ -135,7 +231,7 @@ const AdminRoomsPage = () => {
           <SearchBar placeholder="Buscar Espacio..." onSearch={handleSearch} />
           <button
             onClick={handleAddRoom}
-            className="bg-blue-600 text-white px-4 py-2 rounded flex items-center"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded flex items-center transition duration-200"
           >
             <FaPlus className="mr-2" /> Añadir Espacio
           </button>
@@ -151,6 +247,7 @@ const AdminRoomsPage = () => {
                   <th className="py-2 px-4 border-b text-left">Descripción</th>
                   <th className="py-2 px-4 border-b text-left">Capacidad</th>
                   <th className="py-2 px-4 border-b text-left">Ubicación</th>
+                  <th className="py-2 px-4 border-b text-left">CUC</th>
                   <th className="py-2 px-4 border-b text-left">Encargado</th>
                   <th className="py-2 px-4 border-b text-left">Acciones</th>
                 </tr>
@@ -167,7 +264,7 @@ const AdminRoomsPage = () => {
                       <td className="py-2 px-4 border-b">
                         {room.imagePath ? (
                           <img
-                            src={`http://localhost:3000/${room.imagePath}`}
+                            src={getMediaUrl(room.imagePath)}
                             alt={room.name}
                             className="w-16 h-16 object-cover rounded cursor-pointer hover:opacity-75 transition-opacity duration-200"
                           />
@@ -181,6 +278,9 @@ const AdminRoomsPage = () => {
                       <td className="py-2 px-4 border-b">{room.description}</td>
                       <td className="py-2 px-4 border-b">{room.capacity}</td>
                       <td className="py-2 px-4 border-b">{room.location}</td>
+                      <td className="py-2 px-4 border-b">
+                        {room.isInCUC ? 'Sí' : 'No'}
+                      </td>
                       <td className="py-2 px-4 border-b">{room.staffowner}</td>
 
                       {/* Acciones - Horizontal */}
@@ -194,7 +294,7 @@ const AdminRoomsPage = () => {
                             Actualizar
                           </button>
                           <button
-                            onClick={() => handleDeleteRoom(room.id)}
+                            onClick={() => handleDeleteRoom(room.id, room.name)}
                             className="flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-semibold py-1 px-2 rounded text-xs transition-colors"
                           >
                             <FaTrash className="mr-1" size={12} />
@@ -206,7 +306,7 @@ const AdminRoomsPage = () => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="7" className="py-8 text-center text-gray-500">
+                    <td colSpan="8" className="py-8 text-center text-gray-500">
                       No hay salas disponibles.
                     </td>
                   </tr>
@@ -221,14 +321,21 @@ const AdminRoomsPage = () => {
       <Footer />
       {/* Modal para añadir sala */}
       {showAddRoomForm && (
-        <Modal onClose={() => setShowAddRoomForm(false)}>
-          <AddRoomForm onRoomCreated={handleRoomSaved} />
+        <Modal onClose={handleCloseAddModal}>
+          <AddRoomForm
+            onRoomCreated={handleRoomSaved}
+            onClose={handleCloseAddModal}
+          />
         </Modal>
       )}
       {/* Modal para actualizar sala */}
       {showUpdateRoomForm && selectedRoom && (
-        <Modal onClose={() => setShowUpdateRoomForm(false)}>
-          <UpdateRoomForm room={selectedRoom} onRoomSaved={handleRoomSaved} />
+        <Modal onClose={handleCloseModal}>
+          <UpdateRoomForm
+            room={selectedRoom}
+            onRoomSaved={handleRoomSaved}
+            onClose={handleCloseModal}
+          />
         </Modal>
       )}
     </div>
