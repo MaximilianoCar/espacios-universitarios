@@ -439,6 +439,142 @@ const AdminReservationsPage = () => {
       setAgreementFile(file);
     };
 
+    // --- NUEVAS FUNCIONES PARA CONTRATO ---
+    const handleAgreementOptions = () => {
+      setOpenMenuId(null);
+      Swal.fire({
+        title: '', // usamos HTML custom
+        html: `
+				<div class="max-w-md w-full bg-white rounded-lg shadow-md overflow-hidden text-left">
+				  <div class="flex items-center justify-between px-4 py-3 border-b">
+					<div>
+					  <h3 class="text-lg font-semibold text-gray-800">Contrato</h3>
+					  <p class="text-sm text-gray-600 mt-1">Ver, actualizar o eliminar el contrato asociado a este evento.</p>
+					</div>
+					<!-- El botón de cerrar lo añade SweetAlert con showCloseButton -->
+				  </div>
+
+				  <div class="px-4 py-4 space-y-3">
+					<div class="text-sm text-gray-700">Acciones disponibles:</div>
+					<div class="flex gap-2">
+					  <button id="swal-view" class="w-1/3 px-3 py-2 bg-blue-600 text-white rounded-md text-sm">Ver</button>
+					  <button id="swal-update" class="w-1/3 px-3 py-2 bg-yellow-500 text-white rounded-md text-sm">Actualizar</button>
+					  <button id="swal-delete" class="w-1/3 px-3 py-2 bg-red-600 text-white rounded-md text-sm">Eliminar</button>
+					</div>
+				  </div>
+
+				  <div class="px-4 py-3 border-t text-right">
+					<button id="swal-cancel" class="px-3 py-1 text-sm text-gray-600 hover:text-gray-800">Cerrar</button>
+				  </div>
+				</div>
+			`,
+        showConfirmButton: false,
+        showCloseButton: true,
+        didOpen: () => {
+          const viewBtn = document.getElementById('swal-view');
+          const updateBtn = document.getElementById('swal-update');
+          const deleteBtn = document.getElementById('swal-delete');
+          const cancelBtn = document.getElementById('swal-cancel');
+
+          cancelBtn && cancelBtn.addEventListener('click', () => Swal.close());
+
+          viewBtn &&
+            viewBtn.addEventListener('click', () => {
+              if (event.agreementPath)
+                window.open(getMediaUrl(event.agreementPath), '_blank');
+              Swal.close();
+            });
+
+          updateBtn &&
+            updateBtn.addEventListener('click', () => {
+              Swal.close();
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
+              input.onchange = async e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const formData = new FormData();
+                formData.append('agreementPath', file);
+
+                Swal.fire({
+                  title: 'Subiendo contrato...',
+                  allowOutsideClick: false,
+                  didOpen: () => Swal.showLoading(),
+                  showConfirmButton: false,
+                });
+                try {
+                  await axiosInstance.post(
+                    `/events/${event.id}/upload-files`,
+                    formData,
+                    { headers: { 'Content-Type': 'multipart/form-data' } }
+                  );
+                  Swal.close();
+                  await Swal.fire(
+                    '¡Listo!',
+                    'Contrato actualizado correctamente.',
+                    'success'
+                  );
+                  const resp = await axiosInstance.get('/admin/events');
+                  setEvents(resp.data);
+                  setFilteredEvents(resp.data);
+                } catch (err) {
+                  Swal.close();
+                  console.error(err);
+                  Swal.fire(
+                    'Error',
+                    'No se pudo actualizar el contrato.',
+                    'error'
+                  );
+                }
+              };
+              input.click();
+            });
+
+          deleteBtn &&
+            deleteBtn.addEventListener('click', async () => {
+              Swal.close();
+              const r = await Swal.fire({
+                title: '¿Eliminar contrato?',
+                text: 'Esta acción eliminará el contrato permanentemente.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar',
+              });
+              if (r.isConfirmed) {
+                Swal.fire({
+                  title: 'Eliminando...',
+                  allowOutsideClick: false,
+                  didOpen: () => Swal.showLoading(),
+                  showConfirmButton: false,
+                });
+                try {
+                  await axiosInstance.delete(`/events/${event.id}/agreement`);
+                  Swal.close();
+                  await Swal.fire(
+                    'Eliminado',
+                    'Contrato eliminado correctamente.',
+                    'success'
+                  );
+                  const resp = await axiosInstance.get('/admin/events');
+                  setEvents(resp.data);
+                  setFilteredEvents(resp.data);
+                } catch (err) {
+                  Swal.close();
+                  console.error(err);
+                  Swal.fire(
+                    'Error',
+                    'No se pudo eliminar el contrato.',
+                    'error'
+                  );
+                }
+              }
+            });
+        },
+      });
+    };
+
     return (
       <div
         className="relative action-menu-container flex flex-col items-center justify-center"
@@ -554,15 +690,12 @@ const AdminReservationsPage = () => {
                 )}
 
                 {event.agreementPath ? (
-                  <a
-                    href={getMediaUrl(event.agreementPath)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setOpenMenuId(null)}
+                  <button
+                    onClick={() => handleAgreementOptions()}
                     className="flex items-center w-full px-3 py-2 text-xs text-blue-600 hover:bg-gray-100"
                   >
-                    <FaFileContract className="mr-2" size={14} /> Ver Contrato
-                  </a>
+                    <FaFileContract className="mr-2" size={14} /> Contrato
+                  </button>
                 ) : (
                   <button
                     onClick={startUpload}

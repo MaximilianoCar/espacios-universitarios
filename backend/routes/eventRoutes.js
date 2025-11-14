@@ -112,4 +112,20 @@ router.delete(
 // Eliminar banner (restaurar a default)
 router.delete('/events/:eventId/banner', protect, eventController.removeBanner);
 
+// Eliminar contrato (solo admin/coordinator)
+router.delete(
+  '/events/:eventId/agreement',
+  protect,
+  restrictTo('admin', 'coordinator'),
+  eventController.removeAgreement
+);
+
+// Eliminar programa (requester dueño, admin o coordinador con permiso)
+router.delete(
+  '/events/:eventId/program',
+  protect,
+  restrictTo('requester', 'admin', 'coordinator'),
+  eventController.removeProgram
+);
+
 module.exports = router;

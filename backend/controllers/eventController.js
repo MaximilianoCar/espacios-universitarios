@@ -228,9 +228,28 @@ exports.getAllEvents = async (req, res) => {
 // Obtener solo los eventos aprobados (para usuarios normales)
 exports.getApprovedEvents = async (req, res) => {
   try {
+    // Incluir las fechas necesarias para que el frontend pueda agrupar por día
     const events = await Event.findAll({
       where: { status: Event.STATUS.APPROVED },
-      attributes: ['id', 'name', 'description', 'imagePath'],
+      attributes: [
+        'id',
+        'name',
+        'description',
+        'imagePath',
+        'eventFrom',
+        'eventTo',
+        'reservationFrom',
+        'reservationTo',
+        'roomId',
+      ],
+      include: [
+        {
+          model: Room,
+          as: 'room',
+          attributes: ['id', 'name'],
+        },
+      ],
+      order: [['eventFrom', 'ASC']],
     });
 
     res.status(200).json(events);
@@ -912,5 +931,91 @@ exports.getUserEventsCount = async (req, res) => {
       details:
         process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
+  }
+};
+
+// Eliminar agreement (contrato) de un evento
+exports.removeAgreement = async (req, res) => {
+  try {
+    const eventId = req.params.eventId;
+    const userRole = req.user.role;
+    const userId = req.user.id;
+
+    const event = await Event.findByPk(eventId);
+    if (!event) return res.status(404).json({ error: 'Evento no encontrado.' });
+
+    // permisos: solo admin o coordinator pueden eliminar el contrato
+    if (userRole === 'requester') {
+      return res
+        .status(403)
+        .json({ message: 'No tienes permisos para eliminar el contrato.' });
+    }
+
+    if (userRole === 'coordinator') {
+      const hasPermission = await checkRoomPermission(
+        userId,
+        userRole,
+        event.roomId
+      );
+      if (!hasPermission) {
+        return res.status(403).json({
+          message: 'No tienes permisos para eliminar el contrato de esta sala',
+        });
+      }
+    }
+
+    if (event.agreementPath) {
+      await safeUnlink(event.agreementPath, './uploads/events');
+      event.agreementPath = null;
+      await event.save();
+    }
+
+    res.status(200).json({ message: 'Contrato eliminado', event });
+  } catch (error) {
+    console.error('Error removing agreement:', error);
+    res.status(500).json({ error: 'Error al eliminar el contrato.' });
+  }
+};
+
+// Eliminar program (programa) de un evento
+exports.removeProgram = async (req, res) => {
+  try {
+    const eventId = req.params.eventId;
+    const userRole = req.user.role;
+    const userId = req.user.id;
+
+    const event = await Event.findByPk(eventId);
+    if (!event) return res.status(404).json({ error: 'Evento no encontrado.' });
+
+    // permisos: requester puede eliminar su programa; admin/coordinator también pueden
+    if (userRole === 'requester' && event.userId !== userId) {
+      return res.status(403).json({
+        message: 'No tienes permisos para eliminar el programa de este evento.',
+      });
+    }
+
+    if (userRole === 'coordinator') {
+      const hasPermission = await checkRoomPermission(
+        userId,
+        userRole,
+        event.roomId
+      );
+      if (!hasPermission) {
+        return res.status(403).json({
+          message: 'No tienes permisos para eliminar el programa de esta sala',
+        });
+      }
+    }
+
+    if (event.programPath) {
+      await safeUnlink(event.programPath, './uploads/events');
+      event.programPath = null;
+      await event.save();
+    }
+
+    res.status(200).json({ message: 'Programa eliminado', event });
+  } catch (error) {
+    console.error('Error removing program:', error);
+    res.status(500).json({ error: 'Error al eliminar el programa.' });
   }
 };

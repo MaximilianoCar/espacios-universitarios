@@ -363,6 +363,141 @@ const UserReservationsPage = () => {
       setProgramFile(file);
     };
 
+    // --- NUEVAS FUNCIONES PARA PROGRAMA ---
+    const handleProgramOptions = () => {
+      setOpenMenuId(null);
+      Swal.fire({
+        title: '',
+        html: `
+        <div class="max-w-md w-full bg-white rounded-lg shadow-md overflow-hidden text-left">
+          <div class="flex items-center justify-between px-4 py-3 border-b">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-800">Programa</h3>
+              <p class="text-sm text-gray-600 mt-1">Ver, actualizar o eliminar el programa asociado a este evento.</p>
+            </div>
+          </div>
+
+          <div class="px-4 py-4 space-y-3">
+            <div class="text-sm text-gray-700">Acciones disponibles:</div>
+            <div class="flex gap-2">
+              <button id="swal-view-prog" class="w-1/3 px-3 py-2 bg-blue-600 text-white rounded-md text-sm">Ver</button>
+              <button id="swal-update-prog" class="w-1/3 px-3 py-2 bg-yellow-500 text-white rounded-md text-sm">Actualizar</button>
+              <button id="swal-delete-prog" class="w-1/3 px-3 py-2 bg-red-600 text-white rounded-md text-sm">Eliminar</button>
+            </div>
+          </div>
+
+          <div class="px-4 py-3 border-t text-right">
+            <button id="swal-cancel-prog" class="px-3 py-1 text-sm text-gray-600 hover:text-gray-800">Cerrar</button>
+          </div>
+        </div>
+      `,
+        showConfirmButton: false,
+        showCloseButton: true,
+        didOpen: () => {
+          const view = document.getElementById('swal-view-prog');
+          const update = document.getElementById('swal-update-prog');
+          const del = document.getElementById('swal-delete-prog');
+          const cancel = document.getElementById('swal-cancel-prog');
+
+          cancel && cancel.addEventListener('click', () => Swal.close());
+
+          view &&
+            view.addEventListener('click', () => {
+              if (event.programPath)
+                window.open(getMediaUrl(event.programPath), '_blank');
+              Swal.close();
+            });
+
+          update &&
+            update.addEventListener('click', () => {
+              Swal.close();
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
+              input.onchange = async e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const formData = new FormData();
+                formData.append('programPath', file);
+
+                Swal.fire({
+                  title: 'Subiendo programa...',
+                  allowOutsideClick: false,
+                  didOpen: () => Swal.showLoading(),
+                  showConfirmButton: false,
+                });
+                try {
+                  await axiosInstance.post(
+                    `/events/${event.id}/upload-files`,
+                    formData,
+                    { headers: { 'Content-Type': 'multipart/form-data' } }
+                  );
+                  Swal.close();
+                  await Swal.fire(
+                    '¡Listo!',
+                    'Programa actualizado correctamente.',
+                    'success'
+                  );
+                  const resp = await axiosInstance.get('/my-events');
+                  setEvents(resp.data);
+                  setFilteredEvents(resp.data);
+                } catch (err) {
+                  Swal.close();
+                  console.error(err);
+                  Swal.fire(
+                    'Error',
+                    'No se pudo actualizar el programa.',
+                    'error'
+                  );
+                }
+              };
+              input.click();
+            });
+
+          del &&
+            del.addEventListener('click', async () => {
+              Swal.close();
+              const r = await Swal.fire({
+                title: '¿Eliminar programa?',
+                text: 'Esta acción eliminará el programa permanentemente.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar',
+              });
+              if (r.isConfirmed) {
+                Swal.fire({
+                  title: 'Eliminando...',
+                  allowOutsideClick: false,
+                  didOpen: () => Swal.showLoading(),
+                  showConfirmButton: false,
+                });
+                try {
+                  await axiosInstance.delete(`/events/${event.id}/program`);
+                  Swal.close();
+                  await Swal.fire(
+                    'Eliminado',
+                    'Programa eliminado correctamente.',
+                    'success'
+                  );
+                  const resp = await axiosInstance.get('/my-events');
+                  setEvents(resp.data);
+                  setFilteredEvents(resp.data);
+                } catch (err) {
+                  Swal.close();
+                  console.error(err);
+                  Swal.fire(
+                    'Error',
+                    'No se pudo eliminar el programa.',
+                    'error'
+                  );
+                }
+              }
+            });
+        },
+      });
+    };
+
     return (
       <div
         className="relative action-menu-container flex flex-col items-center justify-center"
@@ -436,15 +571,12 @@ const UserReservationsPage = () => {
               >
                 {/* ACCIONES DE DOCUMENTOS */}
                 {event.programPath ? (
-                  <a
-                    href={getMediaUrl(event.programPath)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setOpenMenuId(null)}
+                  <button
+                    onClick={() => handleProgramOptions()}
                     className="flex items-center w-full px-3 py-2 text-xs text-blue-600 hover:bg-gray-100"
                   >
-                    <FaFilePdf className="mr-2" size={14} /> Ver Programa
-                  </a>
+                    <FaFilePdf className="mr-2" size={14} /> Programa
+                  </button>
                 ) : (
                   <button
                     onClick={startUpload}
