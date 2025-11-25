@@ -22,7 +22,7 @@ router.post(
 );
 
 // Obtener solo eventos aprobados (para usuarios normales)
-router.get('/events', protect, eventController.getApprovedEvents);
+router.get('/events', eventController.getApprovedEvents);
 
 // Rutas para admin: obtener todos los eventos (protegido)
 router.get(

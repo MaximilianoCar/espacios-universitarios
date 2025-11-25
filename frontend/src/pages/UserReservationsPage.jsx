@@ -6,8 +6,8 @@ import SearchBar from '../components/SearchBar';
 import {
   FaEye,
   FaUpload,
-  FaEnvelope,
-  FaCalendarAlt,
+  FaRegEnvelope,
+  FaRegCalendarAlt,
   FaInfoCircle,
   FaTrash,
   FaMapPin,
@@ -19,7 +19,9 @@ import {
   FaFilePdf,
   FaFileContract,
   FaArrowLeft,
+  FaCalendarAlt,
 } from 'react-icons/fa';
+import { IoInformationCircleOutline } from 'react-icons/io5';
 import Modal from '../components/Modal';
 import ModalMobile from '../components/ModalMobile';
 
@@ -27,14 +29,20 @@ import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
 import getMediaUrl from '../utils/media';
 
+const PAGE_SIZE = 25; // mismo que el backend
+
 const UserReservationsPage = () => {
   const [events, setEvents] = useState([]);
-  const [filteredEvents, setFilteredEvents] = useState([]);
-  const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [uploadingProgramId, setUploadingProgramId] = useState(null);
   const [programFile, setProgramFile] = useState(null);
+
+  // Estados de paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalEvents, setTotalEvents] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [openMenuId, setOpenMenuId] = useState(null);
   // ---------------------------------------------
@@ -54,6 +62,26 @@ const UserReservationsPage = () => {
 
   // Estado para detectar si es móvil
   const [isMobile, setIsMobile] = useState(false);
+
+  // Función para recargar eventos manteniendo la paginación actual
+  const refreshEvents = async () => {
+    try {
+      const response = await axiosInstance.get('/my-events', {
+        params: {
+          page: currentPage,
+          pageSize: PAGE_SIZE,
+          search: searchTerm,
+        },
+      });
+
+      setEvents(response.data.events || []);
+      setTotalEvents(response.data.totalEvents || 0);
+      setTotalPages(response.data.totalPages || 1);
+    } catch (error) {
+      console.error('Error refreshing events:', error);
+      setError('Error al obtener las reservas.');
+    }
+  };
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -85,35 +113,49 @@ const UserReservationsPage = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openMenuId]);
 
+  // Obtener eventos con paginación del BACKEND
   useEffect(() => {
-    axiosInstance
-      .get(`/my-events`)
-      .then(response => {
-        setEvents(response.data);
-        setFilteredEvents(response.data);
-        setLoading(false);
-      })
-      .catch(error => {
+    const fetchEvents = async () => {
+      setLoading(true);
+      try {
+        const response = await axiosInstance.get('/my-events', {
+          params: {
+            page: currentPage,
+            pageSize: PAGE_SIZE,
+            search: searchTerm,
+          },
+        });
+
+        setEvents(response.data.events || []);
+        setTotalEvents(response.data.totalEvents || 0);
+        setTotalPages(response.data.totalPages || 1);
+        setError('');
+      } catch (error) {
         console.error('Error fetching reservations:', error);
         setError('Error al obtener las reservas.');
+      } finally {
         setLoading(false);
-      });
-  }, []);
+      }
+    };
+
+    fetchEvents();
+  }, [currentPage, searchTerm]);
+
+  // Resetear la página a 1 cuando se busca
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  // Manejar cambio de página
+  const handlePageChange = newPage => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
 
   // Manejar el cambio en el término de búsqueda
   const handleSearch = term => {
     setSearchTerm(term);
-
-    const filtered = events.filter(event => {
-      const lowerCaseTerm = term.toLowerCase();
-      const searchableFields = `${event.name} ${event.description} ${
-        event.room?.name || ''
-      }`.toLowerCase();
-
-      return searchableFields.includes(lowerCaseTerm);
-    });
-
-    setFilteredEvents(filtered);
   };
 
   // Manejar cambio de archivo para el programa
@@ -122,7 +164,7 @@ const UserReservationsPage = () => {
   };
 
   // Manejar la subida del archivo de programa
-  const handleUploadProgram = eventId => {
+  const handleUploadProgram = async eventId => {
     if (!programFile) return;
 
     const formData = new FormData();
@@ -140,48 +182,44 @@ const UserReservationsPage = () => {
       },
     });
 
-    axiosInstance
-      .post(`/events/${eventId}/upload-files`, formData, {
+    try {
+      await axiosInstance.post(`/events/${eventId}/upload-files`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-      })
-      .then(response => {
-        Swal.close();
-        Swal.fire({
-          title: '¡Éxito!',
-          text: 'El programa ha sido subido exitosamente.',
-          icon: 'success',
-          confirmButtonColor: '#3085d6',
-          confirmButtonText: 'Aceptar',
-        });
-
-        setUploadingProgramId(null);
-        setProgramFile(null);
-
-        // Refrescar los datos para mostrar el nuevo archivo
-        axiosInstance.get(`/my-events`).then(response => {
-          setEvents(response.data);
-          setFilteredEvents(response.data);
-        });
-      })
-      .catch(error => {
-        Swal.close();
-        console.error('Error al subir el programa:', error);
-        Swal.fire({
-          title: 'Error',
-          text: 'Error al subir el programa. Intente nuevamente.',
-          icon: 'error',
-          confirmButtonColor: '#d33',
-          confirmButtonText: 'Aceptar',
-        });
       });
+
+      Swal.close();
+      Swal.fire({
+        title: '¡Éxito!',
+        text: 'El programa ha sido subido exitosamente.',
+        icon: 'success',
+        confirmButtonColor: '#3085d6',
+        confirmButtonText: 'Aceptar',
+      });
+
+      setUploadingProgramId(null);
+      setProgramFile(null);
+
+      // Recargar los datos manteniendo la paginación actual
+      await refreshEvents();
+    } catch (error) {
+      Swal.close();
+      console.error('Error al subir el programa:', error);
+      Swal.fire({
+        title: 'Error',
+        text: 'Error al subir el programa. Intente nuevamente.',
+        icon: 'error',
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Aceptar',
+      });
+    }
   };
 
-  const handleDeleteReservation = reservation => {
+  const handleDeleteReservation = async reservation => {
     setOpenMenuId(null); // Cerrar el menú después de la acción
 
-    Swal.fire({
+    const result = await Swal.fire({
       title: '¿Estás seguro?',
       html: `
         <div class="text-left">
@@ -209,53 +247,47 @@ const UserReservationsPage = () => {
       confirmButtonText: 'Sí, eliminar reserva',
       cancelButtonText: 'Cancelar',
       width: '500px',
-    }).then(result => {
-      if (result.isConfirmed) {
-        // Mostrar loader durante la eliminación
+    });
+
+    if (result.isConfirmed) {
+      // Mostrar loader durante la eliminación
+      Swal.fire({
+        title: 'Eliminando...',
+        text: 'Por favor espere mientras se elimina la reserva',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        willOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      try {
+        await axiosInstance.delete(`/events/${reservation.id}`);
+
+        Swal.close();
         Swal.fire({
-          title: 'Eliminando...',
-          text: 'Por favor espere mientras se elimina la reserva',
-          allowOutsideClick: false,
-          allowEscapeKey: false,
-          showConfirmButton: false,
-          willOpen: () => {
-            Swal.showLoading();
-          },
+          title: '¡Eliminado!',
+          text: 'La reserva ha sido eliminada exitosamente.',
+          icon: 'success',
+          confirmButtonColor: '#3085d6',
+          confirmButtonText: 'Aceptar',
         });
 
-        axiosInstance
-          .delete(`/events/${reservation.id}`)
-          .then(response => {
-            Swal.close();
-            Swal.fire({
-              title: '¡Eliminado!',
-              text: 'La reserva ha sido eliminada exitosamente.',
-              icon: 'success',
-              confirmButtonColor: '#3085d6',
-              confirmButtonText: 'Aceptar',
-            });
-
-            // Actualizar el estado de eventos eliminando la reserva
-            setEvents(prevEvents =>
-              prevEvents.filter(event => event.id !== reservation.id)
-            );
-            setFilteredEvents(prevEvents =>
-              prevEvents.filter(event => event.id !== reservation.id)
-            );
-          })
-          .catch(error => {
-            Swal.close();
-            console.error('Error al eliminar la reserva:', error);
-            Swal.fire({
-              title: 'Error',
-              text: 'Error al eliminar la reserva. Intente nuevamente.',
-              icon: 'error',
-              confirmButtonColor: '#d33',
-              confirmButtonText: 'Aceptar',
-            });
-          });
+        // Recargar desde el backend manteniendo la paginación
+        await refreshEvents();
+      } catch (error) {
+        Swal.close();
+        console.error('Error al eliminar la reserva:', error);
+        Swal.fire({
+          title: 'Error',
+          text: 'Error al eliminar la reserva. Intente nuevamente.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+          confirmButtonText: 'Aceptar',
+        });
       }
-    });
+    }
   };
 
   // para mostrar fechas de forma mas legible
@@ -363,7 +395,6 @@ const UserReservationsPage = () => {
       setProgramFile(file);
     };
 
-    // --- NUEVAS FUNCIONES PARA PROGRAMA ---
     const handleProgramOptions = () => {
       setOpenMenuId(null);
       Swal.fire({
@@ -438,9 +469,7 @@ const UserReservationsPage = () => {
                     'Programa actualizado correctamente.',
                     'success'
                   );
-                  const resp = await axiosInstance.get('/my-events');
-                  setEvents(resp.data);
-                  setFilteredEvents(resp.data);
+                  await refreshEvents();
                 } catch (err) {
                   Swal.close();
                   console.error(err);
@@ -480,9 +509,7 @@ const UserReservationsPage = () => {
                     'Programa eliminado correctamente.',
                     'success'
                   );
-                  const resp = await axiosInstance.get('/my-events');
-                  setEvents(resp.data);
-                  setFilteredEvents(resp.data);
+                  await refreshEvents();
                 } catch (err) {
                   Swal.close();
                   console.error(err);
@@ -675,8 +702,8 @@ const UserReservationsPage = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredEvents.length > 0 ? (
-                filteredEvents.map((event, index) => (
+              {events.length > 0 ? (
+                events.map((event, index) => (
                   <tr
                     key={event.id}
                     className="hover:bg-gray-50 transition-colors"
@@ -709,7 +736,7 @@ const UserReservationsPage = () => {
                         className="text-blue-600 hover:text-blue-800 transition-colors"
                         title="Ver descripción"
                       >
-                        <FaInfoCircle size={18} />
+                        <IoInformationCircleOutline size={22} />
                       </button>
                     </td>
 
@@ -727,7 +754,7 @@ const UserReservationsPage = () => {
                         className="text-blue-600 hover:text-blue-800 transition-colors"
                         title="Ver contacto"
                       >
-                        <FaEnvelope size={18} />
+                        <FaRegEnvelope size={18} />
                       </button>
                     </td>
 
@@ -738,7 +765,7 @@ const UserReservationsPage = () => {
                         className="text-blue-600 hover:text-blue-800 transition-colors"
                         title="Ver fechas"
                       >
-                        <FaCalendarAlt size={18} />
+                        <FaRegCalendarAlt size={18} />
                       </button>
                     </td>
 
@@ -801,12 +828,36 @@ const UserReservationsPage = () => {
               </tr>
             </tbody>
           </table>
+
+          {/* PAGINACIÓN - Igual que AdminReservationsPage */}
+          <div className="flex justify-between items-center p-4 bg-gray-50 border-t">
+            <p className="text-sm text-gray-600">
+              Mostrando {events.length} de {totalEvents} reservas (Pág.{' '}
+              {currentPage} de {totalPages})
+            </p>
+            <div className="space-x-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Vista Mobile - Cards MEJORADA */}
         <div className="lg:hidden space-y-4">
-          {filteredEvents.length > 0 ? (
-            filteredEvents.map((event, index) => (
+          {events.length > 0 ? (
+            events.map((event, index) => (
               <div
                 key={event.id}
                 className="bg-white rounded-lg shadow-md border border-gray-200 p-4 relative"
@@ -840,7 +891,7 @@ const UserReservationsPage = () => {
                         : 'Pendiente'}
                     </span>
 
-                    {/* Botón de opciones en posición más intuitiva */}
+                    {/* Botón de opciones */}
                     <div className="relative">
                       <ActionMenu event={event} index={index} />
                     </div>
@@ -884,14 +935,14 @@ const UserReservationsPage = () => {
                     onClick={() => handleShowContact(event.contact)}
                     className="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
                   >
-                    <FaEnvelope className="mb-1" size={14} />
+                    <FaRegEnvelope className="mb-1" size={14} />
                     <span>Contacto</span>
                   </button>
                   <button
                     onClick={() => handleShowDates(event)}
                     className="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
                   >
-                    <FaCalendarAlt className="mb-1" size={14} />
+                    <FaRegCalendarAlt className="mb-1" size={14} />
                     <span>Fechas</span>
                   </button>
                 </div>
@@ -909,6 +960,31 @@ const UserReservationsPage = () => {
           ) : (
             <div className="text-center py-8 text-gray-500">
               No hay eventos disponibles.
+            </div>
+          )}
+
+          {/* PAGINACIÓN PARA MÓVIL */}
+          {events.length > 0 && (
+            <div className="flex justify-between items-center p-4 bg-gray-50 border-t rounded-lg">
+              <p className="text-sm text-gray-600">
+                Pág. {currentPage} de {totalPages}
+              </p>
+              <div className="space-x-2">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+                >
+                  Anterior
+                </button>
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+                >
+                  Siguiente
+                </button>
+              </div>
             </div>
           )}
         </div>

@@ -8,8 +8,8 @@ import {
   FaCheckCircle,
   FaTimesCircle,
   FaUpload,
-  FaEnvelope,
-  FaCalendarAlt,
+  FaRegEnvelope,
+  FaRegCalendarAlt,
   FaInfoCircle,
   FaExternalLinkAlt,
   FaEllipsisV,
@@ -18,20 +18,27 @@ import {
   FaFilePdf,
   FaArrowLeft,
 } from 'react-icons/fa';
+import { IoInformationCircleOutline } from 'react-icons/io5';
 import Modal from '../components/Modal';
 import Swal from 'sweetalert2';
 import { Link } from 'react-router-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import getMediaUrl from '../utils/media';
 
+const PAGE_SIZE = 25; // Mismo que el backend
+
 const AdminReservationsPage = () => {
   const [events, setEvents] = useState([]);
-  const [filteredEvents, setFilteredEvents] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [uploadingAgreementId, setUploadingAgreementId] = useState(null);
   const [agreementFile, setAgreementFile] = useState(null);
+
+  // Estados de paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalEvents, setTotalEvents] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   // estado menu acciones
   const [openMenuId, setOpenMenuId] = useState(null);
@@ -52,6 +59,26 @@ const AdminReservationsPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Función para recargar eventos manteniendo la paginación actual
+  const refreshEvents = async () => {
+    try {
+      const response = await axiosInstance.get('/admin/events', {
+        params: {
+          page: currentPage,
+          pageSize: PAGE_SIZE,
+          search: searchTerm,
+        },
+      });
+
+      setEvents(response.data.events || []);
+      setTotalEvents(response.data.totalEvents || 0);
+      setTotalPages(response.data.totalPages || 1);
+    } catch (error) {
+      console.error('Error refreshing events:', error);
+      setError('Error al obtener los eventos.');
+    }
+  };
+
   //manejar volver atras
   const handleBack = () => {
     if (location.key !== 'default') {
@@ -71,52 +98,58 @@ const AdminReservationsPage = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openMenuId]);
 
-  // obtener los eventos
+  // obtener los eventos con paginación del BACKEND
   useEffect(() => {
-    axiosInstance
-      .get('/admin/events')
-      .then(response => {
-        setEvents(response.data);
-        setFilteredEvents(response.data);
-        setLoading(false);
-      })
-      .catch(error => {
+    const fetchEvents = async () => {
+      setLoading(true);
+      try {
+        const response = await axiosInstance.get('/admin/events', {
+          params: {
+            page: currentPage,
+            pageSize: PAGE_SIZE,
+            search: searchTerm,
+          },
+        });
+
+        setEvents(response.data.events || []);
+        setTotalEvents(response.data.totalEvents || 0);
+        setTotalPages(response.data.totalPages || 1);
+        setError('');
+      } catch (error) {
         console.error('Error fetching events:', error);
         setError('Error al obtener los eventos.');
+      } finally {
         setLoading(false);
-      });
-  }, []);
+      }
+    };
+
+    fetchEvents();
+  }, [currentPage, searchTerm]);
+
+  // Resetear la página a 1 cuando se busca
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   // manejar el cambio en el término de búsqueda
   const handleSearch = term => {
     setSearchTerm(term);
-
-    const filtered = events.filter(event => {
-      const lowerCaseTerm = term.toLowerCase();
-      const searchableFields =
-        `${event.name} ${event.description}`.toLowerCase();
-
-      return searchableFields
-        .split(' ')
-        .some(word => word.startsWith(lowerCaseTerm));
-    });
-
-    setFilteredEvents(filtered);
   };
 
-  // manejar el cambio de archivo para el contrato
-  const handleAgreementFileChange = event => {
-    setAgreementFile(event.target.files[0]);
+  // Manejar cambio de página
+  const handlePageChange = newPage => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
   };
 
   // manejar la subida del archivo de contrato
-  const handleUploadAgreement = eventId => {
+  const handleUploadAgreement = async eventId => {
     if (!agreementFile) return;
 
     const formData = new FormData();
     formData.append('agreementPath', agreementFile);
 
-    // modal de carga
     Swal.fire({
       title: 'Subiendo archivo...',
       text: 'Por favor espere mientras se sube el contrato',
@@ -128,47 +161,36 @@ const AdminReservationsPage = () => {
       },
     });
 
-    axiosInstance
-      .post(`/events/${eventId}/upload-files`, formData, {
+    try {
+      await axiosInstance.post(`/events/${eventId}/upload-files`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-      })
-      .then(response => {
-        Swal.close(); // cerrar modal
-
-        Swal.fire(
-          'Contrato subido',
-          'El contrato se subió exitosamente.',
-          'success'
-        );
-
-        setUploadingAgreementId(null);
-        setAgreementFile(null);
-
-        axiosInstance.get('/admin/events').then(response => {
-          const updatedEvents = response.data;
-          setEvents(updatedEvents);
-          setFilteredEvents(updatedEvents);
-
-          // Re-aplicar búsqueda si hay término
-          if (searchTerm) {
-            handleSearch(searchTerm);
-          }
-        });
-      })
-      .catch(error => {
-        Swal.close(); // cerrar modal de carga
-
-        console.error('Error al subir el contrato:', error);
-        Swal.fire(
-          'Error',
-          'Error al subir el contrato. Intente nuevamente.',
-          'error'
-        );
-        setUploadingAgreementId(null);
-        setAgreementFile(null);
       });
+
+      Swal.close();
+      Swal.fire(
+        'Contrato subido',
+        'El contrato se subió exitosamente.',
+        'success'
+      );
+
+      setUploadingAgreementId(null);
+      setAgreementFile(null);
+
+      // Recargar los datos manteniendo la paginación actual
+      await refreshEvents();
+    } catch (error) {
+      Swal.close();
+      console.error('Error al subir el contrato:', error);
+      Swal.fire(
+        'Error',
+        'Error al subir el contrato. Intente nuevamente.',
+        'error'
+      );
+      setUploadingAgreementId(null);
+      setAgreementFile(null);
+    }
   };
 
   // para mostrar fechas de forma mas legible
@@ -235,17 +257,8 @@ const AdminReservationsPage = () => {
         try {
           await axiosInstance.put(`/events/${eventId}`, { status: newStatus });
 
-          // Actualizar el estado local
-          setEvents(prevEvents =>
-            prevEvents.map(event =>
-              event.id === eventId ? { ...event, status: newStatus } : event
-            )
-          );
-          setFilteredEvents(prevFilteredEvents =>
-            prevFilteredEvents.map(event =>
-              event.id === eventId ? { ...event, status: newStatus } : event
-            )
-          );
+          // Recargar desde el backend manteniendo la paginación
+          await refreshEvents();
 
           Swal.fire(
             '¡Aprobado!',
@@ -340,16 +353,7 @@ const AdminReservationsPage = () => {
             comments: formValues.comments,
           });
 
-          setEvents(prevEvents =>
-            prevEvents.map(event =>
-              event.id === eventId ? { ...event, status: newStatus } : event
-            )
-          );
-          setFilteredEvents(prevFilteredEvents =>
-            prevFilteredEvents.map(event =>
-              event.id === eventId ? { ...event, status: newStatus } : event
-            )
-          );
+          await refreshEvents();
 
           Swal.fire(
             '¡Rechazado!',
@@ -439,11 +443,10 @@ const AdminReservationsPage = () => {
       setAgreementFile(file);
     };
 
-    // --- NUEVAS FUNCIONES PARA CONTRATO ---
     const handleAgreementOptions = () => {
       setOpenMenuId(null);
       Swal.fire({
-        title: '', // usamos HTML custom
+        title: '',
         html: `
 				<div class="max-w-md w-full bg-white rounded-lg shadow-md overflow-hidden text-left">
 				  <div class="flex items-center justify-between px-4 py-3 border-b">
@@ -515,9 +518,7 @@ const AdminReservationsPage = () => {
                     'Contrato actualizado correctamente.',
                     'success'
                   );
-                  const resp = await axiosInstance.get('/admin/events');
-                  setEvents(resp.data);
-                  setFilteredEvents(resp.data);
+                  await refreshEvents();
                 } catch (err) {
                   Swal.close();
                   console.error(err);
@@ -557,9 +558,7 @@ const AdminReservationsPage = () => {
                     'Contrato eliminado correctamente.',
                     'success'
                   );
-                  const resp = await axiosInstance.get('/admin/events');
-                  setEvents(resp.data);
-                  setFilteredEvents(resp.data);
+                  await refreshEvents();
                 } catch (err) {
                   Swal.close();
                   console.error(err);
@@ -738,21 +737,22 @@ const AdminReservationsPage = () => {
           >
             <FaArrowLeft size={24} />
           </button>
-          <h2 className="text-3xl font-bold text-gray-800">Mis Reservas</h2>
+          <h2 className="text-3xl font-bold text-gray-800">Reservas</h2>
         </div>
-        {/* Agregar el SearchBar */}
+
         <div className="mb-4">
           <SearchBar placeholder="Buscar reserva..." onSearch={handleSearch} />
         </div>
+
         {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
-        {filteredEvents.length > 0 ? (
+
+        {events.length > 0 ? (
           <div className="overflow-x-auto shadow-xl rounded-lg">
             <table className="min-w-full bg-white">
               <thead>
                 <tr className="bg-blue-100">
                   <th className="py-2 px-4 border-b text-left">Nombre</th>
                   <th className="py-2 px-4 border-b text-left">Espacio</th>
-                  {/* COLUMNA IMAGEN REDUCIDA A ÍCONO (OPCIONAL) O MANTENIDA AQUÍ */}
                   <th className="py-2 px-4 border-b text-center">Imagen</th>
                   <th className="py-2 px-4 border-b text-center">
                     Descripción
@@ -767,102 +767,99 @@ const AdminReservationsPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredEvents.length > 0 ? (
-                  filteredEvents.map((event, index) => (
-                    <tr key={event.id} className="hover:bg-gray-50">
-                      <td className="py-2 px-4 border-b font-semibold text-gray-800">
-                        {event.name}
-                      </td>
-                      <td className="py-2 px-4 border-b font-semibold text-gray-800">
-                        {event.room.name}
-                      </td>
-                      <td className="py-2 px-4 border-b text-center">
-                        {event.imagePath ? (
-                          <img
-                            src={getMediaUrl(event.imagePath)}
-                            alt={event.name}
-                            className="w-12 h-12 object-cover rounded cursor-pointer hover:opacity-75 transition-opacity duration-200 inline-block"
-                            onClick={() => handleImageClick(event.imagePath)}
-                          />
-                        ) : (
-                          <span className="text-gray-500 text-xs">N/I</span>
-                        )}
-                      </td>
-                      <td className="py-2 px-4 border-b text-center">
-                        <button
-                          onClick={() =>
-                            handleShowDescription(event.description)
-                          }
-                          className="text-blue-600 hover:text-blue-800 transition-colors"
-                        >
-                          <FaInfoCircle size={18} />
-                        </button>
-                      </td>
-
-                      <td className="py-2 px-4 border-b text-center">
-                        {event.capacity}
-                      </td>
-                      <td className="py-2 px-4 border-b text-center">
-                        {event.cost}
-                      </td>
-                      <td className="py-2 px-4 border-b text-center">
-                        <button
-                          onClick={() => handleShowContact(event.contact)}
-                          className="text-blue-600 hover:text-blue-800 transition-colors"
-                        >
-                          <FaEnvelope size={18} />
-                        </button>
-                      </td>
-                      <td className="py-2 px-4 border-b text-center">
-                        <button
-                          onClick={() => handleShowDates(event)}
-                          className="text-blue-600 hover:text-blue-800 transition-colors"
-                        >
-                          <FaCalendarAlt size={18} />
-                        </button>
-                      </td>
-                      <td className="py-2 px-4 border-b text-center">
-                        <div className="flex justify-center items-center h-full">
-                          <span
-                            className={`px-2 py-1 rounded text-xs font-semibold ${
-                              event.status === 'approved'
-                                ? 'bg-green-100 text-green-800'
-                                : event.status === 'denied'
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}
-                          >
-                            {event.status === 'approved'
-                              ? 'Aprobado'
+                {events.map((event, index) => (
+                  <tr key={event.id} className="hover:bg-gray-50">
+                    <td className="py-2 px-4 border-b font-semibold text-gray-800">
+                      {event.name}
+                    </td>
+                    <td className="py-2 px-4 border-b font-semibold text-gray-800">
+                      {event.room.name}
+                    </td>
+                    {/* Imagen */}
+                    <td className="py-2 px-4 border-b text-center">
+                      {event.imagePath ? (
+                        <img
+                          src={getMediaUrl(event.imagePath)}
+                          alt={event.name}
+                          className="w-12 h-12 object-cover rounded cursor-pointer hover:opacity-75 transition-opacity duration-200 inline-block"
+                          onClick={() => handleImageClick(event.imagePath)}
+                        />
+                      ) : (
+                        <span className="text-gray-500 text-xs">N/I</span>
+                      )}
+                    </td>
+                    {/* Descripción */}
+                    <td className="py-2 px-4 border-b text-center">
+                      <button
+                        onClick={() => handleShowDescription(event.description)}
+                        className="text-blue-600 hover:text-blue-800 transition-colors"
+                      >
+                        <IoInformationCircleOutline size={22} />
+                      </button>
+                    </td>
+                    {/* capacidad */}
+                    <td className="py-2 px-4 border-b text-center">
+                      {event.capacity}
+                    </td>
+                    {/* costo */}
+                    <td className="py-2 px-4 border-b text-center">
+                      {event.cost}
+                    </td>
+                    {/* contacto */}
+                    <td className="py-2 px-4 border-b text-center">
+                      <button
+                        onClick={() => handleShowContact(event.contact)}
+                        className="text-blue-600 hover:text-blue-800 transition-colors"
+                      >
+                        <FaRegEnvelope size={18} />
+                      </button>
+                    </td>
+                    {/* fechas */}
+                    <td className="py-2 px-4 border-b text-center">
+                      <button
+                        onClick={() => handleShowDates(event)}
+                        className="text-blue-600 hover:text-blue-800 transition-colors"
+                      >
+                        <FaRegCalendarAlt size={18} />
+                      </button>
+                    </td>
+                    {/* estado */}
+                    <td className="py-2 px-4 border-b text-center">
+                      <div className="flex justify-center items-center h-full">
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-semibold ${
+                            event.status === 'approved'
+                              ? 'bg-green-100 text-green-800'
                               : event.status === 'denied'
-                              ? 'Rechazado'
-                              : 'Pendiente'}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-2 px-4 border-b text-center">
-                        <div className="flex justify-center items-center h-full">
-                          <Link
-                            to={`/events/${event.id}`}
-                            className="flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs transition-colors w-20"
-                          >
-                            <FaExternalLinkAlt className="mr-1" size={12} />
-                            Ver
-                          </Link>
-                        </div>
-                      </td>
-                      <td className="py-2 px-4 border-b text-center">
-                        <ActionMenu event={event} index={index} />
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="11" className="py-8 text-center text-gray-500">
-                      No hay eventos disponibles.
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}
+                        >
+                          {event.status === 'approved'
+                            ? 'Aprobado'
+                            : event.status === 'denied'
+                            ? 'Rechazado'
+                            : 'Pendiente'}
+                        </span>
+                      </div>
+                    </td>
+                    {/* visualizar */}
+                    <td className="py-2 px-4 border-b text-center">
+                      <div className="flex justify-center items-center h-full">
+                        <Link
+                          to={`/events/${event.id}`}
+                          className="flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs transition-colors w-20"
+                        >
+                          <FaExternalLinkAlt className="mr-1" size={12} />
+                          Ver
+                        </Link>
+                      </div>
+                    </td>
+                    <td className="py-2 px-4 border-b text-center">
+                      <ActionMenu event={event} index={index} />
                     </td>
                   </tr>
-                )}
+                ))}
                 <tr className="bg-gray-50 hover:bg-gray-100 transition-colors">
                   <td colSpan="11" className="py-8 px-4 text-center">
                     <div className="flex justify-center items-center">
@@ -877,10 +874,34 @@ const AdminReservationsPage = () => {
                 </tr>
               </tbody>
             </table>
+
+            {/* PAGINACIÓN - Funciona correctamente ahora */}
+            <div className="flex justify-between items-center p-4 bg-gray-50 border-t">
+              <p className="text-sm text-gray-600">
+                Mostrando {events.length} de {totalEvents} eventos (Pág.{' '}
+                {currentPage} de {totalPages})
+              </p>
+              <div className="space-x-2">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+                >
+                  Anterior
+                </button>
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
           </div>
         ) : (
           <p className="text-center text-gray-700">
-            No hay eventos disponibles.
+            {loading ? 'Cargando...' : 'No hay eventos disponibles.'}
           </p>
         )}
       </div>

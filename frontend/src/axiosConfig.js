@@ -1,8 +1,16 @@
 import axios from 'axios';
 
+// Usar la variable VITE_API_URL (si está definida por Vite) y caer a '/api' en desarrollo (para que el proxy de Vite funcione). Esto evita que el frontend llame directamente al túnel y permite usar el proxy local.
+const base = import.meta.env.VITE_API_URL || '/api';
+
 // Crear una instancia de Axios
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:3000/api', // Establecer la URL base
+  baseURL: base,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  withCredentials: true, // Importante para CORS con credenciales
 });
 
 // Interceptor para añadir el token de autorización a cada solicitud

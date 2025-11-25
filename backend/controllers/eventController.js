@@ -173,7 +173,7 @@ const getRoomName = async roomId => {
 };
 
 // Obtener todos los eventos (Read - Get All)
-exports.getAllEvents = async (req, res) => {
+exports.getAllEventsVieja = async (req, res) => {
   try {
     const userRole = req.user.role;
     const userId = req.user.id;
@@ -220,6 +220,83 @@ exports.getAllEvents = async (req, res) => {
     }
 
     res.status(200).json(events);
+  } catch (error) {
+    console.error('Error fetching events:', error);
+    res.status(500).json({ error: 'Error al obtener los eventos.' });
+  }
+};
+
+// Obtener todos los eventos (Read - Get All)
+
+exports.getAllEvents = async (req, res) => {
+  try {
+    const userRole = req.user.role;
+    const userId = req.user.id;
+
+    // Parámetros de paginación
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 8;
+    const offset = (page - 1) * pageSize;
+
+    let events;
+    let count;
+
+    if (userRole === 'admin') {
+      // Admin ve todos los eventos con paginación
+      const result = await Event.findAndCountAll({
+        include: [
+          {
+            model: Room,
+            as: 'room',
+          },
+        ],
+        limit: pageSize,
+        offset: offset,
+        order: [['createdAt', 'DESC']],
+      });
+      events = result.rows;
+      count = result.count;
+    } else if (userRole === 'coordinator') {
+      // Coordinator ve solo eventos de salas que gestiona con paginación
+      const allowedRoomIds = await getAllowedRoomIds(userId, userRole);
+
+      if (allowedRoomIds.length > 0) {
+        const result = await Event.findAndCountAll({
+          where: {
+            roomId: {
+              [Op.in]: allowedRoomIds,
+            },
+          },
+          include: [
+            {
+              model: Room,
+              as: 'room',
+            },
+          ],
+          limit: pageSize,
+          offset: offset,
+          order: [['createdAt', 'DESC']],
+        });
+        events = result.rows;
+        count = result.count;
+      } else {
+        events = [];
+        count = 0;
+      }
+    } else {
+      return res.status(403).json({
+        message: 'No tienes permisos para realizar esta acción',
+      });
+    }
+
+    const totalPages = Math.ceil(count / pageSize);
+
+    res.status(200).json({
+      totalEvents: count,
+      totalPages: totalPages,
+      currentPage: page,
+      events: events,
+    });
   } catch (error) {
     console.error('Error fetching events:', error);
     res.status(500).json({ error: 'Error al obtener los eventos.' });
@@ -801,7 +878,7 @@ exports.removeEventImage = async (req, res) => {
 };
 
 // Obtener todos los eventos asociados a un usuario por userId
-exports.getEventsByUser = async (req, res) => {
+exports.getEventsByUserVieja = async (req, res) => {
   console.log(req.user);
   const userId = req.user.id;
   try {
@@ -826,6 +903,55 @@ exports.getEventsByUser = async (req, res) => {
     }
 
     res.status(200).json(events);
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ error: 'Error al obtener los eventos del usuario.' });
+  }
+};
+
+// Obtener todos los eventos asociados a un usuario por userId
+exports.getEventsByUser = async (req, res) => {
+  console.log(req.user);
+  const userId = req.user.id;
+
+  // Parámetros de paginación
+  const page = parseInt(req.query.page) || 1;
+  const pageSize = parseInt(req.query.pageSize) || 25;
+  const offset = (page - 1) * pageSize;
+
+  try {
+    const { count, rows: events } = await Event.findAndCountAll({
+      where: {
+        userId: userId,
+      },
+      include: [
+        {
+          model: Room,
+          as: 'room',
+          attributes: ['id', 'name'],
+        },
+      ],
+      limit: pageSize,
+      offset: offset,
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (!events || events.length === 0) {
+      return res
+        .status(404)
+        .json({ error: 'No se encontraron eventos para este usuario.' });
+    }
+
+    const totalPages = Math.ceil(count / pageSize);
+
+    res.status(200).json({
+      totalEvents: count,
+      totalPages: totalPages,
+      currentPage: page,
+      events: events,
+    });
   } catch (error) {
     console.error(error);
     res

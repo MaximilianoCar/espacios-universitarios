@@ -150,7 +150,6 @@ exports.getUsers = async (req, res) => {
               { name: { [Op.iLike]: lowerCaseSearch } },
               { email: { [Op.iLike]: lowerCaseSearch } },
               { ci: { [Op.iLike]: lowerCaseSearch } },
-              // Convertir el campo ENUM a texto para poder usar ILIKE
               sequelize.where(
                 sequelize.cast(sequelize.col('User.role'), 'text'),
                 { [Op.iLike]: lowerCaseSearch }

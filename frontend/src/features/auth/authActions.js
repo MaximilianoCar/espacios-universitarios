@@ -2,16 +2,18 @@ import axiosInstance from '../../axiosConfig';
 import { loginSuccess, refreshAccessToken, logout } from './authSlice';
 import Swal from 'sweetalert2';
 
-const API_URL = ''; //  la URL de tu API
+// Usar rutas relativas: axiosInstance tiene base '/api' o VITE_API_URL
+// Evita usar URLs absolutas para que Vite proxy funcione en dev.
 
 // Acción para iniciar sesión
 export const login = (email, password, navigate) => async dispatch => {
   try {
-    const response = await axiosInstance.post(`${API_URL}/login`, {
-      email,
-      password,
-    });
-    const { token, refreshToken, name, role } = response.data.data;
+    console.log('[auth] POST /login (via axiosInstance)');
+    const response = await axiosInstance.post('/login', { email, password });
+
+    // respuesta en distintos formatos: .data.data o .data
+    const payload = response.data.data || response.data;
+    const { token, refreshToken, name, role } = payload;
 
     // Guardar tokens en localStorage
 
@@ -27,14 +29,33 @@ export const login = (email, password, navigate) => async dispatch => {
     // Redirigir al usuario a la vista de Home
     navigate('/home');
   } catch (error) {
-    console.error('Error al iniciar sesión:', error);
-    // Mostrar SweetAlert de error
-    Swal.fire({
-      title: 'Error',
-      text: 'El correo o la contraseña son incorrectos',
-      icon: 'error',
-      confirmButtonText: 'Intentar de nuevo',
-    });
+    // Distinción de errores para depuración
+    console.error('[auth] Error al iniciar sesión:', error);
+    if (!error.response) {
+      // Network / CORS / proxy
+      Swal.fire({
+        title: 'Error de conexión',
+        text: 'No se pudo conectar con el servidor. Verifica que el backend esté disponible y que el proxy esté configurado. Prueba http://localhost:5173/api/ping',
+        icon: 'error',
+        confirmButtonText: 'Aceptar',
+      });
+    } else if (error.response.status === 404) {
+      Swal.fire({
+        title: 'Ruta no encontrada (404)',
+        text: 'El servidor respondió 404 para /api/login. Revisa que la ruta exista en el backend y que el proxy esté apuntando al servidor correcto.',
+        icon: 'error',
+        confirmButtonText: 'Aceptar',
+      });
+    } else {
+      Swal.fire({
+        title: 'Error',
+        text:
+          error.response?.data?.error ||
+          'El correo o la contraseña son incorrectos',
+        icon: 'error',
+        confirmButtonText: 'Intentar de nuevo',
+      });
+    }
   }
 };
 
@@ -48,7 +69,7 @@ export const refreshToken = () => async dispatch => {
       return;
     }
 
-    const response = await axiosInstance.post(`${API_URL}/refresh-token`, {
+    const response = await axiosInstance.post('/refresh-token', {
       refreshToken,
     });
     const { token: newToken } = response.data;
@@ -80,7 +101,8 @@ export const logoutUser = () => dispatch => {
 
 export const logoutAndRedirect = navigate => async dispatch => {
   try {
-    await axiosInstance.post(`${API_URL}/logout`);
+    -(await axiosInstance.post(`${API_URL}/logout`));
+    +(await axiosInstance.post('/logout'));
     //  limpia tu estado global y el almacenamiento persistente.
     dispatch(logoutUser());
 
