@@ -4,7 +4,14 @@ import axiosInstance from '../axiosConfig';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SearchBar from '../components/SearchBar';
-import { FaEye, FaCheckCircle, FaTimesCircle } from 'react-icons/fa';
+import { useNavigate, useLocation } from 'react-router-dom';
+import {
+  FaEye,
+  FaCheckCircle,
+  FaTimesCircle,
+  FaArrowLeft,
+  FaFileAlt,
+} from 'react-icons/fa';
 import Swal from 'sweetalert2';
 
 const AdminPendingRequestsPage = () => {
@@ -12,6 +19,22 @@ const AdminPendingRequestsPage = () => {
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
+
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Detectar si es móvil
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
 
   const fetchPendingUsers = () => {
     setLoading(true);
@@ -217,14 +240,39 @@ const AdminPendingRequestsPage = () => {
     );
   }
 
+  const handleBack = () => {
+    if (location.key !== 'default') {
+      navigate(-1);
+    } else {
+      navigate('/home');
+    }
+  };
+
   return (
     <div className="min-h-screen grid grid-rows-[auto_1fr_auto]">
       <Header />
-      <div className="container mx-auto my-8">
-        <h2 className="text-2xl font-bold mb-4">Solicitudes pendientes</h2>
+      <div className="container mx-auto my-4 lg:my-8 px-4 lg:px-0">
+        <div className="flex items-center justify-between mb-4 lg:mb-6">
+          <div className="flex items-center">
+            <button
+              onClick={handleBack}
+              className="flex items-center text-gray-800 hover:text-gray-600 transition-colors mr-3"
+              title="Volver al inicio"
+            >
+              <FaArrowLeft size={isMobile ? 20 : 24} />
+            </button>
+            <h2
+              className={`${
+                isMobile ? 'text-xl' : 'text-3xl'
+              } font-bold text-gray-800`}
+            >
+              Solicitudes Pendientes
+            </h2>
+          </div>
+        </div>
 
         {/* SearchBar */}
-        <div className="mb-4">
+        <div className="mb-4 lg:mb-6">
           <SearchBar
             placeholder="Buscar por Nombre, Correo o CI..."
             onSearch={handleSearch}
@@ -233,8 +281,9 @@ const AdminPendingRequestsPage = () => {
 
         {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
 
-        {filteredUsers.length > 0 ? (
-          <div className="overflow-x-auto shadow-xl rounded-lg">
+        {/* VISTA DESKTOP - TABLA */}
+        {!isMobile && filteredUsers.length > 0 && (
+          <div className="hidden lg:block overflow-x-auto shadow-xl rounded-lg">
             <table className="min-w-full bg-white">
               <thead>
                 <tr className="bg-blue-100">
@@ -304,7 +353,82 @@ const AdminPendingRequestsPage = () => {
               </tbody>
             </table>
           </div>
-        ) : (
+        )}
+
+        {/* VISTA MÓVIL - CARDS */}
+        {isMobile && (
+          <div className="lg:hidden space-y-3">
+            {filteredUsers.length > 0 ? (
+              filteredUsers.map((user, index) => (
+                <div
+                  key={user.id}
+                  className="bg-white rounded-lg shadow-sm border border-gray-200 p-3"
+                >
+                  {/* Header de la tarjeta */}
+                  <div className="mb-3">
+                    <h3 className="font-bold text-base text-gray-800 mb-1">
+                      {user.name}
+                    </h3>
+                    <p className="text-xs text-gray-600 break-words mb-1">
+                      {user.email}
+                    </p>
+                    <div className="flex items-center text-xs text-gray-700">
+                      <span className="font-medium mr-1">CI:</span>
+                      <span>{user.ci || 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  {/* Documento */}
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-gray-700">
+                        Documento:
+                      </span>
+                      {user.certificationPath ? (
+                        <a
+                          href={`http://localhost:3000/${user.certificationPath}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition-colors"
+                        >
+                          <FaEye className="mr-1" size={12} /> Ver
+                        </a>
+                      ) : (
+                        <span className="text-xs text-gray-500">No subido</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Botones de Acción */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => handleApproveRequest(user.id, user.name)}
+                      className="flex items-center justify-center bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-2 rounded text-sm transition-colors"
+                    >
+                      <FaCheckCircle className="mr-2" size={14} />
+                      <span>Aprobar</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleRejectRequest(user.id, user.name)}
+                      className="flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-2 rounded text-sm transition-colors"
+                    >
+                      <FaTimesCircle className="mr-2" size={14} />
+                      <span>Rechazar</span>
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500 border rounded-lg bg-gray-50">
+                No hay solicitudes de acceso pendientes de revisión.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* VISTA DESKTOP - Sin resultados */}
+        {!isMobile && filteredUsers.length === 0 && (
           <p className="text-center text-gray-600 p-8 border rounded-lg">
             No hay solicitudes de acceso pendientes de revisión.
           </p>

@@ -68,7 +68,7 @@ const Header = () => {
           className="flex items-center flex-shrink-0 z-10 hover:opacity-90 transition-opacity duration-200"
         >
           <img src={ucvlogo} alt="Logo" className="h-8 md:h-10 mr-3" />
-          <span className="text-white text-lg md:text-xl font-bold hidden sm:block">
+          <span className="text-white text-lg md:text-xl font-bold hidden min-[1300px]:block">
             Universidad Central de Venezuela
           </span>
         </button>

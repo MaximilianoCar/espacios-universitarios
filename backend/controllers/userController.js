@@ -55,6 +55,11 @@ exports.createAnyUser = async (req, res) => {
       return res.status(400).json({ error: 'El correo ya está en uso.' });
     }
 
+    const existingUser2 = await User.findOne({ where: { ci } });
+    if (existingUser2) {
+      return res.status(400).json({ error: 'Cedula ya está en uso.' });
+    }
+
     let newUser;
 
     // Crear usuario según el rol especificado

@@ -12,6 +12,7 @@ import {
   FaCalendarAlt,
   FaChevronLeft,
   FaChevronRight,
+  FaTimes,
 } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
 import getMediaUrl from '../utils/media';
@@ -72,15 +73,43 @@ const EventsPage = () => {
     setFilteredEvents(filtered);
   };
 
+  // MODIFICADO: Ahora incluye todos los días entre eventFrom y eventTo
   const eventsByDay = useMemo(() => {
     const map = {};
+
     events.forEach(ev => {
-      if (!ev.eventFrom) return;
-      const d = new Date(ev.eventFrom);
-      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-      if (!map[key]) map[key] = [];
-      map[key].push(ev);
+      if (!ev.eventFrom || !ev.eventTo) return;
+
+      const startDate = new Date(ev.eventFrom);
+      const endDate = new Date(ev.eventTo);
+
+      // Asegurarnos de que las fechas sean válidas
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return;
+
+      // Iterar por todos los días entre eventFrom y eventTo (inclusive)
+      const currentDate = new Date(startDate);
+
+      while (currentDate <= endDate) {
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const day = currentDate.getDate();
+        const key = `${year}-${month}-${day}`;
+
+        if (!map[key]) map[key] = [];
+
+        // Evitar duplicados del mismo evento en el mismo día
+        if (!map[key].some(event => event.id === ev.id)) {
+          map[key].push(ev);
+        }
+
+        // Avanzar al siguiente día
+        currentDate.setDate(currentDate.getDate() + 1);
+
+        // Resetear la hora para evitar problemas con cambios de hora
+        currentDate.setHours(0, 0, 0, 0);
+      }
     });
+
     return map;
   }, [events]);
 
@@ -109,6 +138,25 @@ const EventsPage = () => {
   };
   const closeCalendar = () => setShowCalendarModal(false);
 
+  // Función para formatear el rango de fechas del evento
+  const formatEventDateRange = event => {
+    const start = new Date(event.eventFrom);
+    const end = new Date(event.eventTo);
+
+    const startDate = start.toLocaleDateString('es-ES', {
+      day: 'numeric',
+      month: 'short',
+    });
+
+    const endDate = end.toLocaleDateString('es-ES', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    return `${startDate} - ${endDate}`;
+  };
+
   // Mobile Calendar Component
   const MobileCalendar = () => {
     const y = calendarDate.getFullYear();
@@ -118,7 +166,7 @@ const EventsPage = () => {
 
     return (
       <div className="bg-white rounded-lg shadow-lg p-4">
-        {/* Header del calendario móvil - Título mejorado */}
+        {/* Header del calendario móvil con botón de cerrar */}
         <div className="flex items-center justify-between mb-4">
           <button
             onClick={prevMonth}
@@ -246,26 +294,34 @@ const EventsPage = () => {
                   dayEvents.map(ev => (
                     <div
                       key={ev.id}
-                      className="p-4 border border-gray-200 rounded-xl bg-white shadow-sm flex justify-between items-center hover:shadow-md transition-shadow"
+                      className="p-4 border border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-shadow"
                     >
-                      <div className="flex-1">
-                        <div className="font-semibold text-gray-900 text-lg">
-                          {ev.name}
-                        </div>
-                        <div className="text-sm text-gray-600 mt-1">
-                          {new Date(ev.eventFrom).toLocaleTimeString('es-ES', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </div>
+                      <div className="font-semibold text-gray-900 text-lg mb-2">
+                        {ev.name}
                       </div>
-                      <Link
-                        to={`/events/${ev.id}`}
-                        className="ml-3 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap hover:bg-blue-500 transition-colors"
-                        onClick={closeCalendar}
-                      >
-                        Ver
-                      </Link>
+                      <div className="text-sm text-gray-600 mb-2">
+                        {formatEventDateRange(ev)}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {new Date(ev.eventFrom).toLocaleTimeString('es-ES', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}{' '}
+                        -{' '}
+                        {new Date(ev.eventTo).toLocaleTimeString('es-ES', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </div>
+                      <div className="mt-3 flex justify-end">
+                        <Link
+                          to={`/events/${ev.id}`}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-500 transition-colors"
+                          onClick={closeCalendar}
+                        >
+                          Ver Detalles
+                        </Link>
+                      </div>
                     </div>
                   ))
                 ) : (
@@ -372,9 +428,10 @@ const EventsPage = () => {
                 />
                 <div className="p-4">
                   <h2 className="text-xl font-bold">{event.name}</h2>
-                  <p className="mt-2 text-gray-600 line-clamp-2">
-                    {event.description}
+                  <p className="text-sm text-gray-500 mt-1">
+                    {formatEventDateRange(event)}
                   </p>
+
                   <Link
                     to={`/events/${event.id}`}
                     className="mt-4 inline-block bg-blue-600 text-white hover:bg-blue-500 px-4 py-2 rounded"
@@ -391,23 +448,32 @@ const EventsPage = () => {
           )}
         </div>
 
-        {/* MODAL DEL CALENDARIO: mostrar solo la versión correspondiente al dispositivo */}
+        {/* MODAL DEL CALENDARIO*/}
         {showCalendarModal &&
           (isMobile ? (
             <ModalMobile onClose={closeCalendar} title="Calendario de Eventos">
+              {/* Botón de cerrar en móvil*/}
+              <button
+                onClick={closeCalendar}
+                className="absolute top-4 right-4 z-10 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <FaTimes size={20} />
+              </button>
               <MobileCalendar />
-              <div className="mt-6 flex justify-center">
-                <button
-                  onClick={closeCalendar}
-                  className="px-8 py-3 bg-gray-200 rounded-lg hover:bg-gray-300 text-base font-medium"
-                >
-                  Cerrar
-                </button>
-              </div>
             </ModalMobile>
           ) : (
             <ModalCalendar onClose={closeCalendar}>
-              <div className="max-w-4xl mx-auto">
+              {/* Botón de cerrar en desktop - POSICIONADO ARRIBA A LA DERECHA */}
+              <button
+                onClick={closeCalendar}
+                className="absolute top-4 right-4 z-10 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
+              >
+                <FaTimes size={20} />
+              </button>
+
+              <div className="max-w-4xl mx-auto pt-8">
+                {' '}
+                {/* Añadido pt-8 para dar espacio al botón de cerrar */}
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-xl font-semibold">
@@ -424,25 +490,34 @@ const EventsPage = () => {
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={prevMonth}
-                      className="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                      className="p-2 rounded-lg bg-white hover:bg-gray-50 border border-gray-300 flex items-center justify-center transition-all duration-200 hover:border-blue-300"
+                      title="Mes anterior"
                     >
-                      ◀
+                      <FaChevronLeft
+                        className="text-blue-600 hover:text-blue-600"
+                        size={16}
+                      />
                     </button>
+
                     <button
                       onClick={goToday}
-                      className="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                      className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-sm transition-colors duration-200 border border-transparent hover:border-gray-300"
                     >
                       Hoy
                     </button>
+
                     <button
                       onClick={nextMonth}
-                      className="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                      className="p-2 rounded-lg bg-white hover:bg-gray-50 border border-gray-300 flex items-center justify-center transition-all duration-200 hover:border-blue-300"
+                      title="Mes siguiente"
                     >
-                      ▶
+                      <FaChevronRight
+                        className="text-blue-600 hover:text-blue-600"
+                        size={16}
+                      />
                     </button>
                   </div>
                 </div>
-
                 {/* Calendar grid */}
                 <div className="grid grid-cols-7 gap-1 text-center">
                   {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map(h => (
@@ -461,7 +536,7 @@ const EventsPage = () => {
                     const cells = [];
                     // leading blanks
                     for (let i = 0; i < firstDay; i++)
-                      cells.push(<div key={`b-${i}`} className="py-6"></div>);
+                      cells.push(<div key={`b-${i}`} className="py-4"></div>);
                     for (let d = 1; d <= total; d++) {
                       const key = getKey(y, m, d);
                       const dayEvents = eventsByDay[key] || [];
@@ -479,40 +554,41 @@ const EventsPage = () => {
                         <div
                           key={key}
                           className={`
-                            p-2 h-20 border rounded cursor-pointer flex flex-col justify-between
-                            ${hasEvents ? 'bg-blue-50 border-blue-200' : ''}
-                            ${isToday ? 'bg-blue-100 border-blue-300' : ''}
-                            ${
-                              isSelected
-                                ? 'ring-2 ring-blue-500 bg-blue-100'
-                                : ''
-                            }
-                            hover:bg-gray-50
-                          `}
+                      p-1 h-16 border rounded cursor-pointer flex flex-col justify-between transition-all duration-150
+                      ${hasEvents ? 'bg-blue-50 border-blue-200' : 'bg-white'}
+                      ${isToday ? 'bg-blue-100 border-blue-300 shadow-sm' : ''}
+                      ${
+                        isSelected
+                          ? 'ring-2 ring-blue-500 bg-blue-100 shadow-md transform scale-105'
+                          : ''
+                      }
+                      hover:bg-gray-50 hover:shadow-sm hover:border-gray-300
+                    `}
                           onClick={() =>
                             setSelectedDay({ year: y, month: m, day: d })
                           }
                         >
                           <div className="flex justify-between items-start">
                             <div
-                              className={`text-sm font-medium ${
-                                isToday ? 'text-blue-800' : ''
+                              className={`text-xs font-medium ${
+                                isToday
+                                  ? 'text-blue-800 font-bold'
+                                  : 'text-gray-700'
                               } ${isSelected ? 'text-blue-900 font-bold' : ''}`}
                             >
                               {d}
                             </div>
                             {hasEvents && (
                               <div
-                                className="w-2 h-2 bg-blue-600 rounded-full"
+                                className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-0.5"
                                 title={`${dayEvents.length} eventos`}
                               ></div>
                             )}
                           </div>
                           <div className="flex justify-center">
                             {hasEvents && (
-                              <span className="text-xs text-blue-700">
-                                {dayEvents.length} evento
-                                {dayEvents.length > 1 ? 's' : ''}
+                              <span className="text-xs text-blue-600 font-medium">
+                                {dayEvents.length}
                               </span>
                             )}
                           </div>
@@ -522,7 +598,6 @@ const EventsPage = () => {
                     return cells;
                   })()}
                 </div>
-
                 {/* Selected day events list */}
                 <div className="mt-6">
                   {selectedDay ? (
@@ -544,27 +619,41 @@ const EventsPage = () => {
                               {dayEvents.map(ev => (
                                 <div
                                   key={ev.id}
-                                  className="p-3 border rounded-lg bg-gray-50 flex justify-between items-center"
+                                  className="p-3 border rounded-lg bg-gray-50"
                                 >
-                                  <div className="flex-1">
-                                    <div className="font-medium text-gray-900">
-                                      {ev.name}
+                                  <div className="flex justify-between items-start">
+                                    <div className="flex-1">
+                                      <div className="font-medium text-gray-900 mb-1">
+                                        {ev.name}
+                                      </div>
+                                      <div className="text-sm text-gray-600 mb-1">
+                                        {formatEventDateRange(ev)}
+                                      </div>
+                                      <div className="text-sm text-gray-500">
+                                        {new Date(
+                                          ev.eventFrom
+                                        ).toLocaleTimeString('es-ES', {
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })}{' '}
+                                        -{' '}
+                                        {new Date(
+                                          ev.eventTo
+                                        ).toLocaleTimeString('es-ES', {
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })}
+                                      </div>
                                     </div>
-                                    <div className="text-sm text-gray-600 mt-1">
-                                      {new Date(
-                                        ev.eventFrom
-                                      ).toLocaleTimeString('es-ES', {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                      })}
+                                    <div className="ml-4 flex-shrink-0">
+                                      <Link
+                                        to={`/events/${ev.id}`}
+                                        className="bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-500 whitespace-nowrap"
+                                      >
+                                        Ver Detalles
+                                      </Link>
                                     </div>
                                   </div>
-                                  <Link
-                                    to={`/events/${ev.id}`}
-                                    className="ml-4 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-500"
-                                  >
-                                    Ver Detalles
-                                  </Link>
                                 </div>
                               ))}
                             </div>
@@ -581,15 +670,6 @@ const EventsPage = () => {
                       Selecciona un día para ver los eventos programados.
                     </div>
                   )}
-                </div>
-
-                <div className="mt-6 text-right">
-                  <button
-                    onClick={closeCalendar}
-                    className="px-6 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
-                  >
-                    Cerrar
-                  </button>
                 </div>
               </div>
             </ModalCalendar>

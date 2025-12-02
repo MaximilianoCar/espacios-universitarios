@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import axiosInstance from '../axiosConfig';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import SearchBar from '../components/SearchBar';
+import SearchBar from '../components/SearchBar2';
 import {
   FaEye,
   FaCheckCircle,
@@ -17,9 +17,14 @@ import {
   FaFileContract,
   FaFilePdf,
   FaArrowLeft,
+  FaCalendarAlt,
+  FaMapPin,
+  FaUsers,
+  FaDollarSign,
 } from 'react-icons/fa';
 import { IoInformationCircleOutline } from 'react-icons/io5';
 import Modal from '../components/Modal';
+import ModalMobile from '../components/ModalMobile';
 import Swal from 'sweetalert2';
 import { Link } from 'react-router-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -30,10 +35,16 @@ const PAGE_SIZE = 25; // Mismo que el backend
 const AdminReservationsPage = () => {
   const [events, setEvents] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentSearch, setCurrentSearch] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [uploadingAgreementId, setUploadingAgreementId] = useState(null);
   const [agreementFile, setAgreementFile] = useState(null);
+
+  const [selectedEventUser, setSelectedEventUser] = useState({
+    name: '',
+    email: '',
+  });
 
   // Estados de paginación
   const [currentPage, setCurrentPage] = useState(1);
@@ -59,6 +70,17 @@ const AdminReservationsPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Estado para detectar si es móvil
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Función para renderizar el modal correcto
+  const RenderModal = ({ children, onClose }) => {
+    if (isMobile) {
+      return <ModalMobile onClose={onClose}>{children}</ModalMobile>;
+    }
+    return <Modal onClose={onClose}>{children}</Modal>;
+  };
+
   // Función para recargar eventos manteniendo la paginación actual
   const refreshEvents = async () => {
     try {
@@ -69,7 +91,7 @@ const AdminReservationsPage = () => {
           search: searchTerm,
         },
       });
-
+      console.log('Refreshed events:', response.data);
       setEvents(response.data.events || []);
       setTotalEvents(response.data.totalEvents || 0);
       setTotalPages(response.data.totalPages || 1);
@@ -89,6 +111,17 @@ const AdminReservationsPage = () => {
   };
 
   useEffect(() => {
+    const checkScreenSize = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
+
+  useEffect(() => {
     const handleClickOutside = event => {
       if (openMenuId && !event.target.closest('.action-menu-container')) {
         setOpenMenuId(null);
@@ -97,6 +130,34 @@ const AdminReservationsPage = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openMenuId]);
+
+  // Modificar la función handleSearch para buscar solo al presionar Enter
+  const handleSearch = async term => {
+    setSearchTerm(term);
+    setCurrentSearch(term);
+    setCurrentPage(1); // Siempre volver a la página 1 al buscar
+
+    setLoading(true);
+    try {
+      const response = await axiosInstance.get('/admin/events', {
+        params: {
+          page: 1,
+          pageSize: PAGE_SIZE,
+          search: term,
+        },
+      });
+
+      setEvents(response.data.events || []);
+      setTotalEvents(response.data.totalEvents || 0);
+      setTotalPages(response.data.totalPages || 1);
+      setError('');
+    } catch (error) {
+      console.error('Error searching events:', error);
+      setError('Error al buscar eventos.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // obtener los eventos con paginación del BACKEND
   useEffect(() => {
@@ -124,24 +185,7 @@ const AdminReservationsPage = () => {
     };
 
     fetchEvents();
-  }, [currentPage, searchTerm]);
-
-  // Resetear la página a 1 cuando se busca
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
-
-  // manejar el cambio en el término de búsqueda
-  const handleSearch = term => {
-    setSearchTerm(term);
-  };
-
-  // Manejar cambio de página
-  const handlePageChange = newPage => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-    }
-  };
+  }, [currentPage]); // Solo dependencia de currentPage
 
   // manejar la subida del archivo de contrato
   const handleUploadAgreement = async eventId => {
@@ -373,8 +417,12 @@ const AdminReservationsPage = () => {
   };
 
   // Funciones para manejar los modales
-  const handleShowContact = contactInfo => {
+  const handleShowContact = (contactInfo, user) => {
     setSelectedEventContact(contactInfo);
+    setSelectedEventUser({
+      name: user?.name || '',
+      email: user?.email || '',
+    });
     setShowContactModal(true);
   };
 
@@ -397,6 +445,13 @@ const AdminReservationsPage = () => {
   const handleImageClick = imagePath => {
     setSelectedImage(getMediaUrl(imagePath));
     setShowImageModal(true);
+  };
+
+  // Manejar cambio de página
+  const handlePageChange = newPage => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
   };
 
   const ActionMenu = ({ event, index }) => {
@@ -726,7 +781,7 @@ const AdminReservationsPage = () => {
   }
 
   return (
-    <div className="min-h-screen grid grid-rows-[auto_auto_1fr_auto]">
+    <div className="min-h-screen grid grid-rows-[auto_1fr_auto]">
       <Header />
       <div className="container mx-auto my-8 px-4">
         <div className="flex items-center mb-6">
@@ -740,41 +795,86 @@ const AdminReservationsPage = () => {
           <h2 className="text-3xl font-bold text-gray-800">Reservas</h2>
         </div>
 
-        <div className="mb-4">
-          <SearchBar placeholder="Buscar reserva..." onSearch={handleSearch} />
+        {/* SearchBar */}
+        <div className="mb-6">
+          <SearchBar
+            placeholder="Buscar por nombre..."
+            onSearch={handleSearch}
+          />
         </div>
+
+        {/* Indicador de búsqueda activa */}
+        {currentSearch && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-blue-700">
+                Mostrando resultados para: <strong>"{currentSearch}"</strong>
+                {totalEvents > 0 && (
+                  <span className="ml-2 text-blue-600">
+                    ({totalEvents} resultado{totalEvents !== 1 ? 's' : ''})
+                  </span>
+                )}
+              </p>
+              <button
+                onClick={() => handleSearch('')}
+                className="text-blue-500 hover:text-blue-700 underline text-sm font-medium"
+              >
+                Limpiar búsqueda
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Mensaje cuando no hay resultados */}
+        {currentSearch && events.length === 0 && !loading && (
+          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-center">
+            <p className="text-yellow-700">
+              No se encontraron resultados para:{' '}
+              <strong>"{currentSearch}"</strong>
+            </p>
+            <button
+              onClick={() => handleSearch('')}
+              className="mt-2 text-yellow-600 hover:text-yellow-800 underline text-sm"
+            >
+              Ver todos los eventos
+            </button>
+          </div>
+        )}
 
         {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
 
-        {events.length > 0 ? (
-          <div className="overflow-x-auto shadow-xl rounded-lg">
-            <table className="min-w-full bg-white">
-              <thead>
-                <tr className="bg-blue-100">
-                  <th className="py-2 px-4 border-b text-left">Nombre</th>
-                  <th className="py-2 px-4 border-b text-left">Espacio</th>
-                  <th className="py-2 px-4 border-b text-center">Imagen</th>
-                  <th className="py-2 px-4 border-b text-center">
-                    Descripción
-                  </th>
-                  <th className="py-2 px-4 border-b text-left">Capacidad</th>
-                  <th className="py-2 px-4 border-b text-left">Costo</th>
-                  <th className="py-2 px-4 border-b text-center">Contacto</th>
-                  <th className="py-2 px-4 border-b text-center">Fechas</th>
-                  <th className="py-2 px-4 border-b text-center">Estado</th>
-                  <th className="py-2 px-4 border-b text-center">Visualizar</th>
-                  <th className="py-2 px-4 border-b text-center">Opciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {events.map((event, index) => (
-                  <tr key={event.id} className="hover:bg-gray-50">
+        {/* Vista Desktop - Tabla */}
+        <div className="hidden lg:block overflow-x-auto shadow-xl rounded-lg">
+          <table className="min-w-full bg-white">
+            <thead>
+              <tr className="bg-blue-100">
+                <th className="py-2 px-4 border-b text-left">Nombre</th>
+                <th className="py-2 px-4 border-b text-left">Espacio</th>
+                <th className="py-2 px-4 border-b text-center">Imagen</th>
+                <th className="py-2 px-4 border-b text-center">Descripción</th>
+                <th className="py-2 px-4 border-b text-left">Capacidad</th>
+                <th className="py-2 px-4 border-b text-left">Costo</th>
+                <th className="py-2 px-4 border-b text-center">Contacto</th>
+                <th className="py-2 px-4 border-b text-center">Fechas</th>
+                <th className="py-2 px-4 border-b text-center">Estado</th>
+                <th className="py-2 px-4 border-b text-center">Visualizar</th>
+                <th className="py-2 px-4 border-b text-center">Opciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.length > 0 ? (
+                events.map((event, index) => (
+                  <tr
+                    key={event.id}
+                    className="hover:bg-gray-50 transition-colors"
+                  >
                     <td className="py-2 px-4 border-b font-semibold text-gray-800">
                       {event.name}
                     </td>
-                    <td className="py-2 px-4 border-b font-semibold text-gray-800">
-                      {event.room.name}
+                    <td className="py-2 px-4 border-b">
+                      {event.room?.name || 'N/A'}
                     </td>
+
                     {/* Imagen */}
                     <td className="py-2 px-4 border-b text-center">
                       {event.imagePath ? (
@@ -788,42 +888,50 @@ const AdminReservationsPage = () => {
                         <span className="text-gray-500 text-xs">N/I</span>
                       )}
                     </td>
+
                     {/* Descripción */}
                     <td className="py-2 px-4 border-b text-center">
                       <button
                         onClick={() => handleShowDescription(event.description)}
                         className="text-blue-600 hover:text-blue-800 transition-colors"
+                        title="Ver descripción"
                       >
                         <IoInformationCircleOutline size={22} />
                       </button>
                     </td>
-                    {/* capacidad */}
+
                     <td className="py-2 px-4 border-b text-center">
                       {event.capacity}
                     </td>
-                    {/* costo */}
                     <td className="py-2 px-4 border-b text-center">
                       {event.cost}
                     </td>
-                    {/* contacto */}
+
+                    {/* Contacto */}
                     <td className="py-2 px-4 border-b text-center">
                       <button
-                        onClick={() => handleShowContact(event.contact)}
+                        onClick={() =>
+                          handleShowContact(event.contact, event.user)
+                        }
                         className="text-blue-600 hover:text-blue-800 transition-colors"
+                        title="Ver contacto"
                       >
                         <FaRegEnvelope size={18} />
                       </button>
                     </td>
-                    {/* fechas */}
+
+                    {/* FECHAS UNIFICADAS */}
                     <td className="py-2 px-4 border-b text-center">
                       <button
                         onClick={() => handleShowDates(event)}
                         className="text-blue-600 hover:text-blue-800 transition-colors"
+                        title="Ver fechas"
                       >
                         <FaRegCalendarAlt size={18} />
                       </button>
                     </td>
-                    {/* estado */}
+
+                    {/* Estado */}
                     <td className="py-2 px-4 border-b text-center">
                       <div className="flex justify-center items-center h-full">
                         <span
@@ -843,7 +951,8 @@ const AdminReservationsPage = () => {
                         </span>
                       </div>
                     </td>
-                    {/* visualizar */}
+
+                    {/* Visualizar */}
                     <td className="py-2 px-4 border-b text-center">
                       <div className="flex justify-center items-center h-full">
                         <Link
@@ -859,27 +968,172 @@ const AdminReservationsPage = () => {
                       <ActionMenu event={event} index={index} />
                     </td>
                   </tr>
-                ))}
-                <tr className="bg-gray-50 hover:bg-gray-100 transition-colors">
-                  <td colSpan="11" className="py-8 px-4 text-center">
-                    <div className="flex justify-center items-center">
-                      <button
-                        onClick={() => navigate('/events')}
-                        className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-8 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-lg"
-                      >
-                        Ver eventos
-                      </button>
-                    </div>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="11" className="py-8 text-center text-gray-500">
+                    {currentSearch
+                      ? 'No se encontraron eventos que coincidan con tu búsqueda.'
+                      : 'No hay eventos disponibles.'}
                   </td>
                 </tr>
-              </tbody>
-            </table>
+              )}
+              <tr className="bg-gray-50 hover:bg-gray-100 transition-colors">
+                <td colSpan="11" className="py-6 px-4 text-center">
+                  <div className="flex justify-center items-center">
+                    <button
+                      onClick={() => navigate('/events')}
+                      className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-8 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-lg"
+                    >
+                      Ver eventos
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
 
-            {/* PAGINACIÓN - Funciona correctamente ahora */}
-            <div className="flex justify-between items-center p-4 bg-gray-50 border-t">
+          {/* PAGINACIÓN */}
+          <div className="flex justify-between items-center p-4 bg-gray-50 border-t">
+            <p className="text-sm text-gray-600">
+              Mostrando {events.length} de {totalEvents} eventos (Pág.{' '}
+              {currentPage} de {totalPages})
+            </p>
+            <div className="space-x-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Vista Mobile - Cards */}
+        <div className="lg:hidden space-y-4">
+          {events.length > 0 ? (
+            events.map((event, index) => (
+              <div
+                key={event.id}
+                className="bg-white rounded-lg shadow-md border border-gray-200 p-4 relative"
+              >
+                {/* Header mejorado */}
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex-1 pr-2">
+                    <h3 className="font-bold text-lg text-gray-800 mb-1">
+                      {event.name}
+                    </h3>
+                    <div className="flex items-center text-sm text-gray-600 mb-1">
+                      <FaMapPin className="mr-2 text-blue-500" size={14} />
+                      <span>{event.room?.name || 'N/A'}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-end space-y-2">
+                    <span
+                      className={`px-3 py-1 text-xs font-semibold rounded-full ${
+                        event.status === 'approved'
+                          ? 'bg-green-100 text-green-800'
+                          : event.status === 'denied'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}
+                    >
+                      {event.status === 'approved'
+                        ? 'Aprobado'
+                        : event.status === 'denied'
+                        ? 'Denegado'
+                        : 'Pendiente'}
+                    </span>
+
+                    {/* Botón de opciones */}
+                    <div className="relative">
+                      <ActionMenu event={event} index={index} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Imagen */}
+                {event.imagePath && (
+                  <div className="mb-3">
+                    <img
+                      src={getMediaUrl(event.imagePath)}
+                      alt={event.name}
+                      className="w-full h-40 object-cover rounded cursor-pointer"
+                      onClick={() => handleImageClick(event.imagePath)}
+                    />
+                  </div>
+                )}
+
+                {/* Información básica compacta */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="flex items-center text-sm text-gray-600">
+                    <FaUsers className="mr-2 text-green-500" size={14} />
+                    <span>Capacidad: {event.capacity}</span>
+                  </div>
+                  <div className="flex items-center text-sm text-gray-600">
+                    <FaDollarSign className="mr-2 text-yellow-500" size={14} />
+                    <span>Costo: {event.cost}</span>
+                  </div>
+                </div>
+
+                {/* Botones de acción principales */}
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  <button
+                    onClick={() => handleShowDescription(event.description)}
+                    className="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
+                  >
+                    <FaInfoCircle className="mb-1" size={14} />
+                    <span>Descripción</span>
+                  </button>
+                  <button
+                    onClick={() => handleShowContact(event.contact, event.user)}
+                    className="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
+                  >
+                    <FaRegEnvelope className="mb-1" size={14} />
+                    <span>Contacto</span>
+                  </button>
+                  <button
+                    onClick={() => handleShowDates(event)}
+                    className="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
+                  >
+                    <FaRegCalendarAlt className="mb-1" size={14} />
+                    <span>Fechas</span>
+                  </button>
+                </div>
+
+                {/* Botón de previsualización */}
+                <Link
+                  to={`/events/${event.id}`}
+                  className="w-full flex items-center justify-center bg-green-500 hover:bg-green-600 text-white py-2 px-3 rounded text-sm transition-colors mb-2"
+                >
+                  <FaEye className="mr-2" size={14} />
+                  Ver Evento
+                </Link>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              {currentSearch
+                ? 'No se encontraron eventos que coincidan con tu búsqueda.'
+                : 'No hay eventos disponibles.'}
+            </div>
+          )}
+
+          {/* PAGINACIÓN PARA MÓVIL */}
+          {events.length > 0 && (
+            <div className="flex justify-between items-center p-4 bg-gray-50 border-t rounded-lg">
               <p className="text-sm text-gray-600">
-                Mostrando {events.length} de {totalEvents} eventos (Pág.{' '}
-                {currentPage} de {totalPages})
+                Pág. {currentPage} de {totalPages}
               </p>
               <div className="space-x-2">
                 <button
@@ -898,140 +1152,204 @@ const AdminReservationsPage = () => {
                 </button>
               </div>
             </div>
-          </div>
-        ) : (
-          <p className="text-center text-gray-700">
-            {loading ? 'Cargando...' : 'No hay eventos disponibles.'}
-          </p>
-        )}
+          )}
+        </div>
       </div>
       <Footer />
 
-      {/* MODALES*/}
+      {/* MODALES COMPLETAMENTE REDISEÑADOS PARA MÓVIL */}
       {showContactModal && (
-        <Modal onClose={handleCloseContactModal}>
-          <h2 className="text-xl font-bold mb-4">Información de Contacto</h2>
-          <p>{selectedEventContact}</p>
-          <button
-            onClick={handleCloseContactModal}
-            className="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-          >
-            Cerrar
-          </button>
-        </Modal>
-      )}
-
-      {/* Modal unificado para mostrar fechas del evento y reserva */}
-      {showDatesModal && (
-        <Modal onClose={handleCloseDatesModal}>
-          <h2 className="text-xl font-bold mb-4">
-            Fechas del Evento y Reserva
-          </h2>
-
-          <div className="space-y-6">
-            {/* Fechas del Evento */}
-            <div>
-              <h3 className="text-lg font-semibold mb-3 text-blue-600">
-                Fechas del Evento
-              </h3>
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <div className="mb-2">
-                  <strong className="text-gray-700">Inicio del Evento:</strong>
-                  <div className="ml-2">
-                    <div className="font-medium">
-                      {formatDateTime(selectedEventDates.eventFrom).date}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      {formatDateTime(selectedEventDates.eventFrom).time}
-                    </div>
+        <RenderModal onClose={handleCloseContactModal}>
+          <div className="p-5 border-b border-gray-200">
+            <h2 className="text-lg font-bold text-gray-800">
+              Información de Contacto
+            </h2>
+          </div>
+          <div className="p-5">
+            <div className="bg-blue-50 rounded-lg p-4 mb-4 space-y-3">
+              {/* Información del Solicitante */}
+              <div className="border-b border-blue-200 pb-3">
+                <h3 className="text-sm font-semibold text-blue-800 mb-2">
+                  Información del Solicitante
+                </h3>
+                <div className="space-y-2">
+                  <div>
+                    <span className="text-xs font-medium text-blue-600">
+                      Nombre:
+                    </span>
+                    <p className="text-sm text-gray-700">
+                      {selectedEventUser?.name || 'No disponible'}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium text-blue-600">
+                      Correo:
+                    </span>
+                    <p className="text-sm text-gray-700 break-all">
+                      {selectedEventUser?.email || 'No disponible'}
+                    </p>
                   </div>
                 </div>
-                <div>
-                  <strong className="text-gray-700">Fin del Evento:</strong>
-                  <div className="ml-2">
-                    <div className="font-medium">
-                      {formatDateTime(selectedEventDates.eventTo).date}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      {formatDateTime(selectedEventDates.eventTo).time}
-                    </div>
+              </div>
+
+              {/* Información de Contacto Adicional */}
+              <div>
+                <h3 className="text-sm font-semibold text-blue-800 mb-2">
+                  Información de Contacto Adicional
+                </h3>
+                <p className="text-sm text-gray-700 leading-relaxed">
+                  {selectedEventContact ||
+                    'No hay información de contacto adicional.'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleCloseContactModal}
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-medium transition-colors text-sm"
+            >
+              Cerrar
+            </button>
+          </div>
+        </RenderModal>
+      )}
+
+      {showDatesModal && (
+        <RenderModal onClose={handleCloseDatesModal}>
+          <div className="p-5 border-b border-gray-200 sticky top-0 bg-white z-10">
+            <h2 className="text-lg font-bold text-gray-800">
+              Fechas del Evento
+            </h2>
+          </div>
+
+          <div className="p-5 space-y-4">
+            {/* Fechas del Evento */}
+            <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
+              <h3 className="text-base font-semibold text-blue-800 mb-3 flex items-center">
+                <FaCalendarAlt className="mr-2" size={16} />
+                Fechas del Evento
+              </h3>
+
+              <div className="space-y-3">
+                <div className="bg-white rounded-lg p-3 border border-blue-100">
+                  <div className="text-xs font-medium text-blue-600 mb-1">
+                    INICIO DEL EVENTO
+                  </div>
+                  <div className="text-sm font-semibold text-gray-800">
+                    {formatDateTime(selectedEventDates.eventFrom).date}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {formatDateTime(selectedEventDates.eventFrom).time}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-lg p-3 border border-blue-100">
+                  <div className="text-xs font-medium text-blue-600 mb-1">
+                    FIN DEL EVENTO
+                  </div>
+                  <div className="text-sm font-semibold text-gray-800">
+                    {formatDateTime(selectedEventDates.eventTo).date}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {formatDateTime(selectedEventDates.eventTo).time}
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Fechas de Reserva */}
-            <div>
-              <h3 className="text-lg font-semibold mb-3 text-green-600">
+            <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
+              <h3 className="text-base font-semibold text-green-800 mb-3 flex items-center">
+                <FaCalendarAlt className="mr-2" size={16} />
                 Fechas de Reserva
               </h3>
-              <div className="bg-green-50 p-4 rounded-lg">
-                <div className="mb-2">
-                  <strong className="text-gray-700">Inicio de Reserva:</strong>
-                  <div className="ml-2">
-                    <div className="font-medium">
-                      {formatDateTime(selectedEventDates.reservationFrom).date}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      {formatDateTime(selectedEventDates.reservationFrom).time}
-                    </div>
+
+              <div className="space-y-3">
+                <div className="bg-white rounded-lg p-3 border border-green-100">
+                  <div className="text-xs font-medium text-green-600 mb-1">
+                    INICIO DE RESERVA
+                  </div>
+                  <div className="text-sm font-semibold text-gray-800">
+                    {formatDateTime(selectedEventDates.reservationFrom).date}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {formatDateTime(selectedEventDates.reservationFrom).time}
                   </div>
                 </div>
-                <div>
-                  <strong className="text-gray-700">Fin de Reserva:</strong>
-                  <div className="ml-2">
-                    <div className="font-medium">
-                      {formatDateTime(selectedEventDates.reservationTo).date}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      {formatDateTime(selectedEventDates.reservationTo).time}
-                    </div>
+
+                <div className="bg-white rounded-lg p-3 border border-green-100">
+                  <div className="text-xs font-medium text-green-600 mb-1">
+                    FIN DE RESERVA
+                  </div>
+                  <div className="text-sm font-semibold text-gray-800">
+                    {formatDateTime(selectedEventDates.reservationTo).date}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {formatDateTime(selectedEventDates.reservationTo).time}
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          <button
-            onClick={handleCloseDatesModal}
-            className="mt-6 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-          >
-            Cerrar
-          </button>
-        </Modal>
-      )}
-
-      {/* Modal para mostrar la descripción */}
-      {showDescriptionModal && (
-        <Modal onClose={handleCloseDescriptionModal}>
-          <h2 className="text-xl font-bold mb-4">Descripción del Evento</h2>
-          <p>{selectedDescription}</p>
-          <button
-            onClick={handleCloseDescriptionModal}
-            className="mt-4 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-          >
-            Cerrar
-          </button>
-        </Modal>
-      )}
-
-      {/* Modal para mostrar la imagen ampliada */}
-      {showImageModal && (
-        <Modal onClose={() => setShowImageModal(false)}>
-          <div className="flex flex-col items-center">
-            <img
-              src={selectedImage}
-              alt="Imagen ampliada"
-              className="max-w-full max-h-screen object-contain rounded"
-            />
+          <div className="p-5 border-t border-gray-200 sticky bottom-0 bg-white">
             <button
-              onClick={() => setShowImageModal(false)}
-              className="mt-4 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
+              onClick={handleCloseDatesModal}
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-medium transition-colors text-sm"
             >
               Cerrar
             </button>
           </div>
-        </Modal>
+        </RenderModal>
+      )}
+
+      {showDescriptionModal && (
+        <RenderModal onClose={handleCloseDescriptionModal}>
+          <div className="p-5 border-b border-gray-200">
+            <h2 className="text-lg font-bold text-gray-800">
+              Descripción del Evento
+            </h2>
+          </div>
+          <div className="flex-1 p-5 overflow-y-auto">
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                {selectedDescription || 'No hay descripción disponible.'}
+              </p>
+            </div>
+          </div>
+          <div className="p-5 border-t border-gray-200">
+            <button
+              onClick={handleCloseDescriptionModal}
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-medium transition-colors text-sm"
+            >
+              Cerrar
+            </button>
+          </div>
+        </RenderModal>
+      )}
+
+      {showImageModal && (
+        <RenderModal onClose={() => setShowImageModal(false)}>
+          <div className="p-5 border-b border-gray-200">
+            <h2 className="text-lg font-bold text-gray-800">
+              Imagen del Evento
+            </h2>
+          </div>
+          <div className="p-5">
+            <div className="flex justify-center">
+              <img
+                src={selectedImage}
+                alt="Imagen ampliada"
+                className="max-w-full max-h-[60vh] object-contain rounded-lg"
+              />
+            </div>
+            <button
+              onClick={() => setShowImageModal(false)}
+              className="w-full mt-4 bg-red-500 hover:bg-red-600 text-white py-3 rounded-lg font-medium transition-colors text-sm"
+            >
+              Cerrar
+            </button>
+          </div>
+        </RenderModal>
       )}
     </div>
   );

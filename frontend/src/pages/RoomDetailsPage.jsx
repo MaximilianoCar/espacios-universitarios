@@ -1,52 +1,70 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import axiosInstance from '../axiosConfig';
 import { useSelector } from 'react-redux';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import UpdateRoomForm from '../components/UpdateRoomForm';
-import Modal from '../components/Modal';
+import HeroSection from '../components/HeroSection';
 import Swal from 'sweetalert2';
+import defaultBanner from '../assets/ucvfondo.jpg';
+import { CameraIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
+import { FaArrowLeft } from 'react-icons/fa';
 import getMediaUrl from '../utils/media';
 
 const RoomDetailsPage = () => {
   const { id } = useParams();
-  const navigate = useNavigate();
   const [room, setRoom] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showUpdateForm, setShowUpdateForm] = useState(false);
+  const [hasCoordinatorPermission, setHasCoordinatorPermission] =
+    useState(false);
 
-  // Obtener el rol del usuario desde Redux
-  const { role } = useSelector(state => state.auth);
+  const { role, user } = useSelector(state => state.auth);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Verificar permisos de coordinador
+  const canEdit =
+    role === 'admin' || (role === 'coordinator' && hasCoordinatorPermission);
+
+  const handleBack = () => {
+    if (location.key !== 'default') {
+      navigate(-1);
+    } else {
+      navigate('/rooms');
+    }
+  };
 
   useEffect(() => {
-    axiosInstance
-      .get(`/rooms/${id}`)
-      .then(response => {
+    const fetchRoomData = async () => {
+      try {
+        const response = await axiosInstance.get(`/rooms/${id}`);
         setRoom(response.data);
+
+        // Si el usuario es coordinador, verificar permisos sobre la sala
+        if (role === 'coordinator' && user) {
+          try {
+            const permissionResponse = await axiosInstance.get(
+              `/rooms/${id}/check-permission`
+            );
+            setHasCoordinatorPermission(permissionResponse.data.hasPermission);
+          } catch (error) {
+            console.error('Error checking coordinator permission:', error);
+            setHasCoordinatorPermission(false);
+          }
+        }
+
         setLoading(false);
-      })
-      .catch(error => {
+      } catch (error) {
         console.error('Error fetching room:', error);
         setLoading(false);
-      });
-  }, [id]);
+      }
+    };
 
-  const handleUpdateClick = () => {
-    setShowUpdateForm(true);
-  };
+    fetchRoomData();
+  }, [id, role, user]);
 
-  const handleCloseModal = () => {
-    setShowUpdateForm(false);
-  };
-
-  const handleRoomUpdated = updatedRoom => {
-    setRoom(updatedRoom);
-    setShowUpdateForm(false);
-  };
-
-  const handleDeleteRoom = async () => {
-    const result = await Swal.fire({
+  const handleDeleteRoom = () => {
+    Swal.fire({
       title: '¿Estás seguro?',
       text: `Esta acción eliminará permanentemente la sala "${room.name}". Esta acción no se puede deshacer.`,
       icon: 'warning',
@@ -55,45 +73,240 @@ const RoomDetailsPage = () => {
       cancelButtonColor: '#3085d6',
       confirmButtonText: 'Sí, eliminar',
       cancelButtonText: 'Cancelar',
-    });
+    }).then(result => {
+      if (result.isConfirmed) {
+        Swal.fire({
+          title: 'Eliminando sala...',
+          allowOutsideClick: false,
+          didOpen: () => Swal.showLoading(),
+        });
 
-    if (result.isConfirmed) {
-      // Mostrar loader
+        axiosInstance
+          .delete(`/rooms/${room.id}`)
+          .then(() => {
+            Swal.fire({
+              title: '¡Eliminada!',
+              text: `La sala "${room.name}" ha sido eliminada exitosamente.`,
+              icon: 'success',
+              confirmButtonColor: '#3085d6',
+            }).then(() => {
+              navigate('/rooms');
+            });
+          })
+          .catch(error => {
+            console.error('Error deleting room:', error);
+            Swal.fire({
+              title: 'Error',
+              text: 'Error al eliminar la sala. Por favor, intente nuevamente.',
+              icon: 'error',
+              confirmButtonColor: '#d33',
+            });
+          });
+      }
+    });
+  };
+
+  const handleUploadImage = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      // Validar tamaño del archivo (máximo 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        Swal.fire({
+          title: 'Error',
+          text: 'La imagen no puede ser mayor a 5MB.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('image', file);
+
+      // Agregar los demás campos del room para no perderlos
+      formData.append('name', room.name);
+      formData.append('description', room.description);
+      formData.append('capacity', room.capacity);
+      formData.append('location', room.location);
+      formData.append('staffowner', room.staffowner);
+      formData.append('isInCUC', room.isInCUC);
+
       Swal.fire({
-        title: 'Eliminando sala...',
-        text: `Por favor espere mientras se elimina la sala "${room.name}"`,
+        title: 'Subiendo imagen...',
         allowOutsideClick: false,
-        allowEscapeKey: false,
-        showConfirmButton: false,
-        willOpen: () => {
-          Swal.showLoading();
-        },
+        didOpen: () => Swal.showLoading(),
       });
 
       try {
-        await axiosInstance.delete(`/rooms/${room.id}`);
-
-        Swal.fire(
-          '¡Eliminada!',
-          `La sala "${room.name}" ha sido eliminada exitosamente.`,
-          'success'
-        ).then(() => {
-          navigate('/rooms');
-        });
-      } catch (error) {
-        console.error('Error deleting room:', error);
-        Swal.fire(
-          'Error',
-          'Error al eliminar la sala. Por favor, intente nuevamente.',
-          'error'
+        const response = await axiosInstance.put(
+          `/rooms/${room.id}`,
+          formData,
+          {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          }
         );
+
+        Swal.close();
+        Swal.fire({
+          title: '¡Listo!',
+          text: 'Imagen actualizada correctamente.',
+          icon: 'success',
+          confirmButtonColor: '#3085d6',
+        });
+        setRoom(response.data);
+      } catch (err) {
+        Swal.close();
+        console.error(err);
+        Swal.fire({
+          title: 'Error',
+          text: 'No se pudo actualizar la imagen.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
+      }
+    };
+    input.click();
+  };
+
+  const handleUpdateRoom = async () => {
+    const { value: formValues } = await Swal.fire({
+      title: 'Actualizar Sala',
+      html: `
+        <div class="text-left space-y-4 max-h-96 overflow-y-auto">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Nombre de la Sala</label>
+            <input 
+              id="swal-name" 
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              value="${room.name || ''}"
+              placeholder="Nombre de la sala"
+            >
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+            <textarea 
+              id="swal-description" 
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              placeholder="Descripción de la sala"
+              rows="4"
+            >${room.description || ''}</textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Capacidad</label>
+            <input 
+              id="swal-capacity" 
+              type="number"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              value="${room.capacity || ''}"
+              placeholder="Capacidad"
+            >
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ubicación</label>
+            <input 
+              id="swal-location" 
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              value="${room.location || ''}"
+              placeholder="Ubicación"
+            >
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Encargado</label>
+            <input 
+              id="swal-staffowner" 
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              value="${room.staffowner || ''}"
+              placeholder="Encargado"
+            >
+          </div>
+          <div class="flex items-center">
+            <input 
+              id="swal-isInCUC" 
+              type="checkbox"
+              class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" 
+              ${room.isInCUC ? 'checked' : ''}
+            >
+            <label for="swal-isInCUC" class="ml-2 block text-sm text-gray-700">
+              ¿Está en la Ciudad Universitaria de Caracas?
+            </label>
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Actualizar',
+      confirmButtonColor: '#3085d6',
+      cancelButtonText: 'Cancelar',
+      cancelButtonColor: '#d33',
+      width: '800px',
+      focusConfirm: false,
+      preConfirm: () => {
+        const name = document.getElementById('swal-name').value;
+        const description = document.getElementById('swal-description').value;
+        const capacity = document.getElementById('swal-capacity').value;
+        const location = document.getElementById('swal-location').value;
+        const staffowner = document.getElementById('swal-staffowner').value;
+        const isInCUC = document.getElementById('swal-isInCUC').checked;
+
+        if (!name || !description || !capacity || !location || !staffowner) {
+          Swal.showValidationMessage('Todos los campos son obligatorios');
+          return false;
+        }
+
+        if (description.length > 2000) {
+          Swal.showValidationMessage(
+            'La descripción no puede exceder los 2000 caracteres'
+          );
+          return false;
+        }
+
+        return {
+          name,
+          description,
+          capacity: parseInt(capacity),
+          location,
+          staffowner,
+          isInCUC,
+        };
+      },
+    });
+
+    if (formValues) {
+      Swal.fire({
+        title: 'Actualizando sala...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      try {
+        const resp = await axiosInstance.put(`/rooms/${room.id}`, formValues);
+
+        Swal.fire({
+          title: '¡Actualizada!',
+          text: 'La sala ha sido actualizada exitosamente.',
+          icon: 'success',
+          confirmButtonColor: '#3085d6',
+        });
+        setRoom(resp.data);
+      } catch (error) {
+        console.error('Error updating room:', error);
+        Swal.fire({
+          title: 'Error',
+          text: 'Error al actualizar la sala. Por favor, intente nuevamente.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
       }
     }
   };
 
   if (loading) {
     return (
-      <div>
+      <div className="min-h-screen grid grid-rows-[auto_1fr_auto]">
         <Header />
         <div className="container mx-auto my-8">
           <p>Cargando sala...</p>
@@ -105,7 +318,7 @@ const RoomDetailsPage = () => {
 
   if (!room) {
     return (
-      <div>
+      <div className="min-h-screen grid grid-rows-[auto_1fr_auto]">
         <Header />
         <div className="container mx-auto my-8">
           <p>Sala no encontrada.</p>
@@ -118,82 +331,128 @@ const RoomDetailsPage = () => {
   return (
     <div className="min-h-screen grid grid-rows-[auto_auto_1fr_auto]">
       <Header />
-      <div className="container mx-auto my-8 px-4">
-        {!showUpdateForm && (
-          <div className="flex flex-col md:flex-row gap-8">
-            <div className="md:w-1/2">
-              <img
-                src={
-                  room.imagePath
-                    ? getMediaUrl(room.imagePath)
-                    : 'https://via.placeholder.com/600x400'
-                }
-                alt={room.name}
-                className="w-full h-auto rounded-lg shadow-md"
-              />
-            </div>
-            <div className="md:w-1/2 flex flex-col justify-around">
-              <h2 className="text-3xl font-bold mb-4 text-gray-800">
-                {room.name}
-              </h2>
-              <p className="mb-6 text-gray-600 text-lg">{room.description}</p>
-              <ul className="mb-6 space-y-3">
-                <li className="flex items-center">
-                  <strong className="text-gray-700 w-48">Capacidad:</strong>
-                  <span className="text-gray-600">
-                    {room.capacity} personas
-                  </span>
-                </li>
-                <li className="flex items-center">
-                  <strong className="text-gray-700 w-48">Ubicación:</strong>
-                  <span className="text-gray-600">{room.location}</span>
-                </li>
-                <li className="flex items-center">
-                  <strong className="text-gray-700 w-48">
-                    Ciudad Universitaria de Caracas:
-                  </strong>
-                  <span className="text-gray-600">
-                    {room.isInCUC ? 'Sí' : 'No'}
-                  </span>
-                </li>
-                <li className="flex items-center">
-                  <strong className="text-gray-700 w-48">Encargado:</strong>
-                  <span className="text-gray-600">{room.staffowner}</span>
-                </li>
-              </ul>
-              {/* Mostrar los botones de "Actualizar" y "Eliminar" solo si el usuario es administrador */}
-              {role === 'admin' && (
-                <div className="flex space-x-4">
-                  <button
-                    onClick={handleUpdateClick}
-                    className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 rounded-lg font-semibold transition duration-200"
-                  >
-                    Actualizar Sala
-                  </button>
-                  <button
-                    onClick={handleDeleteRoom}
-                    className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-semibold transition duration-200"
-                  >
-                    Eliminar Sala
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+
+      {/* HeroSection con banner por defecto */}
+      <div className="relative">
+        <HeroSection title={room?.name || ''} backgroundImage={defaultBanner} />
+        {canEdit && (
+          <div className="absolute bottom-2 right-2 sm:bottom-4 sm:right-4"></div>
         )}
       </div>
-      <Footer />
 
-      {/* Modal para actualizar sala */}
-      {showUpdateForm && (
-        <Modal onClose={handleCloseModal}>
-          <UpdateRoomForm
-            room={room}
-            onRoomSaved={handleRoomUpdated}
-            onClose={handleCloseModal}
-          />
-        </Modal>
-      )}
+      <div className="container mx-auto my-8 px-4">
+        {/* Sección de Detalles de la Sala */}
+        <div className="flex flex-col lg:flex-row gap-8 mb-8">
+          {/* Contenedor de la Imagen de la Sala */}
+          <div className="w-full lg:w-1/2 h-64 lg:h-96 overflow-hidden rounded-lg shadow-md relative">
+            <img
+              src={
+                room?.imagePath
+                  ? getMediaUrl(room.imagePath)
+                  : 'https://via.placeholder.com/600x400'
+              }
+              alt={room?.name || 'Sala'}
+              className="w-full h-full object-cover"
+            />
+            {canEdit && (
+              <div className="absolute top-2 right-2">
+                <button
+                  onClick={handleUploadImage}
+                  className="bg-white/90 hover:bg-white text-gray-800 px-2 py-1 rounded-lg shadow transition-all duration-200 flex items-center space-x-1 border border-gray-200 text-xs"
+                >
+                  <PencilSquareIcon className="h-4 w-4 text-blue-500" />
+                  <span className="hidden sm:inline">Cambiar imagen</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Detalles de la Sala */}
+          <div className="w-full lg:w-1/2">
+            <div className="flex items-center mb-6 flex-wrap">
+              <button
+                onClick={handleBack}
+                className="flex items-center text-gray-800 hover:text-gray-600 transition-colors mr-4"
+                title="Volver a salas"
+              >
+                <FaArrowLeft size={24} />
+              </button>
+              <h2 className="text-2xl lg:text-3xl font-bold">
+                {room?.name || 'Sala'}
+              </h2>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg mb-6 border">
+              <p className="text-gray-700 whitespace-pre-line">
+                {room?.description || 'Sin descripción'}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 mb-6">
+              <div className="space-y-3 lg:space-y-4">
+                <div>
+                  <strong className="text-gray-700 text-sm lg:text-base">
+                    Capacidad:
+                  </strong>
+                  <p className="text-gray-600 text-sm lg:text-base">
+                    {room?.capacity} personas
+                  </p>
+                </div>
+                <div>
+                  <strong className="text-gray-700 text-sm lg:text-base">
+                    Ubicación:
+                  </strong>
+                  <p className="text-gray-600 text-sm lg:text-base">
+                    {room?.location}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-3 lg:space-y-4">
+                <div>
+                  <strong className="text-gray-700 text-sm lg:text-base">
+                    Ciudad Universitaria de Caracas:
+                  </strong>
+                  <p className="text-gray-600 text-sm lg:text-base">
+                    {room?.isInCUC ? 'Sí' : 'No'}
+                  </p>
+                </div>
+                <div>
+                  <strong className="text-gray-700 text-sm lg:text-base">
+                    Encargado:
+                  </strong>
+                  <p className="text-gray-600 text-sm lg:text-base">
+                    {room?.staffowner}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Botones de Acción */}
+            {canEdit && (
+              <div className="flex flex-col sm:flex-row gap-4">
+                <button
+                  onClick={handleUpdateRoom}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg shadow transition-all duration-200 flex items-center space-x-2 border border-blue-700 w-full sm:w-auto justify-center"
+                >
+                  <PencilSquareIcon className="h-5 w-5" />
+                  <span>Actualizar Sala</span>
+                </button>
+
+                {role === 'admin' && (
+                  <button
+                    onClick={handleDeleteRoom}
+                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-3 rounded-lg shadow transition-all duration-200 flex items-center space-x-2 border border-red-700 w-full sm:w-auto justify-center"
+                  >
+                    <span>Eliminar Sala</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <Footer />
     </div>
   );
 };

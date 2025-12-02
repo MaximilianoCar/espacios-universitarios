@@ -1,4 +1,4 @@
-import axiosInstance from '../../axiosConfig';
+import axiosInstance, { setAuthToken, clearAuthToken } from '../../axiosConfig';
 import { loginSuccess, refreshAccessToken, logout } from './authSlice';
 import Swal from 'sweetalert2';
 
@@ -16,12 +16,14 @@ export const login = (email, password, navigate) => async dispatch => {
     const { token, refreshToken, name, role } = payload;
 
     // Guardar tokens en localStorage
-
     localStorage.setItem('user', name);
     localStorage.setItem('role', role);
     localStorage.setItem('token', token);
     localStorage.setItem('refreshToken', refreshToken);
     localStorage.setItem('isAuthenticated', true);
+
+    // Establecer header en axios.defaults para evitar token antiguo en memoria
+    setAuthToken(token);
 
     // Actualizar el estado global con Redux
     dispatch(loginSuccess({ name, role, token, refreshToken }));
@@ -66,6 +68,7 @@ export const refreshToken = () => async dispatch => {
     if (!refreshToken) {
       dispatch(logout());
       localStorage.clear();
+      clearAuthToken();
       return;
     }
 
@@ -77,12 +80,16 @@ export const refreshToken = () => async dispatch => {
     // Guardar el nuevo token en localStorage
     localStorage.setItem('token', newToken);
 
+    // Actualizar header en axios
+    setAuthToken(newToken);
+
     // Actualizar el token en el estado global con Redux
     dispatch(refreshAccessToken({ token: newToken }));
   } catch (error) {
     console.error('Error al refrescar el token:', error);
     dispatch(logout());
     localStorage.clear();
+    clearAuthToken();
   }
 };
 
@@ -95,14 +102,16 @@ export const logoutUser = () => dispatch => {
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('isAuthenticated');
 
+  // Limpiar header en axios
+  clearAuthToken();
+
   // Despachar la acción de logout para limpiar el estado de Redux
   dispatch(logout());
 };
 
 export const logoutAndRedirect = navigate => async dispatch => {
   try {
-    -(await axiosInstance.post(`${API_URL}/logout`));
-    +(await axiosInstance.post('/logout'));
+    await axiosInstance.post('/logout');
     //  limpia tu estado global y el almacenamiento persistente.
     dispatch(logoutUser());
 

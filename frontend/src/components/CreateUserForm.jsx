@@ -1,6 +1,7 @@
 // src/components/CreateUserForm.js
 import React, { useState } from 'react';
 import axiosInstance from '../axiosConfig';
+import Swal from 'sweetalert2';
 
 const CreateUserForm = ({ onUserCreated, onCancel }) => {
   const [formData, setFormData] = useState({
@@ -28,10 +29,33 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
 
     try {
       await axiosInstance.post('/anyusers', formData);
-      alert('Usuario creado con éxito.');
-      onUserCreated();
+
+      // Mostrar modal de éxito con SweetAlert2
+      Swal.fire({
+        title: '¡Éxito!',
+        text: 'Usuario creado exitosamente.',
+        icon: 'success',
+        confirmButtonColor: '#3085d6',
+        confirmButtonText: 'Aceptar',
+        timer: 3000,
+        timerProgressBar: true,
+        didClose: () => {
+          // Llamar a onUserCreated después de cerrar el modal
+          onUserCreated();
+        },
+      });
     } catch (error) {
       console.error('Error creating user:', error);
+
+      // Mostrar error con SweetAlert2
+      Swal.fire({
+        title: 'Error',
+        text: error.response?.data?.error || 'Error al crear el usuario.',
+        icon: 'error',
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Aceptar',
+      });
+
       setError(error.response?.data?.error || 'Error al crear el usuario.');
     } finally {
       setIsSubmitting(false);

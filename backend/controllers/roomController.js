@@ -42,7 +42,10 @@ exports.checkRoomPermission = async (req, res) => {
 };
 
 exports.createRoom = async (req, res) => {
+  const transaction = await Room.sequelize.transaction();
   try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
     let roomData = req.body;
 
     // Si se subió una imagen, agregar la ruta a los datos
@@ -50,9 +53,24 @@ exports.createRoom = async (req, res) => {
       roomData.imagePath = req.file.path;
     }
 
-    const newRoom = await Room.create(roomData);
+    const newRoom = await Room.create(roomData, { transaction });
+
+    // Si el usuario es coordinador, asignarle automáticamente permisos sobre la sala creada
+    if (userRole === 'coordinator') {
+      await CoordinatorRooms.create(
+        {
+          UserId: userId,
+          RoomId: newRoom.id,
+        },
+        { transaction }
+      );
+    }
+
+    await transaction.commit();
     res.status(201).json(newRoom);
   } catch (error) {
+    await transaction.rollback();
+
     // Si el error es un error de validación de Sequelize
     if (
       ['SequelizeValidationError', 'SequelizeUniqueConstraintError'].includes(
@@ -152,8 +170,19 @@ exports.updateRoom = async (req, res) => {
       return res.status(404).json({ error: 'Sala no encontrada.' });
     }
 
-    // Si se subió una nueva imagen, actualizar la ruta
+    // Si se subió una nueva imagen, eliminar la anterior y actualizar la ruta
     if (req.file) {
+      // Eliminar imagen anterior si existe
+      if (room.imagePath) {
+        const absolutePath = path.join(process.cwd(), room.imagePath);
+        try {
+          await fs.unlink(absolutePath);
+        } catch (fileError) {
+          if (fileError.code !== 'ENOENT') {
+            console.error(`Error al eliminar la imagen anterior: ${fileError}`);
+          }
+        }
+      }
       req.body.imagePath = req.file.path;
     }
 
@@ -162,6 +191,50 @@ exports.updateRoom = async (req, res) => {
   } catch (error) {
     console.error('Error updating room:', error);
     res.status(500).json({ error: 'Error al actualizar la sala.' });
+  }
+};
+
+// Subir o reemplazar imagen de la sala
+exports.uploadImage = async (req, res) => {
+  try {
+    const userRole = req.user.role;
+    const userId = req.user.id;
+    const roomId = req.params.id;
+
+    // Verificar permisos
+    const hasPermission = await checkRoomPermission(userId, userRole, roomId);
+    if (!hasPermission) {
+      return res.status(404).json({
+        error: 'Sala no encontrada o no tienes permisos para modificarla.',
+      });
+    }
+
+    const room = await Room.findByPk(roomId);
+    if (!room) {
+      return res.status(404).json({ error: 'Sala no encontrada.' });
+    }
+
+    // Si se subió una nueva imagen, actualizar la ruta
+    if (req.file) {
+      // Eliminar la imagen anterior si existe
+      if (room.imagePath) {
+        const absolutePath = path.join(process.cwd(), room.imagePath);
+        try {
+          await fs.unlink(absolutePath);
+        } catch (fileError) {
+          if (fileError.code !== 'ENOENT') {
+            console.error(`Error al eliminar la imagen anterior: ${fileError}`);
+          }
+        }
+      }
+      room.imagePath = req.file.path;
+      await room.save();
+    }
+
+    res.status(200).json(room);
+  } catch (error) {
+    console.error('Error uploading room image:', error);
+    res.status(500).json({ error: 'Error al subir la imagen de la sala.' });
   }
 };
 

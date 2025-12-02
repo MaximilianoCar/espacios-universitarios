@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import axiosInstance from '../axiosConfig';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import SearchBar from '../components/SearchBar';
+import SearchBar from '../components/SearchBar2';
 import {
   FaEye,
   FaUpload,
@@ -34,6 +34,7 @@ const PAGE_SIZE = 25; // mismo que el backend
 const UserReservationsPage = () => {
   const [events, setEvents] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentSearch, setCurrentSearch] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [uploadingProgramId, setUploadingProgramId] = useState(null);
@@ -113,6 +114,34 @@ const UserReservationsPage = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openMenuId]);
 
+  // Modificar la función handleSearch para buscar solo al presionar Enter
+  const handleSearch = async term => {
+    setSearchTerm(term);
+    setCurrentSearch(term);
+    setCurrentPage(1); // Siempre volver a la página 1 al buscar
+
+    setLoading(true);
+    try {
+      const response = await axiosInstance.get('/my-events', {
+        params: {
+          page: 1,
+          pageSize: PAGE_SIZE,
+          search: term,
+        },
+      });
+
+      setEvents(response.data.events || []);
+      setTotalEvents(response.data.totalEvents || 0);
+      setTotalPages(response.data.totalPages || 1);
+      setError('');
+    } catch (error) {
+      console.error('Error searching events:', error);
+      setError('Error al buscar eventos.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Obtener eventos con paginación del BACKEND
   useEffect(() => {
     const fetchEvents = async () => {
@@ -139,23 +168,13 @@ const UserReservationsPage = () => {
     };
 
     fetchEvents();
-  }, [currentPage, searchTerm]);
-
-  // Resetear la página a 1 cuando se busca
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
+  }, [currentPage]); // Solo dependencia de currentPage
 
   // Manejar cambio de página
   const handlePageChange = newPage => {
     if (newPage >= 1 && newPage <= totalPages) {
       setCurrentPage(newPage);
     }
-  };
-
-  // Manejar el cambio en el término de búsqueda
-  const handleSearch = term => {
-    setSearchTerm(term);
   };
 
   // Manejar cambio de archivo para el programa
@@ -681,6 +700,44 @@ const UserReservationsPage = () => {
           />
         </div>
 
+        {/* Indicador de búsqueda activa */}
+        {currentSearch && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-blue-700">
+                Mostrando resultados para: <strong>"{currentSearch}"</strong>
+                {totalEvents > 0 && (
+                  <span className="ml-2 text-blue-600">
+                    ({totalEvents} resultado{totalEvents !== 1 ? 's' : ''})
+                  </span>
+                )}
+              </p>
+              <button
+                onClick={() => handleSearch('')}
+                className="text-blue-500 hover:text-blue-700 underline text-sm font-medium"
+              >
+                Limpiar búsqueda
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Mensaje cuando no hay resultados */}
+        {currentSearch && events.length === 0 && !loading && (
+          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-center">
+            <p className="text-yellow-700">
+              No se encontraron resultados para:{' '}
+              <strong>"{currentSearch}"</strong>
+            </p>
+            <button
+              onClick={() => handleSearch('')}
+              className="mt-2 text-yellow-600 hover:text-yellow-800 underline text-sm"
+            >
+              Ver todas las reservas
+            </button>
+          </div>
+        )}
+
         {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
 
         {/* Vista Desktop - Tabla MODIFICADA */}
@@ -810,7 +867,9 @@ const UserReservationsPage = () => {
               ) : (
                 <tr>
                   <td colSpan="11" className="py-8 text-center text-gray-500">
-                    No hay eventos disponibles.
+                    {currentSearch
+                      ? 'No se encontraron reservas que coincidan con tu búsqueda.'
+                      : 'No hay reservas disponibles.'}
                   </td>
                 </tr>
               )}
@@ -829,7 +888,7 @@ const UserReservationsPage = () => {
             </tbody>
           </table>
 
-          {/* PAGINACIÓN - Igual que AdminReservationsPage */}
+          {/* PAGINACIÓN */}
           <div className="flex justify-between items-center p-4 bg-gray-50 border-t">
             <p className="text-sm text-gray-600">
               Mostrando {events.length} de {totalEvents} reservas (Pág.{' '}
@@ -959,7 +1018,9 @@ const UserReservationsPage = () => {
             ))
           ) : (
             <div className="text-center py-8 text-gray-500">
-              No hay eventos disponibles.
+              {currentSearch
+                ? 'No se encontraron reservas que coincidan con tu búsqueda.'
+                : 'No hay reservas disponibles.'}
             </div>
           )}
 

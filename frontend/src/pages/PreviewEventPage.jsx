@@ -8,6 +8,7 @@ import Swal from 'sweetalert2';
 import { useSelector } from 'react-redux';
 import defaultBanner from '../assets/ucvfondo.jpg';
 import { CameraIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
+import { FaArrowLeft } from 'react-icons/fa';
 import getMediaUrl from '../utils/media';
 
 const PreviewEventPage = () => {
@@ -16,6 +17,10 @@ const PreviewEventPage = () => {
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
   const { role } = useSelector(state => state.auth);
+
+  const handleBack = () => {
+    navigate(-1);
+  };
 
   useEffect(() => {
     axiosInstance
@@ -52,24 +57,56 @@ const PreviewEventPage = () => {
         showDenyButton: true,
         showCancelButton: true,
         confirmButtonText: 'Subir nuevo',
+        confirmButtonColor: '#3085d6',
         denyButtonText: 'Quitar banner',
+        denyButtonColor: '#3085d6',
+        cancelButtonText: 'Cancelar',
+        cancelButtonColor: '#d33',
+        icon: 'question',
       });
 
       if (result.isDenied) {
-        // quitar banner
+        // Confirmar eliminación del banner
+        const deleteResult = await Swal.fire({
+          title: '¿Quitar banner?',
+          text: 'El banner será restaurado al predeterminado.',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#3085d6',
+          cancelButtonColor: '#d33',
+          confirmButtonText: 'Sí, quitar banner',
+          cancelButtonText: 'Cancelar',
+        });
+
+        if (!deleteResult.isConfirmed) return;
+
+        Swal.fire({
+          title: 'Eliminando banner...',
+          allowOutsideClick: false,
+          didOpen: () => Swal.showLoading(),
+        });
+
         try {
           await axiosInstance.delete(`/events/${event.id}/banner`);
-          Swal.fire(
-            'Eliminado',
-            'Banner restaurado al predeterminado.',
-            'success'
-          );
+          Swal.close();
+          Swal.fire({
+            title: 'Eliminado',
+            text: 'Banner restaurado al predeterminado.',
+            icon: 'success',
+            confirmButtonColor: '#3085d6',
+          });
           // refrescar evento
           const resp = await axiosInstance.get(`/events/${event.id}`);
           setEvent(resp.data);
         } catch (err) {
+          Swal.close();
           console.error(err);
-          Swal.fire('Error', 'No se pudo eliminar el banner.', 'error');
+          Swal.fire({
+            title: 'Error',
+            text: 'No se pudo eliminar el banner.',
+            icon: 'error',
+            confirmButtonColor: '#d33',
+          });
         }
         return;
       }
@@ -84,6 +121,31 @@ const PreviewEventPage = () => {
     input.onchange = async e => {
       const file = e.target.files[0];
       if (!file) return;
+
+      // Validar tamaño del archivo (máximo 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        Swal.fire({
+          title: 'Error',
+          text: 'La imagen no puede ser mayor a 5MB.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
+        return;
+      }
+
+      // Confirmar subida de banner
+      const confirmResult = await Swal.fire({
+        title: '¿Subir banner?',
+        text: '¿Estás seguro de que deseas subir este banner?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Sí, subir',
+        cancelButtonText: 'Cancelar',
+      });
+
+      if (!confirmResult.isConfirmed) return;
 
       const formData = new FormData();
       formData.append('banner', file);
@@ -103,12 +165,22 @@ const PreviewEventPage = () => {
         // refrescar el evento para obtener un payload consistente (incluye isOwner)
         const refreshed = await axiosInstance.get(`/events/${event.id}`);
         Swal.close();
-        Swal.fire('¡Listo!', 'Banner subido correctamente.', 'success');
+        Swal.fire({
+          title: '¡Listo!',
+          text: 'Banner subido correctamente.',
+          icon: 'success',
+          confirmButtonColor: '#3085d6',
+        });
         setEvent(refreshed.data);
       } catch (err) {
         Swal.close();
         console.error(err);
-        Swal.fire('Error', 'No se pudo subir el banner.', 'error');
+        Swal.fire({
+          title: 'Error',
+          text: 'No se pudo subir el banner.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
       }
     };
     input.click();
@@ -123,18 +195,55 @@ const PreviewEventPage = () => {
         showDenyButton: true,
         showCancelButton: true,
         confirmButtonText: 'Subir nueva',
+        confirmButtonColor: '#3085d6',
         denyButtonText: 'Quitar imagen',
+        denyButtonColor: '#3085d6',
+        cancelButtonText: 'Cancelar',
+        cancelButtonColor: '#d33',
+        icon: 'question',
       });
 
       if (result.isDenied) {
+        // Confirmar eliminación de imagen
+        const deleteResult = await Swal.fire({
+          title: '¿Quitar imagen?',
+          text: 'La imagen será eliminada y se mostrará la imagen por defecto.',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#3085d6',
+          cancelButtonColor: '#d33',
+          confirmButtonText: 'Sí, quitar imagen',
+          cancelButtonText: 'Cancelar',
+        });
+
+        if (!deleteResult.isConfirmed) return;
+
+        Swal.fire({
+          title: 'Eliminando imagen...',
+          allowOutsideClick: false,
+          didOpen: () => Swal.showLoading(),
+        });
+
         try {
           await axiosInstance.delete(`/events/${event.id}/image`);
-          Swal.fire('Eliminado', 'Imagen del evento eliminada.', 'success');
+          Swal.close();
+          Swal.fire({
+            title: 'Eliminado',
+            text: 'Imagen del evento eliminada.',
+            icon: 'success',
+            confirmButtonColor: '#3085d6',
+          });
           const resp = await axiosInstance.get(`/events/${event.id}`);
           setEvent(resp.data);
         } catch (err) {
+          Swal.close();
           console.error(err);
-          Swal.fire('Error', 'No se pudo eliminar la imagen.', 'error');
+          Swal.fire({
+            title: 'Error',
+            text: 'No se pudo eliminar la imagen.',
+            icon: 'error',
+            confirmButtonColor: '#d33',
+          });
         }
         return;
       }
@@ -148,6 +257,31 @@ const PreviewEventPage = () => {
     input.onchange = async e => {
       const file = e.target.files[0];
       if (!file) return;
+
+      // Validar tamaño del archivo (máximo 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        Swal.fire({
+          title: 'Error',
+          text: 'La imagen no puede ser mayor a 5MB.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
+        return;
+      }
+
+      // Confirmar subida de imagen
+      const confirmResult = await Swal.fire({
+        title: '¿Subir imagen?',
+        text: '¿Estás seguro de que deseas subir esta imagen?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Sí, subir',
+        cancelButtonText: 'Cancelar',
+      });
+
+      if (!confirmResult.isConfirmed) return;
 
       const formData = new FormData();
       formData.append('image', file);
@@ -165,12 +299,22 @@ const PreviewEventPage = () => {
         // refrescar el evento para obtener isOwner y paths normalizados
         const refreshed = await axiosInstance.get(`/events/${event.id}`);
         Swal.close();
-        Swal.fire('¡Listo!', 'Imagen subida correctamente.', 'success');
+        Swal.fire({
+          title: '¡Listo!',
+          text: 'Imagen subida correctamente.',
+          icon: 'success',
+          confirmButtonColor: '#3085d6',
+        });
         setEvent(refreshed.data);
       } catch (err) {
         Swal.close();
         console.error(err);
-        Swal.fire('Error', 'No se pudo subir la imagen.', 'error');
+        Swal.fire({
+          title: 'Error',
+          text: 'No se pudo subir la imagen.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
       }
     };
     input.click();
@@ -183,6 +327,10 @@ const PreviewEventPage = () => {
       inputLabel: 'Descripción del evento',
       inputValue: event?.description || '',
       showCancelButton: true,
+      confirmButtonText: 'Guardar',
+      confirmButtonColor: '#3085d6',
+      cancelButtonText: 'Cancelar',
+      cancelButtonColor: '#d33',
       inputValidator: value => {
         if (!value) {
           return 'La descripción no puede estar vacía';
@@ -195,11 +343,23 @@ const PreviewEventPage = () => {
         // Guardar el isOwner actual antes de hacer la actualización
         const currentIsOwner = event.isOwner;
 
+        Swal.fire({
+          title: 'Actualizando descripción...',
+          allowOutsideClick: false,
+          didOpen: () => Swal.showLoading(),
+        });
+
         const resp = await axiosInstance.put(`/events/${event.id}`, {
           description,
         });
 
-        Swal.fire('Guardado', 'Descripción actualizada.', 'success');
+        Swal.close();
+        Swal.fire({
+          title: '¡Guardado!',
+          text: 'Descripción actualizada correctamente.',
+          icon: 'success',
+          confirmButtonColor: '#3085d6',
+        });
 
         // Mantener el valor de isOwner al actualizar el estado
         setEvent({
@@ -207,8 +367,14 @@ const PreviewEventPage = () => {
           isOwner: currentIsOwner,
         });
       } catch (err) {
+        Swal.close();
         console.error(err);
-        Swal.fire('Error', 'No se pudo actualizar la descripción.', 'error');
+        Swal.fire({
+          title: 'Error',
+          text: 'No se pudo actualizar la descripción.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
       }
     }
   };
@@ -291,9 +457,16 @@ const PreviewEventPage = () => {
 
           {/* Detalles del Evento */}
           <div className="w-full lg:w-1/2">
-            <h2 className="text-2xl lg:text-3xl font-bold mb-4 lg:mb-6">
-              {event.name}
-            </h2>
+            <div className="flex items-center mb-6 flex-wrap">
+              <button
+                onClick={handleBack}
+                className="flex items-center text-gray-800 hover:text-gray-600 transition-colors mr-4"
+                title="Volver atrás"
+              >
+                <FaArrowLeft size={24} />
+              </button>
+              <h2 className="text-2xl lg:text-3xl font-bold">{event.name}</h2>
+            </div>
 
             <div className="bg-gray-50 p-4 rounded-lg mb-6 border">
               <p className="text-gray-700 whitespace-pre-line">
@@ -380,8 +553,9 @@ const PreviewEventPage = () => {
               <div className="flex justify-start">
                 <button
                   onClick={handleChangeDescription}
-                  className="bg-blue-600 text-white hover:bg-blue-500 px-4 py-3 rounded-lg shadow transition-all duration-200 flex items-center space-x-2 border border-gray-200 w-full sm:w-auto justify-center"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded-lg shadow transition-all duration-200 flex items-center space-x-2 border border-blue-700 w-full sm:w-auto justify-center"
                 >
+                  <PencilSquareIcon className="h-5 w-5" />
                   <span>Editar Descripción</span>
                 </button>
               </div>

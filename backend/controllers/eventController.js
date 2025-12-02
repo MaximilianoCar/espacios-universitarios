@@ -233,23 +233,48 @@ exports.getAllEvents = async (req, res) => {
     const userRole = req.user.role;
     const userId = req.user.id;
 
-    // Parámetros de paginación
+    // Parámetros de paginación y búsqueda
     const page = parseInt(req.query.page) || 1;
-    const pageSize = parseInt(req.query.pageSize) || 8;
+    const pageSize = parseInt(req.query.pageSize) || 25;
+    const search = req.query.search || '';
     const offset = (page - 1) * pageSize;
 
     let events;
     let count;
 
-    if (userRole === 'admin') {
-      // Admin ve todos los eventos con paginación
-      const result = await Event.findAndCountAll({
-        include: [
-          {
-            model: Room,
-            as: 'room',
-          },
+    // Construir condiciones de búsqueda
+    let whereConditions = {};
+    let includeConditions = [
+      {
+        model: Room,
+        as: 'room',
+      },
+      {
+        model: User,
+        as: 'user',
+        attributes: ['name', 'email'],
+      },
+    ];
+
+    // Aplicar filtro de búsqueda si existe
+    if (search) {
+      whereConditions = {
+        [Op.or]: [
+          { name: { [Op.like]: `%${search}%` } },
+          { description: { [Op.like]: `%${search}%` } },
+          { contact: { [Op.like]: `%${search}%` } },
+          { '$room.name$': { [Op.like]: `%${search}%` } },
+          { '$user.name$': { [Op.like]: `%${search}%` } },
+          { '$user.email$': { [Op.like]: `%${search}%` } },
         ],
+      };
+    }
+
+    if (userRole === 'admin') {
+      // Admin ve todos los eventos con paginación y búsqueda
+      const result = await Event.findAndCountAll({
+        where: whereConditions,
+        include: includeConditions,
         limit: pageSize,
         offset: offset,
         order: [['createdAt', 'DESC']],
@@ -257,22 +282,21 @@ exports.getAllEvents = async (req, res) => {
       events = result.rows;
       count = result.count;
     } else if (userRole === 'coordinator') {
-      // Coordinator ve solo eventos de salas que gestiona con paginación
+      // Coordinator ve solo eventos de salas que gestiona con paginación y búsqueda
       const allowedRoomIds = await getAllowedRoomIds(userId, userRole);
 
       if (allowedRoomIds.length > 0) {
-        const result = await Event.findAndCountAll({
-          where: {
-            roomId: {
-              [Op.in]: allowedRoomIds,
-            },
+        // Combinar condiciones de búsqueda con restricción de salas permitidas
+        const coordinatorWhere = {
+          ...whereConditions,
+          roomId: {
+            [Op.in]: allowedRoomIds,
           },
-          include: [
-            {
-              model: Room,
-              as: 'room',
-            },
-          ],
+        };
+
+        const result = await Event.findAndCountAll({
+          where: coordinatorWhere,
+          include: includeConditions,
           limit: pageSize,
           offset: offset,
           order: [['createdAt', 'DESC']],
@@ -289,6 +313,7 @@ exports.getAllEvents = async (req, res) => {
       });
     }
 
+    // Calcular el total de páginas
     const totalPages = Math.ceil(count / pageSize);
 
     res.status(200).json({
@@ -298,8 +323,11 @@ exports.getAllEvents = async (req, res) => {
       events: events,
     });
   } catch (error) {
-    console.error('Error fetching events:', error);
-    res.status(500).json({ error: 'Error al obtener los eventos.' });
+    console.error('Error al obtener eventos:', error);
+    res.status(500).json({
+      message: 'Error interno del servidor',
+      error: error.message,
+    });
   }
 };
 // Obtener solo los eventos aprobados (para usuarios normales)
@@ -916,23 +944,42 @@ exports.getEventsByUser = async (req, res) => {
   console.log(req.user);
   const userId = req.user.id;
 
-  // Parámetros de paginación
+  // Parámetros de paginación y búsqueda
   const page = parseInt(req.query.page) || 1;
   const pageSize = parseInt(req.query.pageSize) || 25;
+  const search = req.query.search || '';
   const offset = (page - 1) * pageSize;
 
   try {
-    const { count, rows: events } = await Event.findAndCountAll({
-      where: {
-        userId: userId,
+    // Construir condiciones de búsqueda
+    let whereConditions = {
+      userId: userId,
+    };
+
+    let includeConditions = [
+      {
+        model: Room,
+        as: 'room',
+        attributes: ['id', 'name'],
       },
-      include: [
-        {
-          model: Room,
-          as: 'room',
-          attributes: ['id', 'name'],
-        },
-      ],
+    ];
+
+    // Si hay un término de búsqueda, agregar condiciones
+    if (search) {
+      whereConditions = {
+        ...whereConditions,
+        [Op.or]: [
+          { name: { [Op.like]: `%${search}%` } },
+          { description: { [Op.like]: `%${search}%` } },
+          { contact: { [Op.like]: `%${search}%` } },
+          { '$room.name$': { [Op.like]: `%${search}%` } },
+        ],
+      };
+    }
+
+    const { count, rows: events } = await Event.findAndCountAll({
+      where: whereConditions,
+      include: includeConditions,
       limit: pageSize,
       offset: offset,
       order: [['createdAt', 'DESC']],
@@ -959,7 +1006,6 @@ exports.getEventsByUser = async (req, res) => {
       .json({ error: 'Error al obtener los eventos del usuario.' });
   }
 };
-
 // para notificaciones
 exports.getPendingEventsCount = async (req, res) => {
   try {

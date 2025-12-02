@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import axiosInstance from '../axiosConfig';
+import Swal from 'sweetalert2';
 
 const PermissionsModal = ({ user, onClose }) => {
   const [allRooms, setAllRooms] = useState([]);
@@ -15,7 +16,6 @@ const PermissionsModal = ({ user, onClose }) => {
     const fetchPermissionsData = async () => {
       setLoading(true);
       try {
-        // Obtener TODAS las salas disponibles
         const roomsResponse = await axiosInstance.get('/rooms');
         setAllRooms(roomsResponse.data);
 
@@ -33,6 +33,14 @@ const PermissionsModal = ({ user, onClose }) => {
       } catch (err) {
         console.error('Error fetching permissions data:', err);
         setError('Error al cargar la lista de salas o los permisos actuales.');
+
+        // Mostrar error con SweetAlert2
+        Swal.fire({
+          title: 'Error',
+          text: 'Error al cargar la lista de salas o los permisos actuales.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
       } finally {
         setLoading(false);
       }
@@ -44,29 +52,65 @@ const PermissionsModal = ({ user, onClose }) => {
   const handleCheckboxChange = roomId => {
     setSelectedRoomIds(prevIds => {
       if (prevIds.includes(roomId)) {
-        // Desmarcar: quitar el ID
         return prevIds.filter(id => id !== roomId);
       } else {
-        // Marcar: añadir el ID
         return [...prevIds, roomId];
       }
     });
   };
 
   const handleSavePermissions = async () => {
+    // Confirmar antes de guardar
+    const confirmResult = await Swal.fire({
+      title: '¿Actualizar permisos?',
+      text: `¿Estás seguro de que deseas guardar los cambios en los permisos de ${user.name}?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Sí, guardar',
+      cancelButtonText: 'Cancelar',
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
     setIsSaving(true);
     setError('');
+
+    // Mostrar loading
+    Swal.fire({
+      title: 'Guardando permisos...',
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading(),
+    });
+
     try {
-      // Endpoint para actualizar los permisos del coordinador
-      // Este endpoint debe aceptar un array de Room IDs en el body
       await axiosInstance.put(`/users/${user.id}/permissions`, {
         roomIds: selectedRoomIds,
       });
 
-      alert(`Permisos actualizados para ${user.name} con éxito.`);
+      // Cerrar loading y mostrar éxito
+      Swal.close();
+      await Swal.fire({
+        title: '¡Éxito!',
+        text: `Permisos actualizados para ${user.name} con éxito.`,
+        icon: 'success',
+        confirmButtonColor: '#3085d6',
+      });
+
       onClose();
     } catch (err) {
       console.error('Error saving permissions:', err);
+
+      // Cerrar loading y mostrar error
+      Swal.close();
+      Swal.fire({
+        title: 'Error',
+        text: 'Error al guardar los permisos. Verifique la conexión.',
+        icon: 'error',
+        confirmButtonColor: '#d33',
+      });
+
       setError('Error al guardar los permisos. Verifique la conexión.');
     } finally {
       setIsSaving(false);
