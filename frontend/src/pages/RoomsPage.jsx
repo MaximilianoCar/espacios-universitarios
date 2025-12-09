@@ -145,7 +145,7 @@ const RoomsPage = () => {
                   />
                   <div className="p-4 flex flex-col flex-grow">
                     <h2 className="text-xl font-bold">{room.name}</h2>
-                    <p className="mt-2 text-gray-600">{room.description}</p>
+                    {/* <p className="mt-2 text-gray-600">{room.description}</p> */}
                     <div className="mt-auto">
                       <Link
                         to={`/rooms/${room.id}`}

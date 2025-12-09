@@ -18,6 +18,8 @@ import Footer from '../components/Footer';
 import SearchBar from '../components/SearchBar2';
 import Modal from '../components/Modal';
 import ModalMobile from '../components/ModalMobile';
+import CreateRoomModal from '../components/CreateRoomModal';
+import UpdateRoomModal from '../components/UpdateRoomModal';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import getMediaUrl from '../utils/media';
@@ -36,6 +38,11 @@ const AdminRoomsPage = () => {
   const [selectedDescription, setSelectedDescription] = useState('');
   const [selectedImage, setSelectedImage] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
+
+  // Estados para modales de creación/actualización
+  const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+  const [showUpdateRoomModal, setShowUpdateRoomModal] = useState(false);
+  const [selectedRoom, setSelectedRoom] = useState(null);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -169,363 +176,7 @@ const AdminRoomsPage = () => {
     }
   };
 
-  // Manejar la creación de una nueva sala - Usando SweetAlert2 como RoomDetailsPage
-  const handleAddRoom = async () => {
-    const { value: formValues } = await Swal.fire({
-      title: 'Crear Nuevo Espacio',
-      html: `
-        <div class="text-left space-y-4 max-h-96 overflow-y-auto pr-2">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nombre del Espacio</label>
-            <input 
-              id="swal-name" 
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              placeholder="Nombre del espacio"
-            >
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
-            <textarea 
-              id="swal-description" 
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              placeholder="Descripción del espacio"
-              rows="4"
-            ></textarea>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Capacidad</label>
-            <input 
-              id="swal-capacity" 
-              type="number"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              placeholder="Capacidad"
-            >
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ubicación</label>
-            <input 
-              id="swal-location" 
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              placeholder="Ubicación"
-            >
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Encargado</label>
-            <input 
-              id="swal-staffowner" 
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              placeholder="Encargado"
-            >
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Imagen</label>
-            <input 
-              id="swal-image" 
-              type="file"
-              accept="image/*"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            >
-          </div>
-          <div class="flex items-center">
-            <input 
-              id="swal-isInCUC" 
-              type="checkbox"
-              class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" 
-            >
-            <label for="swal-isInCUC" class="ml-2 block text-sm text-gray-700">
-              ¿Está en la Ciudad Universitaria de Caracas?
-            </label>
-          </div>
-        </div>
-      `,
-      showCancelButton: true,
-      confirmButtonText: 'Crear',
-      confirmButtonColor: '#3085d6',
-      cancelButtonText: 'Cancelar',
-      cancelButtonColor: '#d33',
-      width: isMobile ? '90%' : '800px',
-      focusConfirm: false,
-      preConfirm: () => {
-        const name = document.getElementById('swal-name').value;
-        const description = document.getElementById('swal-description').value;
-        const capacity = document.getElementById('swal-capacity').value;
-        const location = document.getElementById('swal-location').value;
-        const staffowner = document.getElementById('swal-staffowner').value;
-        const isInCUC = document.getElementById('swal-isInCUC').checked;
-        const imageInput = document.getElementById('swal-image');
-        const imageFile = imageInput.files[0];
-
-        if (!name || !description || !capacity || !location || !staffowner) {
-          Swal.showValidationMessage('Todos los campos son obligatorios');
-          return false;
-        }
-
-        if (description.length > 2000) {
-          Swal.showValidationMessage(
-            'La descripción no puede exceder los 2000 caracteres'
-          );
-          return false;
-        }
-
-        if (!imageFile) {
-          Swal.showValidationMessage('La imagen es obligatoria');
-          return false;
-        }
-
-        // Validar que el archivo sea una imagen
-        if (!imageFile.type.startsWith('image/')) {
-          Swal.showValidationMessage('El archivo debe ser una imagen');
-          return false;
-        }
-
-        // Validar tamaño (5MB)
-        if (imageFile.size > 5 * 1024 * 1024) {
-          Swal.showValidationMessage('La imagen no puede ser mayor a 5MB');
-          return false;
-        }
-
-        return {
-          name,
-          description,
-          capacity: parseInt(capacity),
-          location,
-          staffowner,
-          isInCUC,
-          imageFile,
-        };
-      },
-    });
-
-    if (formValues) {
-      Swal.fire({
-        title: 'Creando espacio...',
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
-      });
-
-      try {
-        const formData = new FormData();
-        formData.append('name', formValues.name);
-        formData.append('description', formValues.description);
-        formData.append('capacity', formValues.capacity);
-        formData.append('location', formValues.location);
-        formData.append('staffowner', formValues.staffowner);
-        formData.append('isInCUC', formValues.isInCUC);
-        formData.append('image', formValues.imageFile);
-
-        await axiosInstance.post('/rooms', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-
-        Swal.fire({
-          title: '¡Creado!',
-          text: 'El espacio ha sido creado exitosamente.',
-          icon: 'success',
-          confirmButtonColor: '#3085d6',
-        });
-
-        // Refrescar la lista de salas
-        fetchRooms();
-      } catch (error) {
-        console.error('Error creating room:', error);
-        Swal.fire({
-          title: 'Error',
-          text: 'Error al crear el espacio. Por favor, intente nuevamente.',
-          icon: 'error',
-          confirmButtonColor: '#d33',
-        });
-      }
-    }
-  };
-
-  // Manejar la actualización de una sala - Usando SweetAlert2 como RoomDetailsPage
-  const handleUpdateRoom = async room => {
-    setOpenMenuId(null);
-
-    const { value: formValues } = await Swal.fire({
-      title: 'Actualizar Espacio',
-      html: `
-        <div class="text-left space-y-4 max-h-96 overflow-y-auto pr-2">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nombre del Espacio</label>
-            <input 
-              id="swal-name" 
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              value="${room.name || ''}"
-              placeholder="Nombre del espacio"
-            >
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
-            <textarea 
-              id="swal-description" 
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              placeholder="Descripción del espacio"
-              rows="4"
-            >${room.description || ''}</textarea>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Capacidad</label>
-            <input 
-              id="swal-capacity" 
-              type="number"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              value="${room.capacity || ''}"
-              placeholder="Capacidad"
-            >
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ubicación</label>
-            <input 
-              id="swal-location" 
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              value="${room.location || ''}"
-              placeholder="Ubicación"
-            >
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Encargado</label>
-            <input 
-              id="swal-staffowner" 
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              value="${room.staffowner || ''}"
-              placeholder="Encargado"
-            >
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Imagen Actual</label>
-            ${
-              room.imagePath
-                ? `<div class="mb-2">
-                    <img src="${getMediaUrl(room.imagePath)}" alt="${
-                    room.name
-                  }" class="w-32 h-32 object-cover rounded">
-                    <p class="text-xs text-gray-500 mt-1">Imagen actual. Sube una nueva para reemplazar.</p>
-                   </div>`
-                : '<p class="text-sm text-gray-500">No hay imagen actual</p>'
-            }
-            <input 
-              id="swal-image" 
-              type="file"
-              accept="image/*"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            >
-          </div>
-          <div class="flex items-center">
-            <input 
-              id="swal-isInCUC" 
-              type="checkbox"
-              class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" 
-              ${room.isInCUC ? 'checked' : ''}
-            >
-            <label for="swal-isInCUC" class="ml-2 block text-sm text-gray-700">
-              ¿Está en la Ciudad Universitaria de Caracas?
-            </label>
-          </div>
-        </div>
-      `,
-      showCancelButton: true,
-      confirmButtonText: 'Actualizar',
-      confirmButtonColor: '#3085d6',
-      cancelButtonText: 'Cancelar',
-      cancelButtonColor: '#d33',
-      width: isMobile ? '90%' : '800px',
-      focusConfirm: false,
-      preConfirm: () => {
-        const name = document.getElementById('swal-name').value;
-        const description = document.getElementById('swal-description').value;
-        const capacity = document.getElementById('swal-capacity').value;
-        const location = document.getElementById('swal-location').value;
-        const staffowner = document.getElementById('swal-staffowner').value;
-        const isInCUC = document.getElementById('swal-isInCUC').checked;
-        const imageInput = document.getElementById('swal-image');
-        const imageFile = imageInput.files[0];
-
-        if (!name || !description || !capacity || !location || !staffowner) {
-          Swal.showValidationMessage('Todos los campos son obligatorios');
-          return false;
-        }
-
-        if (description.length > 2000) {
-          Swal.showValidationMessage(
-            'La descripción no puede exceder los 2000 caracteres'
-          );
-          return false;
-        }
-
-        if (imageFile) {
-          // Validar que el archivo sea una imagen
-          if (!imageFile.type.startsWith('image/')) {
-            Swal.showValidationMessage('El archivo debe ser una imagen');
-            return false;
-          }
-
-          // Validar tamaño (5MB)
-          if (imageFile.size > 5 * 1024 * 1024) {
-            Swal.showValidationMessage('La imagen no puede ser mayor a 5MB');
-            return false;
-          }
-        }
-
-        return {
-          name,
-          description,
-          capacity: parseInt(capacity),
-          location,
-          staffowner,
-          isInCUC,
-          imageFile,
-        };
-      },
-    });
-
-    if (formValues) {
-      Swal.fire({
-        title: 'Actualizando espacio...',
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
-      });
-
-      try {
-        const formData = new FormData();
-        formData.append('name', formValues.name);
-        formData.append('description', formValues.description);
-        formData.append('capacity', formValues.capacity);
-        formData.append('location', formValues.location);
-        formData.append('staffowner', formValues.staffowner);
-        formData.append('isInCUC', formValues.isInCUC);
-
-        // Solo agregar imagen si se seleccionó una nueva
-        if (formValues.imageFile) {
-          formData.append('image', formValues.imageFile);
-        }
-
-        await axiosInstance.put(`/rooms/${room.id}`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-
-        Swal.fire({
-          title: '¡Actualizado!',
-          text: 'El espacio ha sido actualizado exitosamente.',
-          icon: 'success',
-          confirmButtonColor: '#3085d6',
-        });
-
-        // Refrescar la lista de salas
-        fetchRooms();
-      } catch (error) {
-        console.error('Error updating room:', error);
-        Swal.fire({
-          title: 'Error',
-          text: 'Error al actualizar el espacio. Por favor, intente nuevamente.',
-          icon: 'error',
-          confirmButtonColor: '#d33',
-        });
-      }
-    }
-  };
-
-  // Funciones para los modales (como en AdminReservationsPage)
+  // Funciones para los modales
   const handleShowDescription = description => {
     setSelectedDescription(description);
     setShowDescriptionModal(true);
@@ -544,6 +195,13 @@ const AdminRoomsPage = () => {
   const handleCloseImageModal = () => {
     setShowImageModal(false);
     setSelectedImage(null);
+  };
+
+  // Función para abrir modal de actualización
+  const handleOpenUpdateModal = room => {
+    setSelectedRoom(room);
+    setShowUpdateRoomModal(true);
+    setOpenMenuId(null); // Cerrar menú de acciones si está abierto
   };
 
   // Componente del menú de acciones (para móvil)
@@ -580,7 +238,7 @@ const AdminRoomsPage = () => {
             }`}
           >
             <button
-              onClick={() => handleUpdateRoom(room)}
+              onClick={() => handleOpenUpdateModal(room)}
               className="flex items-center w-full px-3 py-2 text-xs text-yellow-600 hover:bg-gray-100 font-semibold"
             >
               <FaEdit className="mr-2" size={14} /> Editar
@@ -635,7 +293,7 @@ const AdminRoomsPage = () => {
             />
           </div>
           <button
-            onClick={handleAddRoom}
+            onClick={() => setShowCreateRoomModal(true)}
             className="w-full lg:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg flex items-center justify-center transition duration-200 shadow-md hover:shadow-lg"
           >
             <FaPlus className="mr-2" /> Añadir Espacio
@@ -761,7 +419,7 @@ const AdminRoomsPage = () => {
                     <td className="py-3 px-4 border-b text-center">
                       <div className="flex space-x-2 justify-center">
                         <button
-                          onClick={() => handleUpdateRoom(room)}
+                          onClick={() => handleOpenUpdateModal(room)}
                           className="flex items-center justify-center bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded text-sm transition-colors shadow-sm"
                         >
                           <FaEdit className="mr-1" size={14} />
@@ -849,7 +507,7 @@ const AdminRoomsPage = () => {
                   </div>
                 </div>
 
-                {/* Botón de descripción (como en AdminReservationsPage) */}
+                {/* Botón de descripción */}
                 <div className="mb-3">
                   <button
                     onClick={() => handleShowDescription(room.description)}
@@ -863,7 +521,7 @@ const AdminRoomsPage = () => {
                 {/* Botones de acción principales */}
                 <div className="flex space-x-2">
                   <button
-                    onClick={() => handleUpdateRoom(room)}
+                    onClick={() => handleOpenUpdateModal(room)}
                     className="flex-1 flex items-center justify-center bg-yellow-500 hover:bg-yellow-600 text-white py-2 px-3 rounded text-sm transition-colors shadow-sm"
                   >
                     <FaEdit className="mr-2" size={14} />
@@ -890,7 +548,7 @@ const AdminRoomsPage = () => {
       </div>
       <Footer />
 
-      {/* MODALES (igual que en AdminReservationsPage) */}
+      {/* MODALES DE DESCRIPCIÓN E IMAGEN */}
       {showDescriptionModal && (
         <RenderModal onClose={handleCloseDescriptionModal}>
           <div className="p-5 border-b border-gray-200">
@@ -939,6 +597,34 @@ const AdminRoomsPage = () => {
             </button>
           </div>
         </RenderModal>
+      )}
+
+      {/* MODALES DE CREACIÓN Y ACTUALIZACIÓN */}
+      {showCreateRoomModal && (
+        <CreateRoomModal
+          isOpen={showCreateRoomModal}
+          onClose={() => setShowCreateRoomModal(false)}
+          onRoomCreated={() => {
+            setShowCreateRoomModal(false);
+            fetchRooms();
+          }}
+        />
+      )}
+
+      {showUpdateRoomModal && selectedRoom && (
+        <UpdateRoomModal
+          isOpen={showUpdateRoomModal}
+          onClose={() => {
+            setShowUpdateRoomModal(false);
+            setSelectedRoom(null);
+          }}
+          room={selectedRoom}
+          onRoomUpdated={() => {
+            setShowUpdateRoomModal(false);
+            setSelectedRoom(null);
+            fetchRooms();
+          }}
+        />
       )}
     </div>
   );

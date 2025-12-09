@@ -17,6 +17,7 @@ const uploadBanner = require('../middlewares/eventBannerUploadMiddleware');
 router.post(
   '/events',
   protect, // Usar 'protect' en lugar de 'authMiddleware'
+  restrictTo('requester', 'admin', 'coordinator'),
   uploadImages.single('imageFile'), // Nombre del campo de imagen en el formulario
   eventController.createEvent
 );

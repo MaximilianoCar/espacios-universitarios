@@ -3,6 +3,8 @@ import axiosInstance from '../axiosConfig';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SearchBar from '../components/SearchBar2';
+import CreateReservationModal from '../components/CreateReservationModal';
+import UpdateEventModal from '../components/UpdateEventModal';
 import {
   FaEye,
   FaCheckCircle,
@@ -21,6 +23,8 @@ import {
   FaMapPin,
   FaUsers,
   FaDollarSign,
+  FaPlus,
+  FaTrash,
 } from 'react-icons/fa';
 import { IoInformationCircleOutline } from 'react-icons/io5';
 import Modal from '../components/Modal';
@@ -40,6 +44,9 @@ const AdminReservationsPage = () => {
   const [loading, setLoading] = useState(true);
   const [uploadingAgreementId, setUploadingAgreementId] = useState(null);
   const [agreementFile, setAgreementFile] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [eventToEdit, setEventToEdit] = useState(null);
 
   const [selectedEventUser, setSelectedEventUser] = useState({
     name: '',
@@ -416,6 +423,62 @@ const AdminReservationsPage = () => {
     }
   };
 
+  // Función para manejar la edición de un evento
+  const handleEditEvent = event => {
+    setOpenMenuId(null);
+    setEventToEdit(event);
+    setShowUpdateModal(true);
+  };
+
+  // Función para manejar la eliminación de un evento
+  const handleDeleteEvent = async (eventId, eventName) => {
+    setOpenMenuId(null);
+
+    const result = await Swal.fire({
+      title: '¿Estás seguro?',
+      text: `Esta acción eliminará permanentemente el evento "${eventName}". Esta acción no se puede deshacer.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar',
+    });
+
+    if (result.isConfirmed) {
+      Swal.fire({
+        title: 'Eliminando evento...',
+        text: 'Por favor espere mientras se elimina el evento',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        willOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      try {
+        await axiosInstance.delete(`/events/${eventId}`);
+
+        // Recargar los eventos
+        await refreshEvents();
+
+        Swal.fire(
+          '¡Eliminado!',
+          `El evento "${eventName}" ha sido eliminado exitosamente.`,
+          'success'
+        );
+      } catch (error) {
+        console.error('Error al eliminar el evento:', error);
+        Swal.fire(
+          'Error',
+          'Error al eliminar el evento. Por favor, intente nuevamente.',
+          'error'
+        );
+      }
+    }
+  };
+
   // Funciones para manejar los modales
   const handleShowContact = (contactInfo, user) => {
     setSelectedEventContact(contactInfo);
@@ -726,6 +789,23 @@ const AdminReservationsPage = () => {
                   <div className="border-t border-gray-100 w-full"></div>
                 )}
 
+                {/* Opciones de Editar y Eliminar */}
+                <button
+                  onClick={() => handleEditEvent(event)}
+                  className="flex items-center w-full px-3 py-2 text-xs text-yellow-600 hover:bg-gray-100 font-semibold"
+                >
+                  <FaEdit className="mr-2" size={14} /> Editar
+                </button>
+                <button
+                  onClick={() => handleDeleteEvent(event.id, event.name)}
+                  className="flex items-center w-full px-3 py-2 text-xs text-red-600 hover:bg-gray-100 font-semibold"
+                >
+                  <FaTrash className="mr-2" size={14} /> Eliminar
+                </button>
+
+                {/* SEPARADOR */}
+                <div className="border-t border-gray-100 w-full"></div>
+
                 {/* ACCIONES DE DOCUMENTOS */}
                 {event.programPath ? (
                   <a
@@ -784,16 +864,51 @@ const AdminReservationsPage = () => {
     <div className="min-h-screen grid grid-rows-[auto_1fr_auto]">
       <Header />
       <div className="container mx-auto my-8 px-4">
-        <div className="flex items-center mb-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center">
+            <button
+              onClick={handleBack}
+              className="flex items-center text-gray-800 hover:text-gray-600 transition-colors mr-4"
+              title="Volver al inicio"
+            >
+              <FaArrowLeft size={24} />
+            </button>
+            <h2 className="text-3xl font-bold text-gray-800">Reservas</h2>
+          </div>
+
+          {/* Botón para crear nueva reserva */}
           <button
-            onClick={handleBack}
-            className="flex items-center text-gray-800 hover:text-gray-600 transition-colors mr-4"
-            title="Volver al inicio"
+            onClick={() => setShowCreateModal(true)}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 flex items-center"
           >
-            <FaArrowLeft size={24} />
+            <FaPlus className="mr-2" />
+            Crear Reserva
           </button>
-          <h2 className="text-3xl font-bold text-gray-800">Reservas</h2>
         </div>
+
+        {showCreateModal && (
+          <CreateReservationModal
+            isOpen={showCreateModal}
+            onClose={() => setShowCreateModal(false)}
+            onReservationCreated={refreshEvents}
+          />
+        )}
+
+        {showUpdateModal && eventToEdit && (
+          <UpdateEventModal
+            isOpen={showUpdateModal}
+            onClose={() => {
+              setShowUpdateModal(false);
+              setEventToEdit(null);
+            }}
+            event={eventToEdit}
+            onEventUpdated={() => {
+              setShowUpdateModal(false);
+              setEventToEdit(null);
+              refreshEvents();
+            }}
+          />
+        )}
 
         {/* SearchBar */}
         <div className="mb-6">

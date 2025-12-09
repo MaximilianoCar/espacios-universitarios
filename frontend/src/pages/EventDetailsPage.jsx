@@ -643,7 +643,7 @@ const EventDetailsPage = () => {
             </div>
 
             <div className="bg-gray-50 p-4 rounded-lg mb-6 border">
-              <p className="text-gray-700 whitespace-pre-line">
+              <p className="text-gray-700 whitespace-pre-line break-words">
                 {event?.description || 'Sin descripción'}
               </p>
             </div>

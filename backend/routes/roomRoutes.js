@@ -44,7 +44,7 @@ router.put(
 router.delete(
   '/rooms/:id',
   protect,
-  restrictTo('admin'),
+  restrictTo('admin', 'coordinator'),
   roomController.deleteRoom
 );
 

@@ -507,6 +507,11 @@ exports.login = async (req, res) => {
       return res.status(401).json({ error: 'Contraseña incorrecta.' });
     }
 
+    const isActive = user.status;
+    if (!isActive) {
+      return res.status(403).json({ error: 'El usuario está inactivo.' });
+    }
+
     // Generar el token de acceso
     const token = jwt.sign(
       { id: user.id, role: user.role },
@@ -518,7 +523,7 @@ exports.login = async (req, res) => {
     const refreshToken = jwt.sign(
       { id: user.id, role: user.role },
       process.env.REFRESH_TOKEN_SECRET,
-      { expiresIn: '7d' } // Por ejemplo, 7 días
+      { expiresIn: '7d' }
     );
 
     // Guardar el refresh token en la base de datos

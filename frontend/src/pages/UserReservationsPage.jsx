@@ -875,13 +875,26 @@ const UserReservationsPage = () => {
               )}
               <tr className="bg-gray-50 hover:bg-gray-100 transition-colors">
                 <td colSpan="11" className="py-6 px-4 text-center">
-                  <div className="flex justify-center items-center">
-                    <button
-                      onClick={() => navigate('/create-reservation')}
-                      className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-8 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-lg"
-                    >
-                      Solicitar Reserva
-                    </button>
+                  <div className="flex flex-col items-center space-y-4">
+                    <div className="max-w-2xl mx-auto mb-2 bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded-r">
+                      <p className="text-sm text-gray-700">
+                        <span className="font-semibold text-yellow-700">
+                          Nota:
+                        </span>{' '}
+                        Las reservas no se pueden editar complementamente, para
+                        editar descripción e imagen previsualizar el evento
+                        (Cambios mayores conllevan eliminar el evento y hacer
+                        una nueva solicitud)
+                      </p>
+                    </div>
+                    <div className="flex justify-center items-center">
+                      <button
+                        onClick={() => navigate('/create-reservation')}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-8 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-lg"
+                      >
+                        Solicitar Reserva
+                      </button>
+                    </div>
                   </div>
                 </td>
               </tr>

@@ -333,9 +333,17 @@ exports.getAllEvents = async (req, res) => {
 // Obtener solo los eventos aprobados (para usuarios normales)
 exports.getApprovedEvents = async (req, res) => {
   try {
-    // Incluir las fechas necesarias para que el frontend pueda agrupar por día
+    // Obtener la fecha y hora actual
+    const currentDate = new Date();
+
     const events = await Event.findAll({
-      where: { status: Event.STATUS.APPROVED },
+      where: {
+        status: Event.STATUS.APPROVED,
+        // Solo eventos que NO hayan terminado (eventTo > fecha actual)
+        eventTo: {
+          [Op.gt]: currentDate,
+        },
+      },
       attributes: [
         'id',
         'name',
@@ -346,6 +354,9 @@ exports.getApprovedEvents = async (req, res) => {
         'reservationFrom',
         'reservationTo',
         'roomId',
+        'capacity',
+        'cost',
+        'contact',
       ],
       include: [
         {
