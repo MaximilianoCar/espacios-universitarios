@@ -16,20 +16,20 @@ const PermissionsModal = ({ user, onClose }) => {
     const fetchPermissionsData = async () => {
       setLoading(true);
       try {
-        const roomsResponse = await axiosInstance.get('/rooms');
-        setAllRooms(roomsResponse.data);
+        const depsResponse = await axiosInstance.get('/dependencies');
+        setAllRooms(depsResponse.data);
 
-        // obtener los permisos (managedRooms)
+        // obtener los permisos (managedDependencies)
         const userPermissionsResponse = await axiosInstance.get(
           `/users/${user.id}/permissions`
         );
 
-        // Mapear los IDs de las salas que el usuario ya administra
-        const currentRoomIds = userPermissionsResponse.data.managedRooms
-          ? userPermissionsResponse.data.managedRooms.map(room => room.id)
+        // Mapear los IDs de las dependencias que el usuario ya administra
+        const currentDepIds = userPermissionsResponse.data.managedDependencies
+          ? userPermissionsResponse.data.managedDependencies.map(d => d.id)
           : [];
 
-        setSelectedRoomIds(currentRoomIds);
+        setSelectedRoomIds(currentDepIds);
       } catch (err) {
         console.error('Error fetching permissions data:', err);
         setError('Error al cargar la lista de salas o los permisos actuales.');
@@ -86,7 +86,7 @@ const PermissionsModal = ({ user, onClose }) => {
 
     try {
       await axiosInstance.put(`/users/${user.id}/permissions`, {
-        roomIds: selectedRoomIds,
+        dependencyIds: selectedRoomIds,
       });
 
       // Cerrar loading y mostrar éxito
@@ -124,8 +124,7 @@ const PermissionsModal = ({ user, onClose }) => {
           Gestión de Permisos para {user.name}
         </h3>
         <p className="mb-4 text-sm text-gray-600">
-          Asigna permisos de control total sobre los siguientes espacios al
-          coordinador.
+          Asigna permisos sobre dependencias al coordinador.
         </p>
         {error && <p className="text-red-500 mb-4">{error}</p>}
 
@@ -134,23 +133,23 @@ const PermissionsModal = ({ user, onClose }) => {
         ) : (
           <div className="max-h-60 overflow-y-auto border p-3 rounded mb-4">
             {allRooms.length > 0 ? (
-              allRooms.map(room => (
+              allRooms.map(dep => (
                 <div
-                  key={room.id}
+                  key={dep.id}
                   className="flex items-center justify-between py-1 border-b last:border-b-0"
                 >
-                  <span className="text-gray-700">{room.name}</span>
+                  <span className="text-gray-700">{dep.name}</span>
                   <input
                     type="checkbox"
-                    checked={selectedRoomIds.includes(room.id)}
-                    onChange={() => handleCheckboxChange(room.id)}
+                    checked={selectedRoomIds.includes(dep.id)}
+                    onChange={() => handleCheckboxChange(dep.id)}
                     className="h-4 w-4 text-blue-600 border-gray-300 rounded"
                   />
                 </div>
               ))
             ) : (
               <p className="text-center text-gray-500">
-                No hay salas disponibles para asignar.
+                No hay dependencias disponibles para asignar.
               </p>
             )}
           </div>

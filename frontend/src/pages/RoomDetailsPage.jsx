@@ -174,133 +174,206 @@ const RoomDetailsPage = () => {
   };
 
   const handleUpdateRoom = async () => {
-    const { value: formValues } = await Swal.fire({
-      title: 'Actualizar Sala',
-      html: `
-        <div class="text-left space-y-4 max-h-96 overflow-y-auto">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nombre de la Sala</label>
-            <input 
-              id="swal-name" 
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              value="${room.name || ''}"
-              placeholder="Nombre de la sala"
-            >
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
-            <textarea 
-              id="swal-description" 
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              placeholder="Descripción de la sala"
-              rows="4"
-            >${room.description || ''}</textarea>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Capacidad</label>
-            <input 
-              id="swal-capacity" 
-              type="number"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              value="${room.capacity || ''}"
-              placeholder="Capacidad"
-            >
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ubicación</label>
-            <input 
-              id="swal-location" 
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              value="${room.location || ''}"
-              placeholder="Ubicación"
-            >
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Encargado</label>
-            <input 
-              id="swal-staffowner" 
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              value="${room.staffowner || ''}"
-              placeholder="Encargado"
-            >
-          </div>
-          <div class="flex items-center">
-            <input 
-              id="swal-isInCUC" 
-              type="checkbox"
-              class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" 
-              ${room.isInCUC ? 'checked' : ''}
-            >
-            <label for="swal-isInCUC" class="ml-2 block text-sm text-gray-700">
-              ¿Está en la Ciudad Universitaria de Caracas?
-            </label>
-          </div>
-        </div>
-      `,
-      showCancelButton: true,
-      confirmButtonText: 'Actualizar',
-      confirmButtonColor: '#3085d6',
-      cancelButtonText: 'Cancelar',
-      cancelButtonColor: '#d33',
-      width: '800px',
-      focusConfirm: false,
-      preConfirm: () => {
-        const name = document.getElementById('swal-name').value;
-        const description = document.getElementById('swal-description').value;
-        const capacity = document.getElementById('swal-capacity').value;
-        const location = document.getElementById('swal-location').value;
-        const staffowner = document.getElementById('swal-staffowner').value;
-        const isInCUC = document.getElementById('swal-isInCUC').checked;
+    try {
+      // obtener dependencias disponibles
+      const depsRes = await axiosInstance.get('/dependencies');
+      const deps = depsRes.data || [];
+      const currentDepId = room?.dependencies?.[0]?.id || '';
 
-        if (!name || !description || !capacity || !location || !staffowner) {
-          Swal.showValidationMessage('Todos los campos son obligatorios');
-          return false;
-        }
+      const optionsHtml = deps
+        .map(
+          d =>
+            `<option value="${d.id}" ${
+              d.id === currentDepId ? 'selected' : ''
+            }>${d.name}</option>`
+        )
+        .join('');
 
-        if (description.length > 2000) {
-          Swal.showValidationMessage(
-            'La descripción no puede exceder los 2000 caracteres'
-          );
-          return false;
-        }
+      const { value: formValues } = await Swal.fire({
+        title: 'Actualizar Sala',
+        html: `
+          <div class="text-left space-y-4 max-h-96 overflow-y-auto">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Nombre de la Sala</label>
+              <input id="swal-name" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${
+                room.name || ''
+              }" placeholder="Nombre de la sala">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+              <textarea id="swal-description" class="w-full px-3 py-2 border border-gray-300 rounded-md" rows="4" placeholder="Descripción de la sala">${
+                room.description || ''
+              }</textarea>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Capacidad</label>
+              <input id="swal-capacity" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${
+                room.capacity || ''
+              }" placeholder="Capacidad">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Ubicación</label>
+              <input id="swal-location" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${
+                room.location || ''
+              }" placeholder="Ubicación">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Encargado</label>
+              <input id="swal-staffowner" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${
+                room.staffowner || ''
+              }" placeholder="Encargado">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Dependencia</label>
+              <div class="flex items-center space-x-2">
+                <select id="swal-dependency" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                  <option value="">-- Selecciona una dependencia --</option>
+                  ${optionsHtml}
+                </select>
+                <button id="swal-add-dep" type="button" class="px-3 py-2 bg-green-500 text-white rounded">+ Agregar</button>
+              </div>
+            </div>
+            <div class="flex items-center">
+              <input id="swal-isInCUC" type="checkbox" class="h-4 w-4" ${
+                room.isInCUC ? 'checked' : ''
+              }>
+              <label for="swal-isInCUC" class="ml-2 block text-sm text-gray-700">¿Está en la Ciudad Universitaria de Caracas?</label>
+            </div>
+          </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: 'Actualizar',
+        confirmButtonColor: '#3085d6',
+        cancelButtonText: 'Cancelar',
+        cancelButtonColor: '#d33',
+        width: '800px',
+        focusConfirm: false,
+        didOpen: () => {
+          const addBtn = document.getElementById('swal-add-dep');
+          if (addBtn) {
+            addBtn.addEventListener('click', async () => {
+              const { value: depName } = await Swal.fire({
+                title: 'Nueva Dependencia',
+                input: 'text',
+                inputLabel: 'Nombre',
+                inputValidator: value =>
+                  !value ? 'El nombre es requerido' : null,
+                showCancelButton: true,
+              });
 
-        return {
-          name,
-          description,
-          capacity: parseInt(capacity),
-          location,
-          staffowner,
-          isInCUC,
-        };
-      },
-    });
+              if (depName) {
+                const { value: depDesc } = await Swal.fire({
+                  title: 'Descripción (opcional)',
+                  input: 'textarea',
+                  showCancelButton: true,
+                });
 
-    if (formValues) {
-      Swal.fire({
-        title: 'Actualizando sala...',
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
+                try {
+                  const res = await axiosInstance.post('/dependencies', {
+                    name: depName,
+                    description: depDesc,
+                  });
+                  // agregar opción al select
+                  const sel = document.getElementById('swal-dependency');
+                  if (sel) {
+                    const opt = document.createElement('option');
+                    opt.value = res.data.id;
+                    opt.text = res.data.name;
+                    sel.appendChild(opt);
+                    sel.value = res.data.id;
+                  }
+                  Swal.fire({
+                    title: '¡Creada!',
+                    text: 'Dependencia creada.',
+                    icon: 'success',
+                  });
+                } catch (err) {
+                  console.error('Error creating dependency', err);
+                  Swal.fire({
+                    title: 'Error',
+                    text:
+                      err.response?.data?.error ||
+                      'No se pudo crear la dependencia',
+                    icon: 'error',
+                  });
+                }
+              }
+            });
+          }
+        },
+        preConfirm: () => {
+          const name = document.getElementById('swal-name').value;
+          const description = document.getElementById('swal-description').value;
+          const capacity = document.getElementById('swal-capacity').value;
+          const location = document.getElementById('swal-location').value;
+          const staffowner = document.getElementById('swal-staffowner').value;
+          const isInCUC = document.getElementById('swal-isInCUC').checked;
+          const dependencyId = document.getElementById('swal-dependency').value;
+
+          if (!name || !description || !capacity || !location || !staffowner) {
+            Swal.showValidationMessage('Todos los campos son obligatorios');
+            return false;
+          }
+
+          if (description.length > 2000) {
+            Swal.showValidationMessage(
+              'La descripción no puede exceder los 2000 caracteres'
+            );
+            return false;
+          }
+
+          if (!dependencyId) {
+            Swal.showValidationMessage('La dependencia es requerida');
+            return false;
+          }
+
+          return {
+            name,
+            description,
+            capacity: parseInt(capacity),
+            location,
+            staffowner,
+            isInCUC,
+            dependencyId,
+          };
+        },
       });
 
-      try {
-        const resp = await axiosInstance.put(`/rooms/${room.id}`, formValues);
-
+      if (formValues) {
         Swal.fire({
-          title: '¡Actualizada!',
-          text: 'La sala ha sido actualizada exitosamente.',
-          icon: 'success',
-          confirmButtonColor: '#3085d6',
+          title: 'Actualizando sala...',
+          allowOutsideClick: false,
+          didOpen: () => Swal.showLoading(),
         });
-        setRoom(resp.data);
-      } catch (error) {
-        console.error('Error updating room:', error);
-        Swal.fire({
-          title: 'Error',
-          text: 'Error al actualizar la sala. Por favor, intente nuevamente.',
-          icon: 'error',
-          confirmButtonColor: '#d33',
-        });
+        try {
+          const resp = await axiosInstance.put(`/rooms/${room.id}`, formValues);
+          Swal.fire({
+            title: '¡Actualizada!',
+            text: 'La sala ha sido actualizada exitosamente.',
+            icon: 'success',
+            confirmButtonColor: '#3085d6',
+          });
+          setRoom(resp.data);
+        } catch (error) {
+          console.error('Error updating room:', error);
+          const msg =
+            error.response?.data?.error ||
+            'Error al actualizar la sala. Por favor, intente nuevamente.';
+          Swal.fire({
+            title: 'Error',
+            text: msg,
+            icon: 'error',
+            confirmButtonColor: '#d33',
+          });
+        }
       }
+    } catch (err) {
+      console.error('Error preparando actualización:', err);
+      Swal.fire({
+        title: 'Error',
+        text: 'No se pudo preparar la actualización.',
+        icon: 'error',
+      });
     }
   };
 

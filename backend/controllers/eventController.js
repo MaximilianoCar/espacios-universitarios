@@ -1,4 +1,10 @@
-const { Event, User, CoordinatorRooms, Room } = require('../models');
+const {
+  Event,
+  User,
+  CoordinatorDependencies,
+  Room,
+  Dependency,
+} = require('../models');
 const { Op } = require('sequelize');
 const upload = require('../middlewares/eventFileUploadMiddleware');
 const path = require('path');
@@ -40,16 +46,21 @@ const safeUnlink = async (relativePath, allowedSubPath) => {
 
 // Función auxiliar para verificar permisos de sala
 const checkRoomPermission = async (userId, userRole, roomId) => {
-  if (userRole === 'admin') {
-    return true;
-  }
+  if (userRole === 'admin') return true;
 
   if (userRole === 'coordinator') {
-    const permission = await CoordinatorRooms.findOne({
-      where: {
-        UserId: userId,
-        RoomId: roomId,
-      },
+    // obtener dependencias de la sala
+    const room = await Room.findByPk(roomId, {
+      include: [
+        { model: Dependency, as: 'dependencies', through: { attributes: [] } },
+      ],
+    });
+    if (!room) return false;
+    const dependencyIds = room.dependencies.map(d => d.id);
+    if (dependencyIds.length === 0) return false;
+
+    const permission = await CoordinatorDependencies.findOne({
+      where: { UserId: userId, DependencyId: dependencyIds[0] },
     });
     return !!permission;
   }
@@ -65,11 +76,25 @@ const getAllowedRoomIds = async (userId, userRole) => {
   }
 
   if (userRole === 'coordinator') {
-    const coordinatorRooms = await CoordinatorRooms.findAll({
+    const coordDeps = await CoordinatorDependencies.findAll({
       where: { UserId: userId },
-      attributes: ['RoomId'],
     });
-    return coordinatorRooms.map(cr => cr.RoomId);
+    const dependencyIds = coordDeps.map(cd => cd.DependencyId);
+    if (dependencyIds.length === 0) return [];
+
+    const rooms = await Room.findAll({
+      include: [
+        {
+          model: Dependency,
+          as: 'dependencies',
+          where: { id: dependencyIds },
+          through: { attributes: [] },
+        },
+      ],
+      attributes: ['id'],
+    });
+
+    return rooms.map(r => r.id);
   }
 
   return [];
@@ -135,8 +160,18 @@ exports.createEvent = async (req, res) => {
 // obtener coordinadores de una sala específica
 const getCoordinatorsByRoom = async roomId => {
   try {
-    const coordinatorRooms = await CoordinatorRooms.findAll({
-      where: { RoomId: roomId },
+    const room = await Room.findByPk(roomId, {
+      include: [
+        { model: Dependency, as: 'dependencies', through: { attributes: [] } },
+      ],
+    });
+    if (!room) return [];
+
+    const dependencyIds = room.dependencies.map(d => d.id);
+    if (dependencyIds.length === 0) return [];
+
+    const coordDeps = await CoordinatorDependencies.findAll({
+      where: { DependencyId: dependencyIds },
       include: [
         {
           model: User,
@@ -145,14 +180,20 @@ const getCoordinatorsByRoom = async roomId => {
           where: { role: 'coordinator' },
         },
       ],
-      attributes: [],
     });
 
-    return coordinatorRooms.map(cr => ({
-      id: cr.user.id,
-      name: cr.user.name,
-      email: cr.user.email,
-    }));
+    const unique = {};
+    coordDeps.forEach(cd => {
+      if (cd.user && !unique[cd.user.id]) {
+        unique[cd.user.id] = {
+          id: cd.user.id,
+          name: cd.user.name,
+          email: cd.user.email,
+        };
+      }
+    });
+
+    return Object.values(unique);
   } catch (error) {
     console.error('Error obteniendo coordinadores de la sala:', error);
     return [];

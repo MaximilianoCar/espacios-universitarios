@@ -1,4 +1,4 @@
-const { User, Room } = require('../models');
+const { User, Dependency } = require('../models');
 
 // Función auxiliar para verificar si el usuario es un administrador o coordinador
 const isPermittedRole = role => role === 'admin' || role === 'coordinator';
@@ -11,11 +11,11 @@ exports.getUserPermissions = async (req, res) => {
     const { id } = req.params;
 
     const user = await User.findByPk(id, {
-      // Incluimos las managedRooms (las salas que ya administra)
+      // Incluimos las managedDependencies (las dependencias que ya administra)
       include: [
         {
-          model: Room,
-          as: 'managedRooms',
+          model: Dependency,
+          as: 'managedDependencies',
           attributes: ['id', 'name'],
         },
       ],
@@ -27,15 +27,18 @@ exports.getUserPermissions = async (req, res) => {
     }
 
     if (!isPermittedRole(user.role)) {
-      // No hay permisos para gestionar, pero devolvemos un array vacío de managedRooms
       return res.status(200).json({
         user: user,
-        managedRooms: [],
+        managedDependencies: [],
         message: 'El usuario no tiene un rol gestionable para permisos.',
       });
     }
 
-    res.status(200).json(user);
+    // Para consistencia, devolver user y managedDependencies
+    const managedDependencies = await user.getManagedDependencies({
+      attributes: ['id', 'name'],
+    });
+    res.status(200).json({ user, managedDependencies });
   } catch (error) {
     console.error('Error al obtener los permisos del usuario:', error);
     res.status(500).json({ error: 'Error interno al cargar los permisos.' });
@@ -48,12 +51,13 @@ exports.getUserPermissions = async (req, res) => {
 exports.updatePermissions = async (req, res) => {
   try {
     const { id } = req.params;
-    // Esperamos un array de IDs de salas en el cuerpo de la solicitud
-    const { roomIds } = req.body;
+    // Esperamos un array de IDs de dependencias en el cuerpo de la solicitud
+    const { dependencyIds } = req.body;
 
-    if (!Array.isArray(roomIds)) {
+    if (!Array.isArray(dependencyIds)) {
       return res.status(400).json({
-        error: 'El cuerpo de la solicitud debe contener un array de roomIds.',
+        error:
+          'El cuerpo de la solicitud debe contener un array de dependencyIds.',
       });
     }
 
@@ -70,10 +74,10 @@ exports.updatePermissions = async (req, res) => {
       });
     }
 
-    await user.setManagedRooms(roomIds);
+    await user.setManagedDependencies(dependencyIds);
 
     res.status(200).json({
-      message: `Permisos de salas actualizados con éxito para ${user.name}.`,
+      message: `Permisos de dependencias actualizados con éxito para ${user.name}.`,
     });
   } catch (error) {
     console.error('Error al actualizar los permisos:', error);

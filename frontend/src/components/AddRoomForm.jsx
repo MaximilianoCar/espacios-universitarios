@@ -1,7 +1,8 @@
 // src/components/AddRoomForm.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axiosInstance from '../axiosConfig';
 import Swal from 'sweetalert2';
+import { FaUsers } from 'react-icons/fa';
 
 const AddRoomForm = ({ onRoomCreated, onClose }) => {
   const [formData, setFormData] = useState({
@@ -15,6 +16,13 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
   const [imageFile, setImageFile] = useState(null);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [dependencies, setDependencies] = useState([]);
+  const [selectedDependencyId, setSelectedDependencyId] = useState('');
+  const [showAddDependency, setShowAddDependency] = useState(false);
+  const [newDependency, setNewDependency] = useState({
+    name: '',
+    description: '',
+  });
 
   const handleChange = e => {
     const { name, value } = e.target;
@@ -24,6 +32,13 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
   const handleImageChange = e => {
     setImageFile(e.target.files[0]);
   };
+
+  useEffect(() => {
+    axiosInstance
+      .get('/dependencies')
+      .then(res => setDependencies(res.data || []))
+      .catch(err => console.error('Error fetching dependencies', err));
+  }, []);
 
   const handleSubmit = async e => {
     e.preventDefault();
@@ -36,6 +51,14 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
       !formData.staffowner
     ) {
       setError('Por favor complete todos los campos obligatorios.');
+      return;
+    }
+
+    // validar dependencia
+    if (!selectedDependencyId) {
+      setError(
+        'Por favor seleccione la dependencia a la que pertenece el espacio.'
+      );
       return;
     }
 
@@ -77,6 +100,8 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
       Object.keys(formData).forEach(key => {
         data.append(key, formData[key]);
       });
+      // agregar dependencyId
+      data.append('dependencyId', selectedDependencyId);
       // Agregar el archivo de imagen
       if (imageFile) {
         data.append('image', imageFile);
@@ -107,10 +132,19 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
       // Cerrar modal de carga
       Swal.close();
 
-      const errorMessage =
+      let errorMessage =
         error.response?.data?.error ||
-        error.response?.data?.errors?.join(', ') ||
+        (error.response?.data?.errors
+          ? error.response.data.errors.join(', ')
+          : undefined) ||
         'Error al crear el espacio. Por favor, intente nuevamente.';
+
+      if (error.response?.status === 403) {
+        // permiso negado (coordinador intentando crear en dependencia sin permiso)
+        errorMessage =
+          error.response.data.error ||
+          'No tienes permisos para crear salas en esta dependencia.';
+      }
 
       // Mostrar modal de error
       await Swal.fire({
@@ -123,6 +157,39 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
       setError(errorMessage);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleCreateDependency = async () => {
+    if (!newDependency.name.trim()) {
+      Swal.fire({
+        title: 'Error',
+        text: 'El nombre es requerido',
+        icon: 'error',
+      });
+      return;
+    }
+
+    try {
+      const res = await axiosInstance.post('/dependencies', newDependency);
+      // refresh deps
+      const depsRes = await axiosInstance.get('/dependencies');
+      setDependencies(depsRes.data || []);
+      setSelectedDependencyId(res.data.id);
+      setShowAddDependency(false);
+      setNewDependency({ name: '', description: '' });
+      Swal.fire({
+        title: '¡Creada!',
+        text: 'Dependencia creada.',
+        icon: 'success',
+      });
+    } catch (err) {
+      console.error('Error creating dependency', err);
+      Swal.fire({
+        title: 'Error',
+        text: err.response?.data?.error || 'No se pudo crear la dependencia',
+        icon: 'error',
+      });
     }
   };
 
@@ -241,6 +308,79 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
                 placeholder="Ej: Edificio A, Piso 2"
               />
             </div>
+          </div>
+
+          {/* Dependencia */}
+          <div className="mt-4">
+            <label className="block text-gray-700 font-medium mb-2">
+              Dependencia *
+            </label>
+            {!showAddDependency ? (
+              <div className="flex items-center space-x-2">
+                <select
+                  name="dependency"
+                  className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={selectedDependencyId}
+                  onChange={e => setSelectedDependencyId(e.target.value)}
+                  required
+                  disabled={isSubmitting}
+                >
+                  <option value="">-- Selecciona una dependencia --</option>
+                  {dependencies.map(dep => (
+                    <option key={dep.id} value={dep.id}>
+                      {dep.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowAddDependency(true)}
+                  className="px-3 py-2 bg-green-500 text-white rounded"
+                >
+                  + Agregar
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="Nombre de la dependencia"
+                  value={newDependency.name}
+                  onChange={e =>
+                    setNewDependency({ ...newDependency, name: e.target.value })
+                  }
+                  className="w-full border rounded px-3 py-2"
+                />
+                <textarea
+                  placeholder="Descripción (opcional)"
+                  value={newDependency.description}
+                  onChange={e =>
+                    setNewDependency({
+                      ...newDependency,
+                      description: e.target.value,
+                    })
+                  }
+                  className="w-full border rounded px-3 py-2"
+                  rows={3}
+                />
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={handleCreateDependency}
+                    className="px-4 py-2 bg-blue-600 text-white rounded"
+                  >
+                    Crear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddDependency(false)}
+                    className="px-4 py-2 border rounded"
+                  >
+                    Atrás
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ¿Ubicado en CUC? */}

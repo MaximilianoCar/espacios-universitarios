@@ -163,7 +163,7 @@ const UsersPage = () => {
     } else {
       Swal.fire({
         title: 'Información',
-        text: `Solo los 'coordinadores' pueden tener permisos de espacio asignados.`,
+        text: `Solo los 'coordinadores' pueden tener permisos de dependencias asignados.`,
         icon: 'info',
         confirmButtonColor: '#3085d6',
       });

@@ -11,6 +11,7 @@ import {
   FaUser,
   FaEllipsisV,
   FaInfoCircle,
+  FaBuilding,
 } from 'react-icons/fa';
 import { IoInformationCircleOutline } from 'react-icons/io5';
 import Header from '../components/Header';
@@ -20,7 +21,9 @@ import Modal from '../components/Modal';
 import ModalMobile from '../components/ModalMobile';
 import CreateRoomModal from '../components/CreateRoomModal';
 import UpdateRoomModal from '../components/UpdateRoomModal';
+import ManageDependenciesModal from '../components/ManageDependenciesModal';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import Swal from 'sweetalert2';
 import getMediaUrl from '../utils/media';
 
@@ -43,9 +46,12 @@ const AdminRoomsPage = () => {
   const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
   const [showUpdateRoomModal, setShowUpdateRoomModal] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
+  const [showManageDepsModal, setShowManageDepsModal] = useState(false);
 
   const navigate = useNavigate();
   const location = useLocation();
+  const { role } = useSelector(state => state.auth);
+  const isAdminOrCoordinator = role === 'admin' || role === 'coordinator';
 
   // Estado para detectar si es móvil
   const [isMobile, setIsMobile] = useState(false);
@@ -114,8 +120,11 @@ const AdminRoomsPage = () => {
 
     const filtered = rooms.filter(room => {
       const lowerCaseTerm = term.toLowerCase();
-      const searchableFields =
-        `${room.name} ${room.description} ${room.location} ${room.staffowner}`.toLowerCase();
+      const searchableFields = `${room.name} ${room.description} ${
+        room.location
+      } ${room.staffowner} ${
+        room.dependencies?.map(d => d.name).join(' ') || ''
+      }`.toLowerCase();
 
       return searchableFields.includes(lowerCaseTerm);
     });
@@ -138,41 +147,43 @@ const AdminRoomsPage = () => {
       cancelButtonText: 'Cancelar',
     });
 
-    if (result.isConfirmed) {
-      // Mostrar loader
-      Swal.fire({
-        title: 'Eliminando sala...',
-        text: `Por favor espere mientras se elimina la sala "${roomName}"`,
-        allowOutsideClick: false,
-        allowEscapeKey: false,
-        showConfirmButton: false,
-        willOpen: () => {
-          Swal.showLoading();
-        },
-      });
+    if (!result.isConfirmed) {
+      return;
+    }
 
-      try {
-        await axiosInstance.delete(`/rooms/${roomId}`);
+    // Mostrar loader
+    Swal.fire({
+      title: 'Eliminando sala...',
+      text: `Por favor espere mientras se elimina la sala "${roomName}"`,
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      willOpen: () => {
+        Swal.showLoading();
+      },
+    });
 
-        // Actualizar la lista de salas
-        setRooms(prevRooms => prevRooms.filter(room => room.id !== roomId));
-        setFilteredRooms(prevRooms =>
-          prevRooms.filter(room => room.id !== roomId)
-        );
+    try {
+      await axiosInstance.delete(`/rooms/${roomId}`);
 
-        Swal.fire(
-          '¡Eliminada!',
-          `La sala "${roomName}" ha sido eliminada exitosamente.`,
-          'success'
-        );
-      } catch (error) {
-        console.error('Error al eliminar la sala:', error);
-        Swal.fire(
-          'Error',
-          'Error al eliminar la sala. Por favor, intente nuevamente.',
-          'error'
-        );
-      }
+      // Actualizar la lista de salas
+      setRooms(prevRooms => prevRooms.filter(room => room.id !== roomId));
+      setFilteredRooms(prevRooms =>
+        prevRooms.filter(room => room.id !== roomId)
+      );
+
+      Swal.fire(
+        '¡Eliminada!',
+        `La sala "${roomName}" ha sido eliminada exitosamente.`,
+        'success'
+      );
+    } catch (error) {
+      console.error('Error al eliminar la sala:', error);
+      Swal.fire(
+        'Error',
+        'Error al eliminar la sala. Por favor, intente nuevamente.',
+        'error'
+      );
     }
   };
 
@@ -204,7 +215,7 @@ const AdminRoomsPage = () => {
     setOpenMenuId(null); // Cerrar menú de acciones si está abierto
   };
 
-  // Componente del menú de acciones (para móvil)
+  // Componente del menú de acciones (similar al de AdminReservationsPage)
   const ActionMenu = ({ room, index }) => {
     const isMenuOpen = openMenuId === room.id;
     const menuRef = useRef(null);
@@ -255,12 +266,23 @@ const AdminRoomsPage = () => {
     );
   };
 
+  // Obtener nombre de dependencia (puede tener múltiples dependencias, tomamos la primera)
+  const getDependencyName = room => {
+    if (!room.dependencies || room.dependencies.length === 0) {
+      return 'Sin dependencia';
+    }
+    return room.dependencies[0].name;
+  };
+
   if (loading) {
     return (
       <div>
         <Header />
-        <div className="container mx-auto my-8">
-          <p>Cargando salas...</p>
+        <div className="container mx-auto my-8 flex justify-center items-center min-h-[50vh]">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+            <p className="text-gray-600">Cargando salas...</p>
+          </div>
         </div>
         <Footer />
       </div>
@@ -292,12 +314,23 @@ const AdminRoomsPage = () => {
               onSearch={handleSearch}
             />
           </div>
-          <button
-            onClick={() => setShowCreateRoomModal(true)}
-            className="w-full lg:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg flex items-center justify-center transition duration-200 shadow-md hover:shadow-lg"
-          >
-            <FaPlus className="mr-2" /> Añadir Espacio
-          </button>
+          <div className="w-full lg:w-auto flex gap-3">
+            {isAdminOrCoordinator && (
+              <button
+                onClick={() => setShowManageDepsModal(true)}
+                className="flex-1 lg:flex-none bg-gray-800 hover:bg-gray-900 text-white px-4 py-3 rounded-lg flex items-center justify-center transition duration-200"
+              >
+                <FaBuilding className="mr-2" /> Gestionar Dependencias
+              </button>
+            )}
+
+            <button
+              onClick={() => setShowCreateRoomModal(true)}
+              className="flex-1 lg:flex-none bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg flex items-center justify-center transition duration-200 shadow-md hover:shadow-lg"
+            >
+              <FaPlus className="mr-2" /> Añadir Espacio
+            </button>
+          </div>
         </div>
 
         {/* Indicador de búsqueda activa */}
@@ -351,9 +384,10 @@ const AdminRoomsPage = () => {
                 <th className="py-3 px-4 border-b text-center">Descripción</th>
                 <th className="py-3 px-4 border-b text-center">Capacidad</th>
                 <th className="py-3 px-4 border-b text-center">Ubicación</th>
+                <th className="py-3 px-4 border-b text-center">Dependencia</th>
                 <th className="py-3 px-4 border-b text-center">CUC</th>
                 <th className="py-3 px-4 border-b text-center">Encargado</th>
-                <th className="py-3 px-4 border-b text-center">Acciones</th>
+                <th className="py-3 px-4 border-b text-center">Opciones</th>
               </tr>
             </thead>
             <tbody>
@@ -400,6 +434,17 @@ const AdminRoomsPage = () => {
                     <td className="py-3 px-4 border-b text-center">
                       {room.location}
                     </td>
+
+                    {/* Dependencia */}
+                    <td className="py-3 px-4 border-b text-center">
+                      <div className="flex items-center justify-center">
+                        <span className="text-sm text-gray-700">
+                          {getDependencyName(room)}
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* CUC */}
                     <td className="py-3 px-4 border-b text-center">
                       <span
                         className={`px-3 py-1 rounded-full text-xs font-semibold ${
@@ -411,34 +456,20 @@ const AdminRoomsPage = () => {
                         {room.isInCUC ? 'Sí' : 'No'}
                       </span>
                     </td>
+
                     <td className="py-3 px-4 border-b text-center">
                       {room.staffowner}
                     </td>
 
-                    {/* Acciones */}
+                    {/* Opciones (menú desplegable) */}
                     <td className="py-3 px-4 border-b text-center">
-                      <div className="flex space-x-2 justify-center">
-                        <button
-                          onClick={() => handleOpenUpdateModal(room)}
-                          className="flex items-center justify-center bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-2 px-4 rounded text-sm transition-colors shadow-sm"
-                        >
-                          <FaEdit className="mr-1" size={14} />
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => handleDeleteRoom(room.id, room.name)}
-                          className="flex items-center justify-center bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded text-sm transition-colors shadow-sm"
-                        >
-                          <FaTrash className="mr-1" size={14} />
-                          Eliminar
-                        </button>
-                      </div>
+                      <ActionMenu room={room} index={index} />
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="8" className="py-8 text-center text-gray-500">
+                  <td colSpan="9" className="py-8 text-center text-gray-500">
                     No hay espacios disponibles.
                   </td>
                 </tr>
@@ -464,6 +495,10 @@ const AdminRoomsPage = () => {
                     <div className="flex items-center text-sm text-gray-600 mb-1">
                       <FaMapPin className="mr-2 text-blue-500" size={14} />
                       <span>{room.location}</span>
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <FaBuilding className="mr-2 text-purple-500" size={14} />
+                      <span>{getDependencyName(room)}</span>
                     </div>
                   </div>
 
@@ -597,6 +632,16 @@ const AdminRoomsPage = () => {
             </button>
           </div>
         </RenderModal>
+      )}
+
+      {showManageDepsModal && (
+        <ManageDependenciesModal
+          isOpen={showManageDepsModal}
+          onClose={() => {
+            setShowManageDepsModal(false);
+            fetchRooms();
+          }}
+        />
       )}
 
       {/* MODALES DE CREACIÓN Y ACTUALIZACIÓN */}

@@ -1,20 +1,21 @@
 'use strict';
 const { Model } = require('sequelize');
-const bcrypt = require('bcrypt'); // Asumiendo que quieres encriptar las contraseñas
+const bcrypt = require('bcrypt');
 
 module.exports = (sequelize, DataTypes) => {
   class User extends Model {
     static associate(models) {
       User.hasMany(models.Event, {
         foreignKey: 'userId',
-        as: 'events', // Alias para los eventos asociados
+        as: 'events',
       });
 
-      User.belongsToMany(models.Room, {
-        through: models.CoordinatorRooms,
+      // relación con Dependency (reemplaza managedRooms)
+      User.belongsToMany(models.Dependency, {
+        through: models.CoordinatorDependencies,
         foreignKey: 'UserId',
-        otherKey: 'RoomId',
-        as: 'managedRooms',
+        otherKey: 'DependencyId',
+        as: 'managedDependencies',
       });
     }
 
@@ -125,7 +126,7 @@ module.exports = (sequelize, DataTypes) => {
           User.ROLES.PENDING
         ),
         allowNull: false,
-        defaultValue: User.ROLES.VISITOR, // El rol por defecto será VISITOR
+        defaultValue: User.ROLES.VISITOR,
       },
       name: {
         type: DataTypes.STRING,
@@ -158,20 +159,18 @@ module.exports = (sequelize, DataTypes) => {
       },
       certificationPath: {
         type: DataTypes.STRING,
-        allowNull: true, // nulo por defecto hasta que suba un documento
+        allowNull: true,
       },
     },
     {
       sequelize,
       modelName: 'User',
       hooks: {
-        // Antes de la validación, si el campo 'role' no tiene valor, asigna el rol por defecto
         beforeValidate: user => {
           if (!user.role) {
             user.role = User.ROLES.VISITOR;
           }
         },
-        // Antes de crear, si el CI está vacío, se pone a null (para evitar strings vacíos en campo unique)
         beforeCreate: user => {
           if (user.ci === '') {
             user.ci = null;

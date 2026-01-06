@@ -7,6 +7,7 @@ const { QueryTypes } = require('sequelize');
 const userRoutes = require('./routes/userRoutes');
 const roomRoutes = require('./routes/roomRoutes');
 const eventRoutes = require('./routes/eventRoutes');
+const dependencyRoutes = require('./routes/dependencyRoutes');
 const path = require('path');
 
 // SOLUCIÓN: usar cors() con lista dinámica (desde env o valores por defecto)
@@ -66,6 +67,7 @@ app.get('/api/ping', (req, res) => {
 app.use('/api', userRoutes);
 app.use('/api', roomRoutes);
 app.use('/api', eventRoutes);
+app.use('/api', dependencyRoutes);
 
 // Restaurar secuencia para casos especiales
 async function syncSequence(tableName) {
