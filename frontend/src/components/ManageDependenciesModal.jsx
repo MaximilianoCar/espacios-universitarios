@@ -1,7 +1,7 @@
 // components/ManageDependenciesModal.jsx
 import React, { useEffect, useState } from 'react';
 import axiosInstance from '../axiosConfig';
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 import {
   FaBuilding,
   FaEdit,
@@ -205,9 +205,23 @@ const ManageDependenciesModal = ({ isOpen, onClose }) => {
       });
     } catch (err) {
       console.error('Error deleting dependency', err);
+      // Preferir mensaje enviado por el backend cuando exista
+      let errorMessage = 'No se pudo eliminar la dependencia.';
+      if (err.response?.data) {
+        if (typeof err.response.data.error === 'string') {
+          errorMessage = err.response.data.error;
+        } else if (Array.isArray(err.response.data.errors)) {
+          errorMessage = err.response.data.errors.join('; ');
+        } else if (err.response.data.message) {
+          errorMessage = err.response.data.message;
+        }
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
       Swal.fire({
         title: 'Error',
-        text: 'No se pudo eliminar la dependencia',
+        text: errorMessage,
         icon: 'error',
       });
     }

@@ -13,7 +13,7 @@ import { usePendingReservations } from '../hooks/usePendingReservations';
 import { usePendingUsers } from '../hooks/usePendingUsers';
 import { useUserEventsCount } from '../hooks/useUserEventsCount';
 import { updateUserRole } from '../features/auth/authSlice';
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 
 //iconos
 import {

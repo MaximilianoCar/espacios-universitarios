@@ -101,12 +101,33 @@ const getAllowedRoomIds = async (userId, userRole) => {
 };
 
 // Crear un nuevo evento (Create)
+// Crear un nuevo evento (Create)
 exports.createEvent = async (req, res) => {
   try {
+    const userRole = req.user.role;
+    const userId = req.user.id;
+    const roomId = req.body.roomId;
+
+    // Verificar permisos si el usuario es coordinador
+    if (userRole === 'coordinator') {
+      const hasPermission = await checkRoomPermission(userId, userRole, roomId);
+      if (!hasPermission) {
+        return res.status(403).json({
+          message: 'No tienes permisos para crear eventos en esta sala',
+        });
+      }
+    }
+
+    // Determinar el estado basado en el rol del usuario
+    let eventStatus = Event.STATUS.PENDING;
+    if (userRole === 'admin' || userRole === 'coordinator') {
+      eventStatus = Event.STATUS.APPROVED;
+    }
+
     const eventData = {
       ...req.body,
-      status: Event.STATUS.PENDING,
-      userId: req.user.id,
+      status: eventStatus,
+      userId: userId,
     };
 
     if (req.file) {
@@ -116,43 +137,116 @@ exports.createEvent = async (req, res) => {
 
     const newEvent = await Event.create(eventData);
 
-    // notificacion obteniendo los coordinadores especificos
-    try {
-      const coordinators = await getCoordinatorsByRoom(newEvent.roomId);
-      const roomName = await getRoomName(newEvent.roomId);
+    // Si el evento fue creado por un requester (estado PENDING), notificar a los coordinadores
+    if (eventStatus === Event.STATUS.PENDING) {
+      try {
+        const coordinators = await getCoordinatorsByRoom(newEvent.roomId);
+        const roomName = await getRoomName(newEvent.roomId);
 
-      if (coordinators.length > 0) {
-        const coordEmails = coordinators.map(coord => coord.email);
-        const user = await User.findByPk(req.user.id);
+        if (coordinators.length > 0) {
+          const coordEmails = coordinators.map(coord => coord.email);
+          const user = await User.findByPk(userId);
 
-        const eventDetails =
-          newEvent.description || 'Sin descripción adicional';
-        const fecha = newEvent.reservationFrom
-          ? new Date(newEvent.reservationFrom).toLocaleString()
-          : 'Fecha no especificada';
+          const eventDetails =
+            newEvent.description || 'Sin descripción adicional';
+          const fecha = newEvent.reservationFrom
+            ? new Date(newEvent.reservationFrom).toLocaleString()
+            : 'Fecha no especificada';
 
-        await emailService.notifyReservationRequest(
-          //enviar correo
-          coordEmails,
-          user.name,
+          await emailService.notifyReservationRequest(
+            //enviar correo
+            coordEmails,
+            user.name,
+            roomName,
+            fecha,
+            `Evento: ${newEvent.name} - ${eventDetails}`
+          );
+
+          console.log(
+            `Notificaciones de reserva enviadas a ${coordinators.length} coordinadores de ${roomName}`
+          );
+        } else {
+          console.log(
+            `No se encontraron coordinadores para la sala ${roomName}`
+          );
+        }
+      } catch (emailError) {
+        console.error('Error enviando notificaciones de reserva:', emailError);
+      }
+    } else {
+      // Si el evento fue creado por admin/coordinator (estado APPROVED), notificar al usuario creador
+      try {
+        const user = await User.findByPk(userId);
+        const roomName = await getRoomName(newEvent.roomId);
+
+        if (user && user.email) {
+          const fecha = newEvent.eventFrom
+            ? new Date(newEvent.eventFrom).toLocaleString()
+            : 'Fecha no especificada';
+
+          await emailService.notifyReservationResult(
+            user.email,
+            user.name,
+            roomName,
+            fecha,
+            true, // Aprobado automáticamente
+            `Evento creado directamente por ${
+              userRole === 'admin' ? 'administrador' : 'coordinador'
+            }`
+          );
+
+          console.log(
+            `Notificación de aprobación automática enviada a: ${user.email}`
+          );
+        }
+      } catch (emailError) {
+        console.error(
+          'Error enviando notificación de aprobación automática:',
+          emailError
+        );
+      }
+
+      // Notificar a las entidades sobre la aprobación automática
+      try {
+        const roomName = await getRoomName(newEvent.roomId);
+
+        await emailService.notifyAllEntitiesApproval(
           roomName,
-          fecha,
-          `Evento: ${newEvent.name} - ${eventDetails}`
+          newEvent.reservationFrom,
+          newEvent.reservationTo,
+          newEvent.eventFrom,
+          newEvent.eventTo,
+          newEvent.id,
+          newEvent.name
         );
 
         console.log(
-          `Notificaciones de reserva enviadas a ${coordinators.length} coordinadores de ${roomName}`
+          'Notificación de aprobación automática enviada a todas las entidades'
         );
-      } else {
-        console.log(`No se encontraron coordinadores para la sala ${roomName}`);
+      } catch (approvalError) {
+        console.error(
+          'Error enviando notificación de aprobación automática a entidades:',
+          approvalError
+        );
       }
-    } catch (emailError) {
-      console.error('Error enviando notificaciones de reserva:', emailError);
     }
 
     res.status(201).json(newEvent); // Responder con el nuevo evento creado
   } catch (error) {
     console.error(error);
+
+    // Manejar errores de validación de Sequelize
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+
+    // Manejar errores de restricción única
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(409).json({ error: messages });
+    }
+
     res.status(500).json({ error: 'Error al crear el evento.' });
   }
 };
@@ -594,6 +688,17 @@ exports.updateEvent = async (req, res) => {
     res.status(200).json(event);
   } catch (error) {
     console.error('Error updating event:', error);
+    const { UniqueConstraintError, ValidationError } = require('sequelize');
+    if (error instanceof UniqueConstraintError) {
+      return res.status(409).json({
+        error: error.errors[0]?.message || 'Conflicto de integridad.',
+      });
+    }
+    if (error instanceof ValidationError) {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+
     res.status(500).json({ error: 'Error al actualizar el evento.' });
   }
 };
@@ -614,7 +719,28 @@ exports.deleteEvent = async (req, res) => {
     await event.destroy(); // Eliminar el evento
     res.status(204).json(); // Responder sin contenido
   } catch (error) {
-    console.error(error);
+    console.error('Error deleting event:', error);
+    const {
+      ForeignKeyConstraintError,
+      UniqueConstraintError,
+      ValidationError,
+    } = require('sequelize');
+    if (error instanceof ForeignKeyConstraintError) {
+      return res.status(409).json({
+        error:
+          'No se puede eliminar el evento porque existen registros relacionados. Elimine o reasigne esos registros antes de intentar eliminar.',
+      });
+    }
+    if (error instanceof UniqueConstraintError) {
+      return res.status(409).json({
+        error: error.errors[0]?.message || 'Conflicto de integridad.',
+      });
+    }
+    if (error instanceof ValidationError) {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+
     res.status(500).json({ error: 'Error al eliminar el evento.' });
   }
 };

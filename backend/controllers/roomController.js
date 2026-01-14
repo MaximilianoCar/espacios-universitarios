@@ -5,6 +5,11 @@ const {
   Dependency,
   DependencyRooms,
 } = require('../models');
+const {
+  ForeignKeyConstraintError,
+  UniqueConstraintError,
+  ValidationError,
+} = require('sequelize');
 const { Op } = require('sequelize');
 const path = require('path');
 const fs = require('fs/promises');
@@ -299,6 +304,18 @@ exports.updateRoom = async (req, res) => {
     res.status(200).json(updated);
   } catch (error) {
     console.error('Error updating room:', error);
+    if (error instanceof UniqueConstraintError) {
+      return res
+        .status(409)
+        .json({
+          error: error.errors[0]?.message || 'Conflicto de integridad.',
+        });
+    }
+    if (error instanceof ValidationError) {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+
     res.status(500).json({ error: 'Error al actualizar la sala.' });
   }
 };
@@ -400,6 +417,24 @@ exports.deleteRoom = async (req, res) => {
     }
   } catch (error) {
     console.error('Error deleting room:', error);
+    if (error instanceof ForeignKeyConstraintError) {
+      return res.status(409).json({
+        error:
+          'No se puede eliminar la sala porque existen registros relacionados (p.ej. reservas o eventos). Elimine o reasigne esos registros antes de intentar eliminar.',
+      });
+    }
+    if (error instanceof UniqueConstraintError) {
+      return res
+        .status(409)
+        .json({
+          error: error.errors[0]?.message || 'Conflicto de integridad.',
+        });
+    }
+    if (error instanceof ValidationError) {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+
     res.status(500).json({ error: 'Error al eliminar la sala.' });
   }
 };

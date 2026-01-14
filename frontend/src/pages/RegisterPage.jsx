@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import axiosInstance from '../axiosConfig';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { login } from '../features/auth/authActions';

@@ -15,9 +15,11 @@ import {
   FaKey,
   FaUserPlus,
   FaFilter,
+  FaEye,
+  FaTimes,
 } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 
 // Definición estática de roles para el menú lateral
 const ALL_ROLES = ['admin', 'coordinator', 'requester', 'visitor', 'pending'];
@@ -283,7 +285,7 @@ const UsersPage = () => {
           className={`p-2 rounded-full text-gray-600 hover:bg-gray-200 transition-colors ${
             isMenuOpen ? 'bg-gray-200' : ''
           }`}
-          title="Opciones"
+          title="Opciones de usuario"
         >
           <FaEllipsisV size={18} />
         </button>
@@ -297,6 +299,7 @@ const UsersPage = () => {
             <button
               onClick={handleUpdateClick}
               className="flex items-center w-full px-4 py-3 text-sm text-blue-600 hover:bg-gray-50 border-b border-gray-100"
+              title="Editar usuario"
             >
               <FaEdit className="mr-3" size={16} />
               Actualizar
@@ -310,6 +313,11 @@ const UsersPage = () => {
                   ? 'text-green-600'
                   : 'text-gray-400 cursor-not-allowed'
               }`}
+              title={
+                user.role === 'coordinator'
+                  ? 'Gestionar permisos'
+                  : 'Solo coordinadores pueden tener permisos'
+              }
             >
               <FaKey className="mr-3" size={16} />
               Permisos
@@ -318,6 +326,7 @@ const UsersPage = () => {
             <button
               onClick={handleDeleteClick}
               className="flex items-center w-full px-4 py-3 text-sm text-red-600 hover:bg-gray-50"
+              title="Eliminar usuario"
             >
               <FaTrash className="mr-3" size={16} />
               Eliminar
@@ -348,6 +357,7 @@ const UsersPage = () => {
               <button
                 onClick={handleCreateUser}
                 className="w-full bg-blue-600 text-white font-bold py-2 rounded-lg mb-6 hover:bg-blue-700 transition duration-150"
+                title="Crear nuevo usuario"
               >
                 + Agregar Usuario
               </button>
@@ -394,6 +404,7 @@ const UsersPage = () => {
                   <button
                     onClick={() => setShowFilters(true)}
                     className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition"
+                    title="Abrir filtros de roles"
                   >
                     <FaFilter size={16} />
                     <span className="text-sm">Filtros</span>
@@ -401,6 +412,7 @@ const UsersPage = () => {
                   <button
                     onClick={handleCreateUser}
                     className="flex items-center gap-2 bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition"
+                    title="Crear nuevo usuario"
                   >
                     <FaUserPlus size={16} />
                     <span className="text-sm">Agregar</span>
@@ -439,14 +451,16 @@ const UsersPage = () => {
                   <table className="min-w-full bg-white">
                     <thead>
                       <tr className="bg-blue-100">
-                        <th className="py-2 px-4 border-b text-left">Nombre</th>
-                        <th className="py-2 px-4 border-b text-left">
+                        <th className="py-3 px-4 border-b text-left max-w-[200px]">
+                          Nombre
+                        </th>
+                        <th className="py-3 px-4 border-b text-left max-w-[250px]">
                           Correo Electrónico
                         </th>
-                        <th className="py-2 px-4 border-b text-left">Rol</th>
-                        <th className="py-2 px-4 border-b text-left">CI</th>
-                        <th className="py-2 px-4 border-b text-left">Estado</th>
-                        <th className="py-2 px-4 border-b text-left">
+                        <th className="py-3 px-4 border-b text-left">Rol</th>
+                        <th className="py-3 px-4 border-b text-left">CI</th>
+                        <th className="py-3 px-4 border-b text-left">Estado</th>
+                        <th className="py-3 px-4 border-b text-left">
                           Acciones
                         </th>
                       </tr>
@@ -455,17 +469,33 @@ const UsersPage = () => {
                       {users.length > 0 ? (
                         users.map(user => (
                           <tr key={user.id} className="hover:bg-gray-50">
-                            <td className="py-2 px-4 border-b">{user.name}</td>
-                            <td className="py-2 px-4 border-b">{user.email}</td>
-                            <td className="py-2 px-4 border-b capitalize">
-                              {user.role}
+                            <td className="py-3 px-4 border-b font-semibold text-gray-800 truncate max-w-[200px]">
+                              <span
+                                className="truncate block"
+                                title={user.name}
+                              >
+                                {user.name}
+                              </span>
                             </td>
-                            <td className="py-2 px-4 border-b">
+                            <td className="py-3 px-4 border-b text-gray-700 truncate max-w-[250px]">
+                              <span
+                                className="truncate block"
+                                title={user.email}
+                              >
+                                {user.email}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 border-b">
+                              <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 truncate max-w-[150px] block text-center">
+                                {ROLE_TRANSLATIONS[user.role] || user.role}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 border-b text-gray-700">
                               {user.ci || 'N/A'}
                             </td>
-                            <td className="py-2 px-4 border-b">
+                            <td className="py-3 px-4 border-b">
                               <span
-                                className={`px-2 py-1 text-xs font-semibold rounded ${
+                                className={`px-3 py-1 text-xs font-semibold rounded-full ${
                                   user.status
                                     ? 'bg-green-100 text-green-800'
                                     : 'bg-red-100 text-red-800'
@@ -474,37 +504,55 @@ const UsersPage = () => {
                                 {user.status ? 'Activo' : 'Inactivo'}
                               </span>
                             </td>
-                            <td className="py-2 px-4 border-b flex items-center space-x-2">
-                              <button
-                                onClick={() => handleUpdateUser(user)}
-                                className="bg-yellow-500 text-white px-2 py-1 rounded text-sm hover:bg-yellow-600 transition"
-                              >
-                                Actualizar
-                              </button>
+                            <td className="py-3 px-4 border-b">
+                              <div className="flex items-center space-x-1">
+                                {/* Botón de Editar */}
+                                <button
+                                  onClick={() => handleUpdateUser(user)}
+                                  className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-lg transition-colors group relative"
+                                  title="Editar usuario"
+                                >
+                                  <FaEdit size={18} />
+                                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                    Editar usuario
+                                  </div>
+                                </button>
 
-                              <button
-                                onClick={() => handleManagePermissions(user)}
-                                disabled={user.role !== 'coordinator'}
-                                className={`text-white px-2 py-1 rounded text-sm transition ${
-                                  user.role === 'coordinator'
-                                    ? 'bg-green-600 hover:bg-green-700'
-                                    : 'bg-gray-400 cursor-not-allowed'
-                                }`}
-                                title={
-                                  user.role === 'coordinator'
-                                    ? 'Asignar permisos de espacio'
-                                    : "Solo 'coordinators' pueden asignar permisos"
-                                }
-                              >
-                                Permisos
-                              </button>
+                                {/* Botón de Permisos */}
+                                <button
+                                  onClick={() => handleManagePermissions(user)}
+                                  disabled={user.role !== 'coordinator'}
+                                  className={`p-2 rounded-lg transition-colors group relative ${
+                                    user.role === 'coordinator'
+                                      ? 'text-green-600 hover:text-green-800 hover:bg-green-100'
+                                      : 'text-gray-400 cursor-not-allowed'
+                                  }`}
+                                  title={
+                                    user.role === 'coordinator'
+                                      ? 'Gestionar permisos'
+                                      : 'Solo coordinadores pueden tener permisos'
+                                  }
+                                >
+                                  <FaKey size={18} />
+                                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                    {user.role === 'coordinator'
+                                      ? 'Gestionar permisos'
+                                      : 'Solo coordinadores'}
+                                  </div>
+                                </button>
 
-                              <button
-                                onClick={() => handleDeleteUser(user.id)}
-                                className="bg-red-600 text-white px-2 py-1 rounded text-sm hover:bg-red-700 transition"
-                              >
-                                Eliminar
-                              </button>
+                                {/* Botón de Eliminar */}
+                                <button
+                                  onClick={() => handleDeleteUser(user.id)}
+                                  className="p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-colors group relative"
+                                  title="Eliminar usuario"
+                                >
+                                  <FaTrash size={18} />
+                                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                    Eliminar usuario
+                                  </div>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -512,10 +560,18 @@ const UsersPage = () => {
                         <tr>
                           <td
                             colSpan="6"
-                            className="py-8 text-center text-gray-500"
+                            className="py-12 text-center text-gray-500"
                           >
-                            No se encontraron usuarios con los filtros
-                            seleccionados.
+                            <div className="flex flex-col items-center">
+                              <FaEye className="text-4xl text-gray-400 mb-3" />
+                              <p className="font-medium">
+                                No se encontraron usuarios
+                              </p>
+                              <p className="text-sm text-gray-600 mt-1">
+                                Intenta ajustar los filtros o crear un nuevo
+                                usuario
+                              </p>
+                            </div>
                           </td>
                         </tr>
                       )}
@@ -533,11 +589,17 @@ const UsersPage = () => {
                       >
                         {/* Header de la tarjeta */}
                         <div className="flex justify-between items-start mb-2">
-                          <div className="flex-1 pr-2">
-                            <h3 className="font-bold text-base text-gray-800 mb-1">
+                          <div className="flex-1 pr-2 max-w-[75%]">
+                            <h3
+                              className="font-bold text-base text-gray-800 mb-1 truncate"
+                              title={user.name}
+                            >
                               {user.name}
                             </h3>
-                            <p className="text-xs text-gray-600 break-words">
+                            <p
+                              className="text-xs text-gray-600 truncate"
+                              title={user.email}
+                            >
                               {user.email}
                             </p>
                           </div>
@@ -545,29 +607,56 @@ const UsersPage = () => {
                         </div>
 
                         {/* Información del usuario - Solo Rol y CI */}
-                        <div className="flex justify-between items-center text-xs">
-                          <div>
+                        <div className="flex justify-between items-center text-xs mt-3">
+                          <div className="truncate max-w-[45%]">
                             <span className="font-medium text-gray-500 mr-1">
                               Rol:
                             </span>
-                            <span className="font-semibold text-gray-800 capitalize">
+                            <span
+                              className="font-semibold text-gray-800 capitalize truncate block text-center"
+                              title={ROLE_TRANSLATIONS[user.role] || user.role}
+                            >
                               {ROLE_TRANSLATIONS[user.role] || user.role}
                             </span>
                           </div>
-                          <div>
+                          <div className="truncate max-w-[45%]">
                             <span className="font-medium text-gray-500 mr-1">
                               CI:
                             </span>
-                            <span className="font-semibold text-gray-800">
+                            <span
+                              className="font-semibold text-gray-800 truncate block"
+                              title={user.ci || 'N/A'}
+                            >
                               {user.ci || 'N/A'}
                             </span>
                           </div>
                         </div>
+
+                        {/* Estado */}
+                        <div className="mt-2">
+                          <span
+                            className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                              user.status
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {user.status ? 'Activo' : 'Inactivo'}
+                          </span>
+                        </div>
                       </div>
                     ))
                   ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      No se encontraron usuarios con los filtros seleccionados.
+                    <div className="text-center py-12 text-gray-500">
+                      <div className="flex flex-col items-center">
+                        <FaEye className="text-4xl text-gray-400 mb-3" />
+                        <p className="font-medium">
+                          No se encontraron usuarios
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Intenta ajustar los filtros
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -590,6 +679,7 @@ const UsersPage = () => {
                       onClick={() => handlePageChange(currentPage - 1)}
                       disabled={currentPage === 1}
                       className="px-4 py-2 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      title="Página anterior"
                     >
                       Anterior
                     </button>
@@ -597,6 +687,7 @@ const UsersPage = () => {
                       onClick={() => handlePageChange(currentPage + 1)}
                       disabled={currentPage === totalPages || totalPages === 0}
                       className="px-4 py-2 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      title="Página siguiente"
                     >
                       Siguiente
                     </button>
@@ -620,6 +711,7 @@ const UsersPage = () => {
                 <button
                   onClick={() => setShowFilters(false)}
                   className="text-gray-500 hover:text-gray-700 text-xl"
+                  title="Cerrar filtros"
                 >
                   ×
                 </button>
@@ -649,6 +741,7 @@ const UsersPage = () => {
               <button
                 onClick={() => setShowFilters(false)}
                 className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 transition"
+                title="Aplicar filtros seleccionados"
               >
                 Aplicar Filtros
               </button>

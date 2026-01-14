@@ -24,7 +24,7 @@ import UpdateRoomModal from '../components/UpdateRoomModal';
 import ManageDependenciesModal from '../components/ManageDependenciesModal';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 import getMediaUrl from '../utils/media';
 
 const AdminRoomsPage = () => {
@@ -320,7 +320,7 @@ const AdminRoomsPage = () => {
                 onClick={() => setShowManageDepsModal(true)}
                 className="flex-1 lg:flex-none bg-gray-800 hover:bg-gray-900 text-white px-4 py-3 rounded-lg flex items-center justify-center transition duration-200"
               >
-                <FaBuilding className="mr-2" /> Gestionar Dependencias
+                <FaBuilding className="mr-2" /> Dependencias
               </button>
             )}
 
@@ -474,6 +474,18 @@ const AdminRoomsPage = () => {
                   </td>
                 </tr>
               )}
+              <tr className="bg-gray-50 hover:bg-gray-100 transition-colors">
+                <td colSpan="11" className="py-8 px-4 text-center">
+                  <div className="flex justify-center items-center">
+                    <button
+                      onClick={() => navigate('/rooms')}
+                      className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-8 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-lg"
+                    >
+                      Ver espacios
+                    </button>
+                  </div>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>

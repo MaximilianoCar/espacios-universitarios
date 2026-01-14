@@ -1,7 +1,7 @@
 // components/CreateRoomModal.jsx
 import React, { useState, useEffect } from 'react';
 import axiosInstance from '../axiosConfig';
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 import {
   FaFileAlt,
   FaUsers,
@@ -398,9 +398,6 @@ const CreateRoomModal = ({ isOpen, onClose, onRoomCreated }) => {
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold">Crear Nuevo Espacio</h2>
-              <p className="text-blue-100">
-                Complete todos los campos obligatorios
-              </p>
             </div>
             <button
               onClick={handleClose}
@@ -590,19 +587,35 @@ const CreateRoomModal = ({ isOpen, onClose, onRoomCreated }) => {
                     ))}
                   </select>
 
-                  {selectedDependencyId && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                      <p className="text-sm text-blue-800">
-                        <span className="font-semibold">
-                          Dependencia seleccionada:
-                        </span>{' '}
-                        {
-                          dependencies.find(d => d.id == selectedDependencyId)
-                            ?.name
-                        }
-                      </p>
-                    </div>
-                  )}
+                  {/* Información de dependencia seleccionada o mensaje */}
+                  <div className="mt-2">
+                    {selectedDependencyId ? (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <p className="text-sm text-blue-800">
+                          <span className="font-semibold">
+                            Dependencia seleccionada:
+                          </span>{' '}
+                          {
+                            dependencies.find(d => d.id == selectedDependencyId)
+                              ?.name
+                          }
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                        <p className="text-sm text-gray-600">
+                          <span className="font-semibold">Nota:</span> Solo se
+                          muestran las dependencias a las que tiene permiso.
+                          {dependencies.length === 0 && (
+                            <span className="block mt-1 text-yellow-600">
+                              No tiene permisos para crear espacios en ninguna
+                              dependencia.
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    )}
+                  </div>
 
                   {errors.dependency && (
                     <p className="text-sm text-red-600 bg-red-50 p-2 rounded">

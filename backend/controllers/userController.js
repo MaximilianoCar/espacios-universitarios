@@ -1,5 +1,6 @@
 const { User } = require('../models');
 const { sequelize } = require('../models');
+const { CoordinatorDependencies } = require('../models');
 const { Op } = require('sequelize');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
@@ -269,23 +270,77 @@ exports.updateUser = async (req, res) => {
       res.status(404).json({ error: 'Usuario no encontrado.' });
     }
   } catch (error) {
+    console.error('Error updating user:', error);
+    const {
+      UniqueConstraintError,
+      ValidationError,
+      ForeignKeyConstraintError,
+    } = require('sequelize');
+    if (error instanceof UniqueConstraintError) {
+      return res.status(409).json({
+        error: error.errors[0]?.message || 'Conflicto de integridad.',
+      });
+    }
+    if (error instanceof ValidationError) {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+    if (error instanceof ForeignKeyConstraintError) {
+      return res.status(409).json({
+        error:
+          'No se puede actualizar el usuario debido a relaciones existentes.',
+      });
+    }
+
     res.status(500).json({ error: 'Error al actualizar el usuario.' });
   }
 };
 
 // Eliminar un usuario
 exports.deleteUser = async (req, res) => {
+  const transaction = await User.sequelize.transaction();
   try {
-    const deleted = await User.destroy({
-      where: { id: req.params.id },
+    const user = await User.findByPk(req.params.id, { transaction });
+    if (!user) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Usuario no encontrado.' });
+    }
+
+    // Eliminar permisos (CoordinatorDependencies) si existen
+    await CoordinatorDependencies.destroy({
+      where: { UserId: user.id },
+      transaction,
     });
 
-    if (deleted) {
-      res.status(204).send();
-    } else {
-      res.status(404).json({ error: 'Usuario no encontrado.' });
-    }
+    // Eliminar el usuario (eventos relacionados tienen ON DELETE CASCADE según el modelo)
+    await user.destroy({ transaction });
+
+    await transaction.commit();
+    return res.status(204).send();
   } catch (error) {
+    await transaction.rollback();
+    console.error('Error deleting user:', error);
+    const {
+      ForeignKeyConstraintError,
+      UniqueConstraintError,
+      ValidationError,
+    } = require('sequelize');
+    if (error instanceof ForeignKeyConstraintError) {
+      return res.status(409).json({
+        error:
+          'No se puede eliminar el usuario porque existen registros relacionados (p.ej. eventos, permisos). Elimine o reasigne esos registros antes de intentar eliminar.',
+      });
+    }
+    if (error instanceof UniqueConstraintError) {
+      return res.status(409).json({
+        error: error.errors[0]?.message || 'Conflicto de integridad.',
+      });
+    }
+    if (error instanceof ValidationError) {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+
     res.status(500).json({ error: 'Error al eliminar el usuario.' });
   }
 };

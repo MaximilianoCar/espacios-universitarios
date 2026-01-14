@@ -12,7 +12,7 @@ import {
   FaArrowLeft,
   FaFileAlt,
 } from 'react-icons/fa';
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 
 const AdminPendingRequestsPage = () => {
   const [users, setUsers] = useState([]);

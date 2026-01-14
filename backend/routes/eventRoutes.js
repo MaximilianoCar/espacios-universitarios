@@ -16,7 +16,7 @@ const uploadBanner = require('../middlewares/eventBannerUploadMiddleware');
 // Crear un nuevo evento con imagen
 router.post(
   '/events',
-  protect, // Usar 'protect' en lugar de 'authMiddleware'
+  protect, //
   restrictTo('requester', 'admin', 'coordinator'),
   uploadImages.single('imageFile'), // Nombre del campo de imagen en el formulario
   eventController.createEvent

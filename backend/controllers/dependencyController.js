@@ -2,7 +2,14 @@ const {
   Dependency,
   CoordinatorDependencies,
   DependencyRooms,
+  Event,
 } = require('../models');
+const {
+  ForeignKeyConstraintError,
+  UniqueConstraintError,
+  ValidationError,
+  Op,
+} = require('sequelize');
 
 exports.createDependency = async (req, res) => {
   const transaction = await Dependency.sequelize.transaction();
@@ -48,6 +55,16 @@ exports.createDependency = async (req, res) => {
   } catch (error) {
     await transaction.rollback();
     console.error('Error creating dependency:', error);
+    if (error instanceof UniqueConstraintError) {
+      return res.status(409).json({
+        error: error.errors[0]?.message || 'Conflicto de integridad.',
+      });
+    }
+    if (error instanceof ValidationError) {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+
     res.status(500).json({ error: 'Error al crear la dependencia.' });
   }
 };
@@ -115,11 +132,9 @@ exports.updateDependency = async (req, res) => {
         where: { UserId: userId, DependencyId: dep.id },
       });
       if (!hasPerm) {
-        return res
-          .status(403)
-          .json({
-            error: 'No tienes permisos para modificar esta dependencia.',
-          });
+        return res.status(403).json({
+          error: 'No tienes permisos para modificar esta dependencia.',
+        });
       }
     }
 
@@ -146,15 +161,28 @@ exports.updateDependency = async (req, res) => {
     res.status(200).json(dep);
   } catch (error) {
     console.error('Error updating dependency:', error);
+    if (error instanceof UniqueConstraintError) {
+      return res.status(409).json({
+        error: error.errors[0]?.message || 'Conflicto de integridad.',
+      });
+    }
+    if (error instanceof ValidationError) {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+
     res.status(500).json({ error: 'Error al actualizar la dependencia.' });
   }
 };
 
 exports.deleteDependency = async (req, res) => {
+  const transaction = await Dependency.sequelize.transaction();
   try {
-    const dep = await Dependency.findByPk(req.params.id);
-    if (!dep)
+    const dep = await Dependency.findByPk(req.params.id, { transaction });
+    if (!dep) {
+      await transaction.rollback();
       return res.status(404).json({ error: 'Dependencia no encontrada.' });
+    }
 
     // Si el usuario es coordinador, validar que tenga permiso sobre la dependencia
     const userRole = req.user.role;
@@ -162,23 +190,73 @@ exports.deleteDependency = async (req, res) => {
     if (userRole === 'coordinator') {
       const hasPerm = await CoordinatorDependencies.findOne({
         where: { UserId: userId, DependencyId: dep.id },
+        transaction,
       });
       if (!hasPerm) {
-        return res
-          .status(403)
-          .json({
-            error: 'No tienes permisos para eliminar esta dependencia.',
-          });
+        await transaction.rollback();
+        return res.status(403).json({
+          error: 'No tienes permisos para eliminar esta dependencia.',
+        });
       }
     }
 
-    // borrar asociaciones con rooms
-    await DependencyRooms.destroy({ where: { DependencyId: dep.id } });
+    // Obtener rooms asociadas a la dependencia
+    const depRooms = await DependencyRooms.findAll({
+      where: { DependencyId: dep.id },
+      transaction,
+    });
+    const roomIds = depRooms.map(dr => dr.RoomId).filter(Boolean);
 
-    await dep.destroy();
+    // Si alguna sala tiene eventos/reservas, impedir eliminación e informar al front
+    if (roomIds.length > 0) {
+      const eventsCount = await Event.count({
+        where: { roomId: { [Op.in]: roomIds } },
+        transaction,
+      });
+
+      if (eventsCount > 0) {
+        await transaction.rollback();
+        return res.status(409).json({
+          error:
+            'No se puede eliminar la dependencia porque existen solicitudes/reservas asociadas a uno o más espacios. Elimine primero esas solicitudes si desea borrar la dependencia.',
+        });
+      }
+    }
+
+    // Eliminar permisos/relaciones y luego la dependencia
+    await CoordinatorDependencies.destroy({
+      where: { DependencyId: dep.id },
+      transaction,
+    });
+    await DependencyRooms.destroy({
+      where: { DependencyId: dep.id },
+      transaction,
+    });
+    await dep.destroy({ transaction });
+
+    await transaction.commit();
     res.status(204).send();
   } catch (error) {
+    await transaction.rollback();
     console.error('Error deleting dependency:', error);
+    if (error instanceof ForeignKeyConstraintError) {
+      return res.status(409).json({
+        error:
+          'No se puede eliminar la dependencia porque existen registros relacionados (p.ej. salas o permisos). Elimine o reasigne esos registros antes de intentar eliminar.',
+      });
+    }
+    if (error instanceof UniqueConstraintError) {
+      return res
+        .status(409)
+        .json({
+          error: error.errors[0]?.message || 'Conflicto de integridad.',
+        });
+    }
+    if (error instanceof ValidationError) {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+
     res.status(500).json({ error: 'Error al eliminar la dependencia.' });
   }
 };

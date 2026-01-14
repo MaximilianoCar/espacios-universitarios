@@ -25,7 +25,7 @@ import { IoInformationCircleOutline } from 'react-icons/io5';
 import Modal from '../components/Modal';
 import ModalMobile from '../components/ModalMobile';
 
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 import { useNavigate } from 'react-router-dom';
 import getMediaUrl from '../utils/media';
 

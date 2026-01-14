@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axiosInstance from '../axiosConfig';
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 import {
   FaCalendarAlt,
   FaUsers,

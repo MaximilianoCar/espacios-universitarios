@@ -1,7 +1,7 @@
 // src/components/CreateUserForm.js
 import React, { useState } from 'react';
 import axiosInstance from '../axiosConfig';
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 
 const CreateUserForm = ({ onUserCreated, onCancel }) => {
   const [formData, setFormData] = useState({

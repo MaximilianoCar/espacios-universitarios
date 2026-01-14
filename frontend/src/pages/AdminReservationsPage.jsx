@@ -29,7 +29,7 @@ import {
 import { IoInformationCircleOutline } from 'react-icons/io5';
 import Modal from '../components/Modal';
 import ModalMobile from '../components/ModalMobile';
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 import { Link } from 'react-router-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import getMediaUrl from '../utils/media';
@@ -1094,7 +1094,7 @@ const AdminReservationsPage = () => {
                 </tr>
               )}
               <tr className="bg-gray-50 hover:bg-gray-100 transition-colors">
-                <td colSpan="11" className="py-6 px-4 text-center">
+                <td colSpan="11" className="py-8 px-4 text-center">
                   <div className="flex justify-center items-center">
                     <button
                       onClick={() => navigate('/events')}
@@ -1109,7 +1109,7 @@ const AdminReservationsPage = () => {
           </table>
 
           {/* PAGINACIÓN */}
-          <div className="flex justify-between items-center p-4 bg-gray-50 border-t">
+          <div className="flex justify-between items-center p-6 bg-gray-50 border-t">
             <p className="text-sm text-gray-600">
               Mostrando {events.length} de {totalEvents} eventos (Pág.{' '}
               {currentPage} de {totalPages})

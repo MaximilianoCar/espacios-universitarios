@@ -125,7 +125,6 @@ const RoomsPage = () => {
                   title="Volver al inicio"
                 >
                   <FaArrowLeft size={24} />
-                  <span className="ml-2 hidden sm:inline">Volver</span>
                 </button>
                 <div className="min-w-[250px]">
                   <SearchBar
@@ -143,7 +142,7 @@ const RoomsPage = () => {
                     className="flex items-center justify-center bg-gray-700 hover:bg-gray-800 text-white px-4 py-2.5 rounded-lg transition-colors shadow-sm"
                   >
                     <FaUsers className="mr-2" size={14} />
-                    <span className="text-sm">Gestionar Dependencias</span>
+                    <span className="text-sm">Dependencias</span>
                   </button>
                   <button
                     onClick={handleAddRoom}

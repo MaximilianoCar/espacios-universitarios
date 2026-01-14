@@ -13,6 +13,9 @@ import {
   FaChevronLeft,
   FaChevronRight,
   FaTimes,
+  FaMapPin,
+  FaUsers,
+  FaCogs,
 } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
 import getMediaUrl from '../utils/media';
@@ -67,8 +70,17 @@ const EventsPage = () => {
   }, []);
 
   const handleSearch = searchTerm => {
-    const filtered = events.filter(event =>
-      event.name.toLowerCase().includes(searchTerm.toLowerCase())
+    if (!searchTerm.trim()) {
+      setFilteredEvents(events);
+      return;
+    }
+
+    const lowerCaseTerm = searchTerm.toLowerCase();
+    const filtered = events.filter(
+      event =>
+        event.name.toLowerCase().includes(lowerCaseTerm) ||
+        event.description?.toLowerCase().includes(lowerCaseTerm) ||
+        event.room?.name?.toLowerCase().includes(lowerCaseTerm)
     );
     setFilteredEvents(filtered);
   };
@@ -157,7 +169,21 @@ const EventsPage = () => {
     return `${startDate} - ${endDate}`;
   };
 
-  // Mobile Calendar Component
+  // Formatear hora del evento
+  const formatEventTime = event => {
+    const start = new Date(event.eventFrom);
+    const end = new Date(event.eventTo);
+
+    return `${start.toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })} - ${end.toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })}`;
+  };
+
+  // Mobile Calendar Component (sin cambios)
   const MobileCalendar = () => {
     const y = calendarDate.getFullYear();
     const m = calendarDate.getMonth();
@@ -166,7 +192,6 @@ const EventsPage = () => {
 
     return (
       <div className="bg-white rounded-lg shadow-lg p-4">
-        {/* Header del calendario móvil con botón de cerrar */}
         <div className="flex items-center justify-between mb-4">
           <button
             onClick={prevMonth}
@@ -200,7 +225,6 @@ const EventsPage = () => {
           </button>
         </div>
 
-        {/* Días de la semana */}
         <div className="grid grid-cols-7 gap-1 mb-3">
           {['D', 'L', 'M', 'X', 'J', 'V', 'S'].map(day => (
             <div
@@ -212,7 +236,6 @@ const EventsPage = () => {
           ))}
         </div>
 
-        {/* Días del mes */}
         <div className="grid grid-cols-7 gap-1">
           {Array.from({ length: firstDay }).map((_, index) => (
             <div key={`empty-${index}`} className="aspect-square"></div>
@@ -268,7 +291,6 @@ const EventsPage = () => {
           })}
         </div>
 
-        {/* Eventos del día seleccionado */}
         {selectedDay && (
           <div className="mt-6 border-t pt-4">
             <h4 className="font-bold mb-3 text-xl text-gray-900 text-center">
@@ -303,15 +325,7 @@ const EventsPage = () => {
                         {formatEventDateRange(ev)}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {new Date(ev.eventFrom).toLocaleTimeString('es-ES', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}{' '}
-                        -{' '}
-                        {new Date(ev.eventTo).toLocaleTimeString('es-ES', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                        {formatEventTime(ev)}
                       </div>
                       <div className="mt-3 flex justify-end">
                         <Link
@@ -341,8 +355,11 @@ const EventsPage = () => {
     return (
       <div>
         <Header />
-        <div className="container mx-auto my-8">
-          <p>Cargando eventos...</p>
+        <div className="container mx-auto my-8 flex justify-center items-center min-h-[50vh]">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+            <p className="text-gray-600">Cargando eventos...</p>
+          </div>
         </div>
         <Footer />
       </div>
@@ -358,101 +375,140 @@ const EventsPage = () => {
         backgroundImage={backgroundImage}
       />
       <div className="container mx-auto my-8 px-4">
-        <div className="flex items-center mb-6 flex-wrap">
-          <button
-            onClick={handleBack}
-            className="flex items-center text-gray-800 hover:text-gray-600 transition-colors mr-4 mt-3"
-            title="Volver al inicio"
-          >
-            <FaArrowLeft size={24} />
-          </button>
-          <div className="flex-1 min-w-[200px]">
-            <SearchBar
-              placeholder="Buscar eventos..."
-              onSearch={handleSearch}
-            />
+        <div className="flex justify-between items-start mb-6 flex-wrap">
+          <div className="flex items-center flex-wrap">
+            <button
+              onClick={handleBack}
+              className="flex items-center text-gray-800 hover:text-gray-600 transition-colors mr-4 mb-3 lg:mb-0"
+              title="Volver al inicio"
+            >
+              <FaArrowLeft size={24} />
+            </button>
+            <div className="min-w-[250px]">
+              <SearchBar
+                placeholder="Buscar eventos por nombre, descripción o espacio..."
+                onSearch={handleSearch}
+              />
+            </div>
           </div>
 
-          {/* movil */}
           <button
             onClick={openCalendar}
-            className="lg:hidden mt-3 ml-auto flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-500 px-4 py-2 rounded"
+            className="mt-3 lg:mt-0 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg transition-colors shadow-sm"
           >
             <FaCalendarAlt />
-            <span>Calendario</span>
+            <span className="text-sm">Calendario</span>
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-          {/* desktop */}
-          <div className="hidden lg:block border rounded-lg overflow-hidden bg-white shadow-md flex flex-col hover:shadow-lg transition">
-            <div className="w-full h-48 bg-gradient-to-r from-blue-200 to-blue-300 flex items-center justify-center">
-              <div className="text-center">
-                <h3 className="text-xl font-bold text-blue-800">Calendario</h3>
-                <p className="text-sm text-blue-700 mt-2">
-                  Consulta los eventos aprobados por fecha y navega por el mes.
-                </p>
-              </div>
-            </div>
-            <div className="p-4 flex-1 flex flex-col justify-between">
-              <h2 className="text-xl font-bold">Abrir calendario</h2>
-              <p className="text-sm text-gray-600 mb-4">
-                Para ver los días con eventos y acceder a los detalles.
-              </p>
-              <div>
-                <button
-                  onClick={openCalendar}
-                  className="mt-4 inline-block bg-blue-600 text-white hover:bg-blue-500 px-4 py-2 rounded"
-                >
-                  Ver Calendario
-                </button>
-              </div>
-            </div>
+        {filteredEvents.length > 0 && (
+          <div className="mb-4 text-sm text-gray-600">
+            Mostrando {filteredEvents.length} de {events.length} eventos
           </div>
+        )}
 
-          {/* Cards de eventos */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
           {filteredEvents.length > 0 ? (
             filteredEvents.map(event => (
               <div
                 key={event.id}
-                className="border rounded-lg overflow-hidden bg-white shadow-md hover:shadow-lg transition-shadow"
+                className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col"
               >
-                <img
-                  src={
-                    event.imagePath
-                      ? getMediaUrl(event.imagePath)
-                      : 'https://via.placeholder.com/600x400'
-                  }
-                  alt={event.name}
-                  className="w-full h-48 object-cover"
-                />
-                <div className="p-4">
-                  <h2 className="text-xl font-bold">{event.name}</h2>
-                  <p className="text-sm text-gray-500 mt-1">
-                    {formatEventDateRange(event)}
-                  </p>
+                <div className="relative h-48 overflow-hidden">
+                  <img
+                    src={
+                      event.imagePath
+                        ? getMediaUrl(event.imagePath)
+                        : 'https://via.placeholder.com/600x400?text=Sin+Imagen'
+                    }
+                    alt={event.name}
+                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                  />
+                </div>
+                <div className="p-4 flex flex-col flex-grow">
+                  <div className="mb-2">
+                    <h2 className="text-lg font-bold text-gray-800 truncate">
+                      {event.name}
+                    </h2>
 
-                  <Link
-                    to={`/events/${event.id}`}
-                    className="mt-4 inline-block bg-blue-600 text-white hover:bg-blue-500 px-4 py-2 rounded"
-                  >
-                    Ver Detalles
-                  </Link>
+                    <div className="flex items-center text-sm text-gray-600 mt-1">
+                      <FaCalendarAlt className="mr-1 text-gray-500" size={12} />
+                      <span>{formatEventDateRange(event)}</span>
+                    </div>
+
+                    {event.room && (
+                      <div className="flex items-center text-sm text-gray-600 mt-1">
+                        <FaMapPin className="mr-1 text-blue-500" size={12} />
+                        <span className="truncate">{event.room.name}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-auto pt-4 border-t border-gray-100">
+                    <Link
+                      to={`/events/${event.id}`}
+                      className="inline-flex items-center justify-center w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg transition-colors text-sm font-medium"
+                    >
+                      Ver Detalles
+                    </Link>
+                  </div>
                 </div>
               </div>
             ))
           ) : (
-            <p className="text-center text-gray-500 col-span-full">
-              No se encontraron eventos.
-            </p>
+            <div className="col-span-full text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+              <FaCogs className="text-4xl text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-600 font-medium">
+                No se encontraron eventos
+              </p>
+              <p className="text-gray-500 text-sm mt-1">
+                {events.length === 0
+                  ? 'No hay eventos disponibles en este momento.'
+                  : 'No hay resultados que coincidan con tu búsqueda.'}
+              </p>
+            </div>
           )}
         </div>
 
-        {/* MODAL DEL CALENDARIO*/}
+        <div className="hidden lg:block mt-6">
+          <div className="border-2 border-blue-200 rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow duration-300">
+            <div className="border-b-2 border-blue-100 bg-white px-6 py-8">
+              <div className="text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
+                  <FaCalendarAlt className="text-blue-600 text-2xl" />
+                </div>
+                <h3 className="text-2xl font-bold text-blue-800 mb-2">
+                  Calendario de Eventos
+                </h3>
+                <p className="text-blue-600">
+                  Consulta los eventos aprobados por fecha y navega por el mes.
+                </p>
+              </div>
+            </div>
+            <div className="p-6">
+              <h2 className="text-xl font-bold text-gray-800 mb-3">
+                Explora los eventos por fecha
+              </h2>
+              <p className="text-gray-600 mb-4">
+                Utiliza nuestro calendario interactivo para ver los días con
+                eventos y acceder rápidamente a los detalles de cada evento
+                programado.
+              </p>
+              <button
+                onClick={openCalendar}
+                className="inline-flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors text-base font-medium shadow-sm hover:shadow-md"
+              >
+                <FaCalendarAlt className="mr-2" />
+                Abrir Calendario
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* MODAL DEL CALENDARIO (sin cambios) */}
         {showCalendarModal &&
           (isMobile ? (
             <ModalMobile onClose={closeCalendar} title="Calendario de Eventos">
-              {/* Botón de cerrar en móvil*/}
               <button
                 onClick={closeCalendar}
                 className="absolute top-4 right-4 z-10 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
@@ -463,7 +519,6 @@ const EventsPage = () => {
             </ModalMobile>
           ) : (
             <ModalCalendar onClose={closeCalendar}>
-              {/* Botón de cerrar en desktop - POSICIONADO ARRIBA A LA DERECHA */}
               <button
                 onClick={closeCalendar}
                 className="absolute top-4 right-4 z-10 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
@@ -472,8 +527,6 @@ const EventsPage = () => {
               </button>
 
               <div className="max-w-4xl mx-auto pt-8">
-                {' '}
-                {/* Añadido pt-8 para dar espacio al botón de cerrar */}
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-xl font-semibold">
@@ -518,7 +571,6 @@ const EventsPage = () => {
                     </button>
                   </div>
                 </div>
-                {/* Calendar grid */}
                 <div className="grid grid-cols-7 gap-1 text-center">
                   {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map(h => (
                     <div
@@ -534,7 +586,6 @@ const EventsPage = () => {
                     const firstDay = startOfMonth(calendarDate).getDay();
                     const total = daysInMonth(y, m);
                     const cells = [];
-                    // leading blanks
                     for (let i = 0; i < firstDay; i++)
                       cells.push(<div key={`b-${i}`} className="py-4"></div>);
                     for (let d = 1; d <= total; d++) {
@@ -598,7 +649,6 @@ const EventsPage = () => {
                     return cells;
                   })()}
                 </div>
-                {/* Selected day events list */}
                 <div className="mt-6">
                   {selectedDay ? (
                     (() => {

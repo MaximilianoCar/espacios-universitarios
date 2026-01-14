@@ -4,7 +4,7 @@ import axiosInstance from '../axiosConfig';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import HeroSection from '../components/HeroSection';
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 import { useSelector } from 'react-redux';
 import defaultBanner from '../assets/ucvfondo.jpg';
 import { CameraIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
