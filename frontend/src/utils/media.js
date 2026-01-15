@@ -1,4 +1,3 @@
-// media.js - Versión para Vite
 const MEDIA_BASE_URL =
   import.meta.env.VITE_MEDIA_BASE_URL || 'http://localhost:3000';
 

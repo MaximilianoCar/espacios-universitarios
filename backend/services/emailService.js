@@ -85,6 +85,37 @@ const emailTemplates = {
     `,
   }),
 
+  // Plantilla para envío de código de recuperación de contraseña
+  passwordReset: (userName, code) => ({
+    subject:
+      'Código para restablecer tu contraseña - Espacios Universitarios UCV',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Solicitud de Cambio de Contraseña</h2>
+        <p>Hola <strong>${userName}</strong>,</p>
+        <p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta. Usa el siguiente código para continuar con el proceso:</p>
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0; text-align: center; font-size: 20px;">
+          <strong>${code}</strong>
+        </div>
+        <p>Este código expira en 15 minutos. Si no solicitaste este cambio, puedes ignorar este correo.</p>
+        <p style="margin-top: 20px; color: #666; font-size: 12px;">Espacios Universitarios UCV - ${new Date().getFullYear()}</p>
+      </div>
+    `,
+  }),
+
+  // Plantilla para confirmar cambio de contraseña
+  passwordChanged: userName => ({
+    subject: 'Tu contraseña fue cambiada - Espacios Universitarios UCV',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Cambio de Contraseña Realizado</h2>
+        <p>Hola <strong>${userName}</strong>,</p>
+        <p>Se ha realizado un cambio de contraseña en tu cuenta. Si fuiste tú, no necesitas hacer nada más. Si no reconoces esta acción, contacta al administrador del sistema.</p>
+        <p style="margin-top: 20px; color: #666; font-size: 12px;">Espacios Universitarios UCV - ${new Date().getFullYear()}</p>
+      </div>
+    `,
+  }),
+
   // Notificación a coordinadores - Nueva reserva
   reservationRequest: (
     solicitanteName,
@@ -606,6 +637,16 @@ class EmailService {
       process.env.JefeDeProtocoloMail,
       process.env.COPREDMail,
     ].filter(email => email && email.trim() !== ''); // Filtrar emails vacíos
+  }
+
+  // Notificar código de recuperación
+  async notifyPasswordReset(userEmail, userName, code) {
+    return this.sendEmail(userEmail, 'passwordReset', [userName, code]);
+  }
+
+  // Notificar que la contraseña fue cambiada
+  async notifyPasswordChanged(userEmail, userName) {
+    return this.sendEmail(userEmail, 'passwordChanged', [userName]);
   }
 }
 

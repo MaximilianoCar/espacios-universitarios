@@ -2,9 +2,6 @@ import axiosInstance, { setAuthToken, clearAuthToken } from '../../axiosConfig';
 import { loginSuccess, refreshAccessToken, logout } from './authSlice';
 import Swal from '../../utils/swal';
 
-// Usar rutas relativas: axiosInstance tiene base '/api' o VITE_API_URL
-// Evita usar URLs absolutas para que Vite proxy funcione en dev.
-
 // Acción para iniciar sesión
 export const login = (email, password, navigate) => async dispatch => {
   try {

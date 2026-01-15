@@ -62,7 +62,7 @@ const Header = () => {
   return (
     <nav className="bg-[#3969B1] shadow-lg">
       <div className="container mx-auto flex items-center h-16 relative px-4 sm:px-6 lg:px-8">
-        {/* Logo y título a la izquierda - Ahora es clickeable */}
+        {/* Logo y título */}
         <button
           onClick={handleLogoClick}
           className="flex items-center flex-shrink-0 z-10 hover:opacity-90 transition-opacity duration-200"
@@ -73,7 +73,7 @@ const Header = () => {
           </span>
         </button>
 
-        {/* Menú de escritorio - SOLO se muestra si está autenticado */}
+        {/* Menú de escritorio*/}
         {isAuthenticated && (
           <div className="hidden md:flex absolute left-1/2 transform -translate-x-1/2 space-x-8">
             {/* Eventos */}
@@ -98,7 +98,7 @@ const Header = () => {
           </div>
         )}
 
-        {/* Botón de cierre de sesión a la derecha */}
+        {/* cierre de sesión */}
         <div className="ml-auto flex items-center">
           {isAuthenticated ? (
             <>
@@ -133,7 +133,7 @@ const Header = () => {
         </div>
       </div>
 
-      {/* Menú móvil - SOLO se muestra si está autenticado y el menú está abierto */}
+      {/* Menú móvil - solo se muestra si está autenticado y el menú esta abierto */}
       {isAuthenticated && (
         <div
           className={`md:hidden bg-[#3969B1] transition-all duration-300 ease-in-out ${

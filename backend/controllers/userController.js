@@ -667,6 +667,129 @@ exports.refreshToken = async (req, res) => {
   }
 };
 
+// Iniciar flujo de restablecimiento de contraseña: validar email+ci y enviar código
+exports.requestPasswordReset = async (req, res) => {
+  try {
+    let { email, ci } = req.body;
+    if (!email || !ci) {
+      return res.status(400).json({ error: 'Email y cédula son requeridos.' });
+    }
+
+    email = email.toLowerCase();
+
+    const user = await User.findOne({ where: { email, ci } });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ error: 'Usuario no encontrado con esos datos.' });
+    }
+
+    // generar código de 6 dígitos
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+
+    user.resetCode = code;
+    user.resetCodeExpiry = expiry;
+    await user.save();
+
+    // enviar correo con código
+    try {
+      await emailService.notifyPasswordReset(user.email, user.name, code);
+    } catch (emailError) {
+      console.error('Error enviando código de restablecimiento:', emailError);
+      // no revelar detalles al cliente
+    }
+
+    return res
+      .status(200)
+      .json({ message: 'Código enviado al correo si el usuario existe.' });
+  } catch (error) {
+    console.error('requestPasswordReset error:', error);
+    return res
+      .status(500)
+      .json({ error: 'Error interno al solicitar restablecimiento.' });
+  }
+};
+
+// Verificar código enviado
+exports.verifyResetCode = async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    if (!email || !code) {
+      return res.status(400).json({ error: 'Email y código son requeridos.' });
+    }
+
+    const user = await User.findOne({ where: { email: email.toLowerCase() } });
+    if (!user || !user.resetCode || !user.resetCodeExpiry) {
+      return res.status(400).json({ valid: false, error: 'Código inválido.' });
+    }
+
+    if (user.resetCode !== code) {
+      return res.status(400).json({ valid: false, error: 'Código inválido.' });
+    }
+
+    if (new Date() > new Date(user.resetCodeExpiry)) {
+      return res.status(400).json({ valid: false, error: 'Código expirado.' });
+    }
+
+    return res.status(200).json({ valid: true });
+  } catch (error) {
+    console.error('verifyResetCode error:', error);
+    return res
+      .status(500)
+      .json({ error: 'Error interno al verificar el código.' });
+  }
+};
+
+// Resetear la contraseña con el código
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword) {
+      return res
+        .status(400)
+        .json({ error: 'Email, código y nueva contraseña son requeridos.' });
+    }
+
+    const user = await User.findOne({ where: { email: email.toLowerCase() } });
+    if (!user || !user.resetCode || !user.resetCodeExpiry) {
+      return res.status(400).json({ error: 'Código inválido o expirado.' });
+    }
+
+    if (user.resetCode !== code) {
+      return res.status(400).json({ error: 'Código inválido.' });
+    }
+
+    if (new Date() > new Date(user.resetCodeExpiry)) {
+      return res.status(400).json({ error: 'Código expirado.' });
+    }
+
+    // actualizar contraseña
+    const hashed = await bcrypt.hash(newPassword, 10);
+    user.password = hashed;
+    // limpiar código
+    user.resetCode = null;
+    user.resetCodeExpiry = null;
+    await user.save();
+
+    // notificar al usuario
+    try {
+      await emailService.notifyPasswordChanged(user.email, user.name);
+    } catch (emailError) {
+      console.error('Error notificando cambio de contraseña:', emailError);
+    }
+
+    return res
+      .status(200)
+      .json({ message: 'Contraseña actualizada correctamente.' });
+  } catch (error) {
+    console.error('resetPassword error:', error);
+    return res
+      .status(500)
+      .json({ error: 'Error interno al cambiar la contraseña.' });
+  }
+};
+
 // notis de usuarios pendientes a ser solicitantes
 exports.getPendingUsersCount = async (req, res) => {
   try {
