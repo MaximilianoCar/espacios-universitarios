@@ -10,7 +10,20 @@ import HeroSection from '../components/HeroSection';
 import AddRoomForm from '../components/AddRoomForm';
 import ManageDependenciesModal from '../components/ManageDependenciesModal';
 import backgroundImage from '../assets/ucvfondo.jpg';
-import { FaArrowLeft, FaPlus, FaCogs, FaUsers } from 'react-icons/fa';
+import {
+  FaArrowLeft,
+  FaPlus,
+  FaCogs,
+  FaUsers,
+  FaWheelchair,
+  FaWifi,
+  FaToilet,
+  FaMicrophoneAlt,
+  FaVideo,
+  FaMoneyBillWave,
+  FaExchangeAlt,
+  FaBox,
+} from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
 import getMediaUrl from '../utils/media';
 
@@ -82,6 +95,80 @@ const RoomsPage = () => {
     setRooms(updatedRooms);
     setFilteredRooms(updatedRooms);
     setShowAddRoomForm(false);
+  };
+
+  // Función para renderizar las etiquetas de características
+  const renderFeatureTags = room => {
+    const features = [];
+
+    // Definir las características y sus iconos
+    const featureConfig = [
+      {
+        key: 'isAccessible',
+        icon: <FaWheelchair />,
+        tooltip: 'Accesible para personas con discapacidad motriz',
+      },
+      {
+        key: 'hasInternet',
+        icon: <FaWifi />,
+        tooltip: 'Cuenta con conectividad',
+      },
+      {
+        key: 'hasBathrooms',
+        icon: <FaToilet />,
+        tooltip: 'Disponibilidad de sanitarios',
+      },
+      {
+        key: 'hasAudioEquipment',
+        icon: <FaMicrophoneAlt />,
+        tooltip: 'Cualquier equipo de sonido',
+      },
+      {
+        key: 'hasVideoEquipment',
+        icon: <FaVideo />,
+        tooltip: 'Cuenta con equipos de video',
+      },
+      {
+        key: 'canExonerate',
+        icon: <FaMoneyBillWave />,
+        tooltip: 'Posibilidad de exoneración de pago',
+      },
+      {
+        key: 'acceptsTransfer',
+        icon: <FaExchangeAlt />,
+        tooltip: 'Acepta transferencia como método de pago',
+      },
+      {
+        key: 'acceptsMaterials',
+        icon: <FaBox />,
+        tooltip: 'Acepta materiales como método de pago',
+      },
+    ];
+
+    // Solo agregar características que estén en true
+    featureConfig.forEach(feature => {
+      if (room[feature.key]) {
+        features.push(
+          <div
+            key={feature.key}
+            className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-semibold flex items-center mr-1 mb-1 group relative"
+            title={feature.tooltip}
+          >
+            <span className="mr-1">{feature.icon}</span>
+            <div className="absolute bottom-full left-0 mb-1 hidden group-hover:block w-48 z-10">
+              <div className="bg-gray-800 text-white text-xs rounded py-2 px-3 whitespace-normal text-left">
+                {feature.tooltip}
+                <div className="absolute top-full left-4 transform -mt-1">
+                  <div className="border-4 border-transparent border-t-gray-800"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+    });
+
+    return features;
   };
 
   if (loading) {
@@ -203,11 +290,27 @@ const RoomsPage = () => {
                       alt={room.name}
                       className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
                     />
+
+                    {/* Etiqueta CUC con tooltip  */}
                     {room.isInCUC && (
                       <div className="absolute top-2 right-2 bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-semibold">
                         CUC
+                        <div className="absolute bottom-full right-0 mb-1 hidden group-hover:block w-48 z-10">
+                          <div className="bg-gray-800 text-white text-xs rounded py-2 px-3 whitespace-normal text-left">
+                            Espacio ubicado en la Ciudad Universitaria de
+                            Caracas
+                            <div className="absolute top-full right-4 transform -mt-1">
+                              <div className="border-4 border-transparent border-t-gray-800"></div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     )}
+
+                    {/* Contenedor de etiquetas de características en la parte inferior */}
+                    <div className="absolute bottom-2 left-2 right-2 flex flex-wrap">
+                      {renderFeatureTags(room)}
+                    </div>
                   </div>
                   <div className="p-4 flex flex-col flex-grow">
                     <div className="mb-2">
@@ -217,13 +320,26 @@ const RoomsPage = () => {
                       <div className="flex items-center text-sm text-gray-600 mt-1">
                         <FaUsers className="mr-1 text-gray-500" size={12} />
                         <span>Capacidad: {room.capacity}</span>
+                        <span className="mx-2">|</span>
+                        <span>
+                          Costo:{' '}
+                          {room.cost && room.cost !== '0'
+                            ? `$${room.cost}`
+                            : 'Gratuito'}
+                        </span>
                       </div>
                     </div>
 
                     {room.location && (
-                      <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+                      <p className="text-sm text-gray-600 line-clamp-2">
                         <span className="font-medium">Ubicación:</span>{' '}
                         {room.location}
+                      </p>
+                    )}
+                    {room.dependencies && room.dependencies.length > 0 && (
+                      <p className="text-sm text-gray-600 mb-4 line-clamp-2">
+                        <span className="font-medium">Dependencia:</span>{' '}
+                        {room.dependencies.map(dep => dep.name).join(', ')}
                       </p>
                     )}
 

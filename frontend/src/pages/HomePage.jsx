@@ -165,7 +165,7 @@ const HomePage = () => {
       />
       <MenuCard
         title="¡Quiero Reservar!"
-        description="Haz clic para obtener el rol de 'Solicitante' y poder reservar espacios."
+        description="Haz click para empezar a reservar espacios."
         onClick={() => setShowRequestUpgradeModal(true)}
         icon={<KeyIcon className="w-12 h-12 text-blue-500" />}
         isButton={true}

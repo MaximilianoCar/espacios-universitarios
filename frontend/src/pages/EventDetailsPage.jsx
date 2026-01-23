@@ -452,7 +452,7 @@ const EventDetailsPage = () => {
           document.getElementById('swal-reservationTo').value;
 
         // Validaciones básicas de campos requeridos
-        if (!name || !description || !capacity || !cost || !contact) {
+        if (!name || !capacity || !cost || !contact) {
           Swal.showValidationMessage(
             'Todos los campos básicos son obligatorios'
           );
@@ -701,15 +701,15 @@ const EventDetailsPage = () => {
                       event?.status === 'approved'
                         ? 'bg-green-100 text-green-800'
                         : event?.status === 'denied'
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-yellow-100 text-yellow-800'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-yellow-100 text-yellow-800'
                     }`}
                   >
                     {event?.status === 'approved'
                       ? 'Aprobado'
                       : event?.status === 'denied'
-                      ? 'Rechazado'
-                      : 'Pendiente'}
+                        ? 'Rechazado'
+                        : 'Pendiente'}
                   </span>
                 </div>
                 <div>

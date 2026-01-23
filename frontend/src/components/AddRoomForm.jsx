@@ -2,7 +2,17 @@
 import React, { useState, useEffect } from 'react';
 import axiosInstance from '../axiosConfig';
 import Swal from '../utils/swal';
-import { FaUsers } from 'react-icons/fa';
+import {
+  FaUsers,
+  FaWheelchair,
+  FaWifi,
+  FaToilet,
+  FaMicrophoneAlt,
+  FaVideo,
+  FaMoneyBillWave,
+  FaExchangeAlt,
+  FaBox,
+} from 'react-icons/fa';
 
 const AddRoomForm = ({ onRoomCreated, onClose }) => {
   const [formData, setFormData] = useState({
@@ -12,6 +22,15 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
     location: '',
     staffowner: '',
     isInCUC: true,
+    cost: '0',
+    isAccessible: false,
+    canExonerate: false,
+    hasBathrooms: false,
+    hasInternet: false,
+    hasAudioEquipment: false,
+    hasVideoEquipment: false,
+    acceptsTransfer: false,
+    acceptsMaterials: false,
   });
   const [imageFile, setImageFile] = useState(null);
   const [error, setError] = useState('');
@@ -25,8 +44,12 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
   });
 
   const handleChange = e => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    const { name, value, type, checked } = e.target;
+    if (type === 'checkbox') {
+      setFormData({ ...formData, [name]: checked });
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
   };
 
   const handleImageChange = e => {
@@ -59,6 +82,26 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
       setError(
         'Por favor seleccione la dependencia a la que pertenece el espacio.'
       );
+      return;
+    }
+
+    // Validar que al menos un método de pago esté seleccionado
+    if (!formData.acceptsTransfer && !formData.acceptsMaterials) {
+      setError(
+        'Debe seleccionar al menos un método de pago (Transferencia o Materiales).'
+      );
+      return;
+    }
+
+    // Validar que el costo sea un número válido si se ingresa
+    if (formData.cost && isNaN(parseFloat(formData.cost))) {
+      setError('El costo debe ser un número válido.');
+      return;
+    }
+
+    // Validar que la capacidad sea un número positivo
+    if (parseInt(formData.capacity) <= 0) {
+      setError('La capacidad debe ser un número positivo.');
       return;
     }
 
@@ -98,7 +141,17 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
       const data = new FormData();
       // Agregar los campos del formulario al FormData
       Object.keys(formData).forEach(key => {
-        data.append(key, formData[key]);
+        if (
+          key === 'isInCUC' ||
+          key.startsWith('is') ||
+          key.startsWith('has') ||
+          key.startsWith('can') ||
+          key.startsWith('accepts')
+        ) {
+          data.append(key, formData[key] ? 'true' : 'false');
+        } else {
+          data.append(key, formData[key]);
+        }
       });
       // agregar dependencyId
       data.append('dependencyId', selectedDependencyId);
@@ -272,10 +325,10 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
             ></textarea>
           </div>
 
-          {/* Capacidad y Ubicación */}
-          <div className="flex flex-wrap -mx-2">
+          {/* Capacidad, Ubicación y Costo */}
+          <div className="flex flex-wrap -mx-2 mb-4">
             {/* Capacidad */}
-            <div className="w-full md:w-1/2 px-2 mb-4 md:mb-0">
+            <div className="w-full md:w-1/3 px-2 mb-4 md:mb-0">
               <label className="block text-gray-700 font-medium mb-2">
                 Capacidad *
               </label>
@@ -293,7 +346,7 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
             </div>
 
             {/* Ubicación */}
-            <div className="w-full md:w-1/2 px-2">
+            <div className="w-full md:w-1/3 px-2 mb-4 md:mb-0">
               <label className="block text-gray-700 font-medium mb-2">
                 Ubicación *
               </label>
@@ -308,10 +361,27 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
                 placeholder="Ej: Edificio A, Piso 2"
               />
             </div>
+
+            {/* Costo */}
+            <div className="w-full md:w-1/3 px-2">
+              <label className="block text-gray-700 font-medium mb-2">
+                Costo ($)
+              </label>
+              <input
+                type="text"
+                name="cost"
+                className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                value={formData.cost}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                placeholder="Ej: 100.00"
+              />
+              <p className="text-xs text-gray-500 mt-1">0 = Gratuito</p>
+            </div>
           </div>
 
           {/* Dependencia */}
-          <div className="mt-4">
+          <div className="mb-4">
             <label className="block text-gray-700 font-medium mb-2">
               Dependencia *
             </label>
@@ -335,9 +405,10 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
                 <button
                   type="button"
                   onClick={() => setShowAddDependency(true)}
-                  className="px-3 py-2 bg-green-500 text-white rounded"
+                  className="px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isSubmitting}
                 >
-                  + Agregar
+                  Agregar
                 </button>
               </div>
             ) : (
@@ -350,6 +421,7 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
                     setNewDependency({ ...newDependency, name: e.target.value })
                   }
                   className="w-full border rounded px-3 py-2"
+                  disabled={isSubmitting}
                 />
                 <textarea
                   placeholder="Descripción (opcional)"
@@ -362,19 +434,22 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
                   }
                   className="w-full border rounded px-3 py-2"
                   rows={3}
+                  disabled={isSubmitting}
                 />
                 <div className="flex space-x-2">
                   <button
                     type="button"
                     onClick={handleCreateDependency}
-                    className="px-4 py-2 bg-blue-600 text-white rounded"
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isSubmitting}
                   >
                     Crear
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowAddDependency(false)}
-                    className="px-4 py-2 border rounded"
+                    className="px-4 py-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isSubmitting}
                   >
                     Atrás
                   </button>
@@ -383,39 +458,213 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
             )}
           </div>
 
-          {/* ¿Ubicado en CUC? */}
-          <div className="mt-4">
-            <label className="block text-gray-700 font-medium mb-2">
-              ¿Ubicado en la Ciudad Universitaria de Caracas? *
-            </label>
-            <select
-              name="isInCUC"
-              className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              value={formData.isInCUC}
-              onChange={handleChange}
-              required
-              disabled={isSubmitting}
-            >
-              <option value={true}>Sí</option>
-              <option value={false}>No</option>
-            </select>
+          {/* Características del espacio */}
+          <div className="mb-4">
+            <h3 className="text-lg font-medium text-gray-700 mb-3">
+              Características del Espacio
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {/* Accesibilidad */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="isAccessible"
+                  id="isAccessible"
+                  checked={formData.isAccessible}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="isAccessible"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaWheelchair className="mr-1" /> Accesibilidad motriz
+                </label>
+              </div>
+
+              {/* Baños */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="hasBathrooms"
+                  id="hasBathrooms"
+                  checked={formData.hasBathrooms}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="hasBathrooms"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaToilet className="mr-1" /> Baños disponibles
+                </label>
+              </div>
+
+              {/* Internet */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="hasInternet"
+                  id="hasInternet"
+                  checked={formData.hasInternet}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="hasInternet"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaWifi className="mr-1" /> Conexión a Internet
+                </label>
+              </div>
+
+              {/* Equipo de audio */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="hasAudioEquipment"
+                  id="hasAudioEquipment"
+                  checked={formData.hasAudioEquipment}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="hasAudioEquipment"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaMicrophoneAlt className="mr-1" /> Equipo de audio
+                </label>
+              </div>
+
+              {/* Equipo de video */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="hasVideoEquipment"
+                  id="hasVideoEquipment"
+                  checked={formData.hasVideoEquipment}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="hasVideoEquipment"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaVideo className="mr-1" /> Equipo de video
+                </label>
+              </div>
+
+              {/* Exoneración */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="canExonerate"
+                  id="canExonerate"
+                  checked={formData.canExonerate}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="canExonerate"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaMoneyBillWave className="mr-1" /> Permite exoneración
+                </label>
+              </div>
+            </div>
           </div>
 
-          {/* Encargado */}
-          <div className="mt-4">
-            <label className="block text-gray-700 font-medium mb-2">
-              Encargado *
-            </label>
-            <input
-              type="text"
-              name="staffowner"
-              className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              value={formData.staffowner}
-              onChange={handleChange}
-              required
-              disabled={isSubmitting}
-              placeholder="Nombre del encargado"
-            />
+          {/* Métodos de pago */}
+          <div className="mb-4">
+            <h3 className="text-lg font-medium text-gray-700 mb-3">
+              Métodos de Pago Aceptados *
+            </h3>
+            <div className="flex flex-col sm:flex-row sm:space-x-6 space-y-2 sm:space-y-0">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="acceptsTransfer"
+                  id="acceptsTransfer"
+                  checked={formData.acceptsTransfer}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="acceptsTransfer"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaExchangeAlt className="mr-1" /> Transferencia
+                </label>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="acceptsMaterials"
+                  id="acceptsMaterials"
+                  checked={formData.acceptsMaterials}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="acceptsMaterials"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaBox className="mr-1" /> Materiales
+                </label>
+              </div>
+            </div>
+            {!formData.acceptsTransfer && !formData.acceptsMaterials && (
+              <p className="text-red-500 text-xs mt-1">
+                Debe seleccionar al menos un método de pago
+              </p>
+            )}
+          </div>
+
+          {/* ¿Ubicado en CUC? y Encargado */}
+          <div className="flex flex-wrap -mx-2 mb-4">
+            {/* ¿Ubicado en CUC? */}
+            <div className="w-full md:w-1/2 px-2 mb-4 md:mb-0">
+              <label className="block text-gray-700 font-medium mb-2">
+                ¿Ubicado en la Ciudad Universitaria de Caracas? *
+              </label>
+              <select
+                name="isInCUC"
+                className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                value={formData.isInCUC}
+                onChange={handleChange}
+                required
+                disabled={isSubmitting}
+              >
+                <option value={true}>Sí</option>
+                <option value={false}>No</option>
+              </select>
+            </div>
+
+            {/* Encargado */}
+            <div className="w-full md:w-1/2 px-2">
+              <label className="block text-gray-700 font-medium mb-2">
+                Encargado *
+              </label>
+              <input
+                type="text"
+                name="staffowner"
+                className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                value={formData.staffowner}
+                onChange={handleChange}
+                required
+                disabled={isSubmitting}
+                placeholder="Nombre del encargado"
+              />
+            </div>
           </div>
 
           {/* Campo para subir imagen */}
@@ -449,7 +698,10 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
           </button>
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={
+              isSubmitting ||
+              (!formData.acceptsTransfer && !formData.acceptsMaterials)
+            }
             className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg shadow-md transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
           >
             {isSubmitting ? (

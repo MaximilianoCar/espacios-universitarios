@@ -8,7 +8,6 @@ module.exports = (sequelize, DataTypes) => {
         as: 'events',
       });
 
-      // relación con Dependency
       Room.belongsToMany(models.Dependency, {
         through: models.DependencyRooms,
         foreignKey: 'RoomId',
@@ -42,6 +41,51 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       isInCUC: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      cost: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: 0,
+      },
+      isAccessible: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      canExonerate: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      hasBathrooms: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      hasInternet: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      hasAudioEquipment: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      hasVideoEquipment: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      acceptsTransfer: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      acceptsMaterials: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: false,

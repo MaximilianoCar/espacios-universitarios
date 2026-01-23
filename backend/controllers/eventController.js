@@ -100,8 +100,7 @@ const getAllowedRoomIds = async (userId, userRole) => {
   return [];
 };
 
-// Crear un nuevo evento (Create)
-// Crear un nuevo evento (Create)
+// Crear un nuevo evento
 exports.createEvent = async (req, res) => {
   try {
     const userRole = req.user.role;

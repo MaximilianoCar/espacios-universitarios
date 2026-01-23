@@ -7,14 +7,14 @@ const base = Swal.mixin({
     cancelButton: 'swal2-cancel btn-red',
     popup: 'swal2-custom-popup',
   },
-  reverseButtons: false, // confirm on the right, cancel on the left
+  reverseButtons: false, // confirmar a la derecha, cancelar a la izquierda
   allowOutsideClick: false,
 });
 
 const helpers = {
   fire: options => base.fire(options),
 
-  // Positive confirmation: confirm (blue) / cancel (red)
+  // colores
   confirm: opts =>
     base.fire({
       icon: opts.icon || 'question',
@@ -24,7 +24,6 @@ const helpers = {
       ...opts,
     }),
 
-  // Negative confirmation: confirm (red) / cancel (blue)
   confirmDanger: opts =>
     base.fire({
       icon: opts.icon || 'warning',
@@ -39,7 +38,6 @@ const helpers = {
       ...opts,
     }),
 
-  // Success toast/modal with auto close and blue confirm
   success: (title, text, timer = 2500) =>
     base.fire({
       title,
@@ -51,7 +49,6 @@ const helpers = {
       timerProgressBar: true,
     }),
 
-  // Error modal with auto close and blue confirm
   error: (title, text, timer = 3000) =>
     base.fire({
       title,
@@ -66,6 +63,12 @@ const helpers = {
   showLoading: () => Swal.showLoading(),
   close: () => Swal.close(),
   mixin: opts => Swal.mixin(opts),
+  get showValidationMessage() {
+    return Swal.showValidationMessage;
+  },
+  get validationMessage() {
+    return Swal.validationMessage;
+  },
 };
 
 export default helpers;

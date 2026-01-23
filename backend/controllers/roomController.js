@@ -101,6 +101,40 @@ exports.createRoom = async (req, res) => {
       }
     }
 
+    // Establecer valores por defecto para los nuevos campos booleanos
+    const defaultBooleanFields = [
+      'isAccessible',
+      'canExonerate',
+      'hasBathrooms',
+      'hasInternet',
+      'hasAudioEquipment',
+      'hasVideoEquipment',
+      'acceptsTransfer',
+      'acceptsMaterials',
+    ];
+
+    defaultBooleanFields.forEach(field => {
+      if (roomData[field] === undefined) {
+        roomData[field] = false;
+      }
+    });
+
+    // Establecer valor por defecto para cost si no se proporciona
+    if (!roomData.cost) {
+      roomData.cost = '0';
+    }
+
+    // Validar que al menos un método de pago esté seleccionado
+    if (
+      roomData.acceptsTransfer === false &&
+      roomData.acceptsMaterials === false
+    ) {
+      return res.status(400).json({
+        error:
+          'Debe seleccionar al menos un método de pago (Transferencia o Materiales).',
+      });
+    }
+
     // Si se subió una imagen, agregar la ruta a los datos
     if (req.file) {
       roomData.imagePath = req.file.path;
@@ -128,7 +162,14 @@ exports.createRoom = async (req, res) => {
         error.name
       )
     ) {
+      console.error('Nombre del error:', error.name);
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        return res
+          .status(400)
+          .json({ error: 'Ya existe una sala con ese nombre.' });
+      }
       const validationErrors = error.errors.map(err => err.message);
+      console.log('Errores de validación al crear la sala:', validationErrors);
       res.status(400).json({ errors: validationErrors });
     } else {
       console.error(error);
@@ -251,6 +292,28 @@ exports.updateRoom = async (req, res) => {
       return res.status(404).json({ error: 'Sala no encontrada.' });
     }
 
+    // Validar métodos de pago si se están actualizando
+    if (
+      req.body.acceptsTransfer !== undefined ||
+      req.body.acceptsMaterials !== undefined
+    ) {
+      const newAcceptsTransfer =
+        req.body.acceptsTransfer !== undefined
+          ? req.body.acceptsTransfer
+          : room.acceptsTransfer;
+      const newAcceptsMaterials =
+        req.body.acceptsMaterials !== undefined
+          ? req.body.acceptsMaterials
+          : room.acceptsMaterials;
+
+      if (newAcceptsTransfer === false && newAcceptsMaterials === false) {
+        return res.status(400).json({
+          error:
+            'Debe tener al menos un método de pago seleccionado (Transferencia o Materiales).',
+        });
+      }
+    }
+
     // Si se subió una nueva imagen, eliminar la anterior y actualizar la ruta
     if (req.file) {
       // Eliminar imagen anterior si existe
@@ -288,13 +351,14 @@ exports.updateRoom = async (req, res) => {
         }
       }
 
-      // borrar relaciones previas y crear la nueva relación (asumimos una dependencia por sala desde el frontend)
+      // borrar relaciones previas y crear la nueva relación
       await DependencyRooms.destroy({ where: { RoomId: room.id } });
       await DependencyRooms.create({ DependencyId: newDepId, RoomId: room.id });
-      delete req.body.dependencyId; // no es columna directa en Room
+      delete req.body.dependencyId;
     }
 
     await room.update(req.body);
+
     // volver a cargar relaciones
     const updated = await Room.findByPk(room.id, {
       include: [
@@ -305,11 +369,9 @@ exports.updateRoom = async (req, res) => {
   } catch (error) {
     console.error('Error updating room:', error);
     if (error instanceof UniqueConstraintError) {
-      return res
-        .status(409)
-        .json({
-          error: error.errors[0]?.message || 'Conflicto de integridad.',
-        });
+      return res.status(409).json({
+        error: error.errors[0]?.message || 'Ya existe una sala con ese nombre.',
+      });
     }
     if (error instanceof ValidationError) {
       const messages = error.errors.map(e => e.message).join('; ');
@@ -424,11 +486,9 @@ exports.deleteRoom = async (req, res) => {
       });
     }
     if (error instanceof UniqueConstraintError) {
-      return res
-        .status(409)
-        .json({
-          error: error.errors[0]?.message || 'Conflicto de integridad.',
-        });
+      return res.status(409).json({
+        error: error.errors[0]?.message || 'Conflicto de integridad.',
+      });
     }
     if (error instanceof ValidationError) {
       const messages = error.errors.map(e => e.message).join('; ');

@@ -2,7 +2,6 @@
 const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
   class Event extends Model {
-    // Agregamos propiedades estáticas para el status
     static get STATUS() {
       return {
         PENDING: 'pending',
@@ -11,18 +10,16 @@ module.exports = (sequelize, DataTypes) => {
       };
     }
     static associate(models) {
-      // Relación "muchos a uno" con User
       Event.belongsTo(models.User, {
-        foreignKey: 'userId', // Llave foránea en Event
-        as: 'user', // Alias para la relación
-        onDelete: 'CASCADE', // Si el usuario se elimina, elimina el evento
+        foreignKey: 'userId',
+        as: 'user',
+        onDelete: 'CASCADE',
       });
 
-      // Relación "muchos a uno" con Room
       Event.belongsTo(models.Room, {
-        foreignKey: 'roomId', // Llave foránea en Event
-        as: 'room', // Alias para la relación
-        onDelete: 'SET NULL', // Si la sala se elimina, no elimina el evento pero establece roomId en null
+        foreignKey: 'roomId',
+        as: 'room',
+        onDelete: 'SET NULL',
       });
     }
   }
@@ -30,7 +27,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       name: {
         type: DataTypes.STRING,
-        allowNull: false, // Este campo es obligatorio
+        allowNull: false,
       },
       description: DataTypes.TEXT,
       comments: DataTypes.TEXT,
@@ -51,8 +48,8 @@ module.exports = (sequelize, DataTypes) => {
           Event.STATUS.PENDING,
           Event.STATUS.APPROVED,
           Event.STATUS.DENIED
-        ), // Solo permite los valores 'pending','approved',"denied"
-        allowNull: false, // Campo obligatorio
+        ),
+        allowNull: false,
       },
       eventFrom: {
         type: DataTypes.DATE,
@@ -75,16 +72,16 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
       },
       programPath: {
-        type: DataTypes.STRING, // Ruta del archivo del programa
+        type: DataTypes.STRING,
         allowNull: true,
       },
       agreementPath: {
-        type: DataTypes.STRING, // Ruta del archivo del contrato
+        type: DataTypes.STRING,
         allowNull: true,
       },
       imagePath: {
         type: DataTypes.STRING,
-        allowNull: true, // Puede ser nulo si no se sube imagen
+        allowNull: true,
       },
       bannerPath: {
         type: DataTypes.STRING,

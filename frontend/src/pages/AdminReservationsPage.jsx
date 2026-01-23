@@ -523,7 +523,7 @@ const AdminReservationsPage = () => {
     const isUploading = uploadingAgreementId === event.id;
     const fileInputRef = useRef(null);
 
-    const shouldOpenUpward = index > 0;
+    const shouldOpenUpward = index > 2;
 
     const toggleMenu = e => {
       e.stopPropagation();
@@ -1054,15 +1054,15 @@ const AdminReservationsPage = () => {
                             event.status === 'approved'
                               ? 'bg-green-100 text-green-800'
                               : event.status === 'denied'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-yellow-100 text-yellow-800'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-yellow-100 text-yellow-800'
                           }`}
                         >
                           {event.status === 'approved'
                             ? 'Aprobado'
                             : event.status === 'denied'
-                            ? 'Rechazado'
-                            : 'Pendiente'}
+                              ? 'Rechazado'
+                              : 'Pendiente'}
                         </span>
                       </div>
                     </td>
@@ -1159,15 +1159,15 @@ const AdminReservationsPage = () => {
                         event.status === 'approved'
                           ? 'bg-green-100 text-green-800'
                           : event.status === 'denied'
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-yellow-100 text-yellow-800'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-yellow-100 text-yellow-800'
                       }`}
                     >
                       {event.status === 'approved'
                         ? 'Aprobado'
                         : event.status === 'denied'
-                        ? 'Denegado'
-                        : 'Pendiente'}
+                          ? 'Denegado'
+                          : 'Pendiente'}
                     </span>
 
                     {/* Botón de opciones */}

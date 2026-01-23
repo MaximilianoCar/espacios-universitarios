@@ -8,7 +8,17 @@ import HeroSection from '../components/HeroSection';
 import Swal from '../utils/swal';
 import defaultBanner from '../assets/ucvfondo.jpg';
 import { CameraIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
-import { FaArrowLeft } from 'react-icons/fa';
+import {
+  FaArrowLeft,
+  FaWheelchair,
+  FaWifi,
+  FaToilet,
+  FaMicrophoneAlt,
+  FaVideo,
+  FaMoneyBillWave,
+  FaExchangeAlt,
+  FaBox,
+} from 'react-icons/fa';
 import getMediaUrl from '../utils/media';
 
 const RoomDetailsPage = () => {
@@ -135,6 +145,15 @@ const RoomDetailsPage = () => {
       formData.append('location', room.location);
       formData.append('staffowner', room.staffowner);
       formData.append('isInCUC', room.isInCUC);
+      formData.append('cost', room.cost || '0');
+      formData.append('isAccessible', room.isAccessible || false);
+      formData.append('canExonerate', room.canExonerate || false);
+      formData.append('hasBathrooms', room.hasBathrooms || false);
+      formData.append('hasInternet', room.hasInternet || false);
+      formData.append('hasAudioEquipment', room.hasAudioEquipment || false);
+      formData.append('hasVideoEquipment', room.hasVideoEquipment || false);
+      formData.append('acceptsTransfer', room.acceptsTransfer || false);
+      formData.append('acceptsMaterials', room.acceptsMaterials || false);
 
       Swal.fire({
         title: 'Subiendo imagen...',
@@ -173,6 +192,91 @@ const RoomDetailsPage = () => {
     input.click();
   };
 
+  // Función para renderizar las etiquetas de características sobre la imagen
+  const renderFeatureTags = room => {
+    const features = [];
+
+    // Definir las características y sus iconos con texto corto
+    const featureConfig = [
+      {
+        key: 'isAccessible',
+        icon: <FaWheelchair />,
+        text: 'Accesible',
+        tooltip: 'Accesible para personas con discapacidad motriz',
+      },
+      {
+        key: 'hasInternet',
+        icon: <FaWifi />,
+        text: 'Wi-Fi',
+        tooltip: 'Disponibilidad deonectividad',
+      },
+      {
+        key: 'hasBathrooms',
+        icon: <FaToilet />,
+        text: 'Baños',
+        tooltip: 'Disponibilidad de sanitarios',
+      },
+      {
+        key: 'hasAudioEquipment',
+        icon: <FaMicrophoneAlt />,
+        text: 'Audio',
+        tooltip: 'Equipo de audio disponible',
+      },
+      {
+        key: 'hasVideoEquipment',
+        icon: <FaVideo />,
+        text: 'Video',
+        tooltip: 'Equipo de video disponible',
+      },
+      //{
+      //  key: 'canExonerate',
+      //  icon: <FaMoneyBillWave />,
+      //  text: 'Exonerable',
+      //  tooltip: 'Posibilidad de exoneración de pago',
+      //},
+      {
+        key: 'acceptsTransfer',
+        icon: <FaExchangeAlt />,
+        text: 'Transferencia',
+        tooltip: 'Acepta transferencia como método de pago',
+      },
+      {
+        key: 'acceptsMaterials',
+        icon: <FaBox />,
+        text: 'Materiales',
+        tooltip: 'Acepta materiales como método de pago',
+      },
+    ];
+
+    // Solo agregar características que estén en true
+    featureConfig.forEach(feature => {
+      if (room[feature.key]) {
+        features.push(
+          <div
+            key={feature.key}
+            className="bg-blue-100 text-blue-800 px-1 py-0.5 sm:px-3 sm:py-1 rounded-full text-[10px] sm:text-xs flex items-center mr-1 mb-1 sm:mb-2 group relative"
+            title={feature.tooltip}
+          >
+            <span className="text-sm sm:text-base mr-1 sm:mr-2">
+              {feature.icon}
+            </span>
+            <span className="hidden sm:inline">{feature.text}</span>
+            <div className="absolute bottom-full left-0 mb-1 hidden group-hover:block w-56 z-10">
+              <div className="bg-gray-800 text-white text-xs rounded py-2 px-3 whitespace-normal text-left shadow-lg">
+                {feature.tooltip}
+                <div className="absolute top-full left-4 transform -mt-1">
+                  <div className="border-4 border-transparent border-t-gray-800"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+    });
+
+    return features;
+  };
+
   const handleUpdateRoom = async () => {
     try {
       // obtener dependencias disponibles
@@ -192,37 +296,36 @@ const RoomDetailsPage = () => {
       const { value: formValues } = await Swal.fire({
         title: 'Actualizar Sala',
         html: `
-          <div class="text-left space-y-4 max-h-96 overflow-y-auto">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Nombre de la Sala</label>
-              <input id="swal-name" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${
-                room.name || ''
-              }" placeholder="Nombre de la sala">
+          <div class="text-left space-y-4 max-h-[80vh] overflow-y-auto pr-2">
+            <!-- Sección de información básica -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Nombre de la Sala</label>
+                <input id="swal-name" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${
+                  room.name || ''
+                }" placeholder="Nombre de la sala">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Costo ($)</label>
+                <input id="swal-cost" type="text" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${
+                  room.cost || '0'
+                }" placeholder="Ej: 100.00">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Capacidad</label>
+                <input id="swal-capacity" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${
+                  room.capacity || ''
+                }" placeholder="Capacidad">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Ubicación</label>
+                <input id="swal-location" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${
+                  room.location || ''
+                }" placeholder="Ubicación">
+              </div>
             </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
-              <textarea id="swal-description" class="w-full px-3 py-2 border border-gray-300 rounded-md" rows="4" placeholder="Descripción de la sala">${
-                room.description || ''
-              }</textarea>
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Capacidad</label>
-              <input id="swal-capacity" type="number" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${
-                room.capacity || ''
-              }" placeholder="Capacidad">
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Ubicación</label>
-              <input id="swal-location" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${
-                room.location || ''
-              }" placeholder="Ubicación">
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Encargado</label>
-              <input id="swal-staffowner" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${
-                room.staffowner || ''
-              }" placeholder="Encargado">
-            </div>
+
+            <!-- Dependencia -->
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Dependencia</label>
               <div class="flex items-center space-x-2">
@@ -232,11 +335,111 @@ const RoomDetailsPage = () => {
                 </select>
               </div>
             </div>
-            <div class="flex items-center">
+
+            <!-- Encargado y Descripción -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Encargado</label>
+              <input id="swal-staffowner" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${
+                room.staffowner || ''
+              }" placeholder="Encargado">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+              <textarea id="swal-description" class="w-full px-3 py-2 border border-gray-300 rounded-md" rows="4" placeholder="Descripción de la sala">${
+                room.description || ''
+              }</textarea>
+            </div>
+
+            <!-- Sección de características -->
+            <div class="border-t pt-4">
+              <h3 class="text-lg font-medium text-gray-700 mb-3">Características del Espacio</h3>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="flex items-center">
+                  <input id="swal-isAccessible" type="checkbox" class="h-4 w-4" ${
+                    room.isAccessible ? 'checked' : ''
+                  }>
+                  <label for="swal-isAccessible" class="ml-2 block text-sm text-gray-700 flex items-center">
+                    <span class="mr-1"></span> Accesibilidad motriz
+                  </label>
+                </div>
+                <div class="flex items-center">
+                  <input id="swal-hasBathrooms" type="checkbox" class="h-4 w-4" ${
+                    room.hasBathrooms ? 'checked' : ''
+                  }>
+                  <label for="swal-hasBathrooms" class="ml-2 block text-sm text-gray-700 flex items-center">
+                    <span class="mr-1"></span> Baños disponibles
+                  </label>
+                </div>
+                <div class="flex items-center">
+                  <input id="swal-hasInternet" type="checkbox" class="h-4 w-4" ${
+                    room.hasInternet ? 'checked' : ''
+                  }>
+                  <label for="swal-hasInternet" class="ml-2 block text-sm text-gray-700 flex items-center">
+                    <span class="mr-1"></span> Conexión a Internet
+                  </label>
+                </div>
+                <div class="flex items-center">
+                  <input id="swal-hasAudioEquipment" type="checkbox" class="h-4 w-4" ${
+                    room.hasAudioEquipment ? 'checked' : ''
+                  }>
+                  <label for="swal-hasAudioEquipment" class="ml-2 block text-sm text-gray-700 flex items-center">
+                    <span class="mr-1"></span> Equipo de audio
+                  </label>
+                </div>
+                <div class="flex items-center">
+                  <input id="swal-hasVideoEquipment" type="checkbox" class="h-4 w-4" ${
+                    room.hasVideoEquipment ? 'checked' : ''
+                  }>
+                  <label for="swal-hasVideoEquipment" class="ml-2 block text-sm text-gray-700 flex items-center">
+                    <span class="mr-1"></span> Equipo de video
+                  </label>
+                </div>
+                <div class="flex items-center">
+                  <input id="swal-canExonerate" type="checkbox" class="h-4 w-4" ${
+                    room.canExonerate ? 'checked' : ''
+                  }>
+                  <label for="swal-canExonerate" class="ml-2 block text-sm text-gray-700 flex items-center">
+                    <span class="mr-1"></span> Permite exoneración
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sección de métodos de pago -->
+            <div class="border-t pt-4">
+              <h3 class="text-lg font-medium text-gray-700 mb-3">Métodos de Pago Aceptados</h3>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="flex items-center">
+                  <input id="swal-acceptsTransfer" type="checkbox" class="h-4 w-4" ${
+                    room.acceptsTransfer ? 'checked' : ''
+                  }>
+                  <label for="swal-acceptsTransfer" class="ml-2 block text-sm text-gray-700 flex items-center">
+                    <span class="mr-1"></span> Transferencia
+                  </label>
+                </div>
+                <div class="flex items-center">
+                  <input id="swal-acceptsMaterials" type="checkbox" class="h-4 w-4" ${
+                    room.acceptsMaterials ? 'checked' : ''
+                  }>
+                  <label for="swal-acceptsMaterials" class="ml-2 block text-sm text-gray-700 flex items-center">
+                    <span class="mr-1"></span> Materiales
+                  </label>
+                </div>
+              </div>
+              <p id="payment-validation" class="text-red-500 text-xs mt-2 hidden">
+                Debe seleccionar al menos un método de pago
+              </p>
+            </div>
+
+            <!-- Checkbox de CUC -->
+            <div class="flex items-center border-t pt-4">
               <input id="swal-isInCUC" type="checkbox" class="h-4 w-4" ${
                 room.isInCUC ? 'checked' : ''
               }>
-              <label for="swal-isInCUC" class="ml-2 block text-sm text-gray-700">¿Está en la Ciudad Universitaria de Caracas?</label>
+              <label for="swal-isInCUC" class="ml-2 block text-sm text-gray-700">
+                ¿Está en la Ciudad Universitaria de Caracas?
+              </label>
             </div>
           </div>
         `,
@@ -299,6 +502,32 @@ const RoomDetailsPage = () => {
               }
             });
           }
+
+          // Validación en tiempo real de métodos de pago
+          const transferCheckbox = document.getElementById(
+            'swal-acceptsTransfer'
+          );
+          const materialsCheckbox = document.getElementById(
+            'swal-acceptsMaterials'
+          );
+          const validationMessage =
+            document.getElementById('payment-validation');
+
+          const validatePaymentMethods = () => {
+            const hasTransfer = transferCheckbox.checked;
+            const hasMaterials = materialsCheckbox.checked;
+
+            if (!hasTransfer && !hasMaterials) {
+              validationMessage.classList.remove('hidden');
+              return false;
+            } else {
+              validationMessage.classList.add('hidden');
+              return true;
+            }
+          };
+
+          transferCheckbox.addEventListener('change', validatePaymentMethods);
+          materialsCheckbox.addEventListener('change', validatePaymentMethods);
         },
         preConfirm: () => {
           const name = document.getElementById('swal-name').value;
@@ -308,9 +537,35 @@ const RoomDetailsPage = () => {
           const staffowner = document.getElementById('swal-staffowner').value;
           const isInCUC = document.getElementById('swal-isInCUC').checked;
           const dependencyId = document.getElementById('swal-dependency').value;
+          const cost = document.getElementById('swal-cost').value;
 
+          // Nuevos campos booleanos
+          const isAccessible =
+            document.getElementById('swal-isAccessible').checked;
+          const hasBathrooms =
+            document.getElementById('swal-hasBathrooms').checked;
+          const hasInternet =
+            document.getElementById('swal-hasInternet').checked;
+          const hasAudioEquipment = document.getElementById(
+            'swal-hasAudioEquipment'
+          ).checked;
+          const hasVideoEquipment = document.getElementById(
+            'swal-hasVideoEquipment'
+          ).checked;
+          const canExonerate =
+            document.getElementById('swal-canExonerate').checked;
+          const acceptsTransfer = document.getElementById(
+            'swal-acceptsTransfer'
+          ).checked;
+          const acceptsMaterials = document.getElementById(
+            'swal-acceptsMaterials'
+          ).checked;
+
+          // Validaciones básicas
           if (!name || !description || !capacity || !location || !staffowner) {
-            Swal.showValidationMessage('Todos los campos son obligatorios');
+            Swal.showValidationMessage(
+              'Todos los campos básicos son obligatorios'
+            );
             return false;
           }
 
@@ -326,6 +581,20 @@ const RoomDetailsPage = () => {
             return false;
           }
 
+          // Validar que al menos un método de pago esté seleccionado
+          if (!acceptsTransfer && !acceptsMaterials) {
+            Swal.showValidationMessage(
+              'Debe seleccionar al menos un método de pago'
+            );
+            return false;
+          }
+
+          // Validar costo (opcional, pero si se ingresa debe ser numérico)
+          if (cost && isNaN(parseFloat(cost))) {
+            Swal.showValidationMessage('El costo debe ser un número válido');
+            return false;
+          }
+
           return {
             name,
             description,
@@ -334,6 +603,15 @@ const RoomDetailsPage = () => {
             staffowner,
             isInCUC,
             dependencyId,
+            cost: cost || '0',
+            isAccessible,
+            hasBathrooms,
+            hasInternet,
+            hasAudioEquipment,
+            hasVideoEquipment,
+            canExonerate,
+            acceptsTransfer,
+            acceptsMaterials,
           };
         },
       });
@@ -380,8 +658,11 @@ const RoomDetailsPage = () => {
     return (
       <div className="min-h-screen grid grid-rows-[auto_1fr_auto]">
         <Header />
-        <div className="container mx-auto my-8">
-          <p>Cargando sala...</p>
+        <div className="container mx-auto my-8 flex justify-center items-center min-h-[50vh]">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+            <p className="text-gray-600">Cargando detalles de la sala...</p>
+          </div>
         </div>
         <Footer />
       </div>
@@ -393,7 +674,20 @@ const RoomDetailsPage = () => {
       <div className="min-h-screen grid grid-rows-[auto_1fr_auto]">
         <Header />
         <div className="container mx-auto my-8">
-          <p>Sala no encontrada.</p>
+          <div className="text-center py-12">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">
+              Sala no encontrada
+            </h2>
+            <p className="text-gray-600 mb-6">
+              La sala que buscas no existe o ha sido eliminada.
+            </p>
+            <button
+              onClick={() => navigate('/rooms')}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+            >
+              Volver a salas
+            </button>
+          </div>
         </div>
         <Footer />
       </div>
@@ -421,16 +715,40 @@ const RoomDetailsPage = () => {
               src={
                 room?.imagePath
                   ? getMediaUrl(room.imagePath)
-                  : 'https://via.placeholder.com/600x400'
+                  : 'https://via.placeholder.com/600x400?text=Sin+Imagen'
               }
               alt={room?.name || 'Sala'}
               className="w-full h-full object-cover"
             />
+
+            {/* Etiqueta CUC con tooltip - Aumentada */}
+            {room.isInCUC && (
+              <div
+                className="absolute top-2 right-2 bg-green-100 text-green-800 px-3 py-2 rounded-full text-sm font-semibold group relative"
+                title="Espacio ubicado en el Centro Urbano de la UCV"
+              >
+                CUC
+                <div className="absolute bottom-full right-0 mb-1 hidden group-hover:block w-48 z-10">
+                  <div className="bg-gray-800 text-white text-xs rounded py-2 px-3 whitespace-normal text-left shadow-lg">
+                    Espacio ubicado en el Centro Urbano de la UCV
+                    <div className="absolute top-full right-4 transform -mt-1">
+                      <div className="border-4 border-transparent border-t-gray-800"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Contenedor de etiquetas de características en la parte inferior */}
+            <div className="absolute bottom-2 left-2 right-2 flex flex-wrap">
+              {renderFeatureTags(room)}
+            </div>
+
             {canEdit && (
-              <div className="absolute top-2 right-2">
+              <div className="absolute top-2 left-2">
                 <button
                   onClick={handleUploadImage}
-                  className="bg-white/90 hover:bg-white text-gray-800 px-2 py-1 rounded-lg shadow transition-all duration-200 flex items-center space-x-1 border border-gray-200 text-xs"
+                  className="bg-white/90 hover:bg-white text-gray-800 px-3 py-1.5 rounded-lg shadow transition-all duration-200 flex items-center space-x-1 border border-gray-200 text-sm"
                 >
                   <PencilSquareIcon className="h-4 w-4 text-blue-500" />
                   <span className="hidden sm:inline">Cambiar imagen</span>
@@ -472,6 +790,16 @@ const RoomDetailsPage = () => {
                 </div>
                 <div>
                   <strong className="text-gray-700 text-sm lg:text-base">
+                    Costo:
+                  </strong>
+                  <p className="text-gray-600 text-sm lg:text-base">
+                    {room?.cost && room.cost !== '0'
+                      ? `$${room.cost}`
+                      : 'Gratuito'}
+                  </p>
+                </div>
+                <div>
+                  <strong className="text-gray-700 text-sm lg:text-base">
                     Ubicación:
                   </strong>
                   <p className="text-gray-600 text-sm lg:text-base">
@@ -496,6 +824,16 @@ const RoomDetailsPage = () => {
                     {room?.staffowner}
                   </p>
                 </div>
+                {room?.dependencies && room.dependencies.length > 0 && (
+                  <div>
+                    <strong className="text-gray-700 text-sm lg:text-base">
+                      Dependencia:
+                    </strong>
+                    <p className="text-gray-600 text-sm lg:text-base">
+                      {room.dependencies.map(dep => dep.name).join(', ')}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 

@@ -15,7 +15,7 @@ app.set('trust proxy', true);
 
 const allowedOriginsEnv =
   process.env.ALLOWED_ORIGINS ||
-  'http://localhost:5173,https://l5z18rgq-3000.brs.devtunnels.ms,http://localhost:3000';
+  'http://localhost:5173,https://l5z18rgq-3000.brs.devtunnels.ms,http://localhost:3000,https://8lvctg3s-3000.brs.devtunnels.ms';
 const allowedOrigins = allowedOriginsEnv.split(',').map(s => s.trim());
 
 const corsOptions = {
@@ -45,6 +45,11 @@ app.use(express.json());
 
 // Middleware para servir archivos estáticos
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+app.use((req, res, next) => {
+  res.setHeader('bypass-tunnel-reminder', 'true');
+  next();
+});
 
 // Health Check (ya existía)
 app.get('/health', (req, res) => {

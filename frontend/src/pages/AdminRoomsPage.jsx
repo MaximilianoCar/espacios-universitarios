@@ -12,6 +12,15 @@ import {
   FaEllipsisV,
   FaInfoCircle,
   FaBuilding,
+  FaWheelchair,
+  FaWifi,
+  FaToilet,
+  FaMicrophoneAlt,
+  FaVideo,
+  FaMoneyBillWave,
+  FaExchangeAlt,
+  FaBox,
+  FaDollarSign,
 } from 'react-icons/fa';
 import { IoInformationCircleOutline } from 'react-icons/io5';
 import Header from '../components/Header';
@@ -34,11 +43,10 @@ const AdminRoomsPage = () => {
   const [currentSearch, setCurrentSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [openMenuId, setOpenMenuId] = useState(null);
 
   // para modales
-  const [showDescriptionModal, setShowDescriptionModal] = useState(false);
-  const [selectedDescription, setSelectedDescription] = useState('');
+  const [showDataModal, setShowDataModal] = useState(false);
+  const [selectedRoomData, setSelectedRoomData] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
 
@@ -47,6 +55,8 @@ const AdminRoomsPage = () => {
   const [showUpdateRoomModal, setShowUpdateRoomModal] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [showManageDepsModal, setShowManageDepsModal] = useState(false);
+
+  const [openMenuId, setOpenMenuId] = useState(null);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -124,7 +134,7 @@ const AdminRoomsPage = () => {
         room.location
       } ${room.staffowner} ${
         room.dependencies?.map(d => d.name).join(' ') || ''
-      }`.toLowerCase();
+      } ${room.cost || ''}`.toLowerCase();
 
       return searchableFields.includes(lowerCaseTerm);
     });
@@ -188,14 +198,14 @@ const AdminRoomsPage = () => {
   };
 
   // Funciones para los modales
-  const handleShowDescription = description => {
-    setSelectedDescription(description);
-    setShowDescriptionModal(true);
+  const handleShowData = room => {
+    setSelectedRoomData(room);
+    setShowDataModal(true);
   };
 
-  const handleCloseDescriptionModal = () => {
-    setShowDescriptionModal(false);
-    setSelectedDescription('');
+  const handleCloseDataModal = () => {
+    setShowDataModal(false);
+    setSelectedRoomData(null);
   };
 
   const handleImageClick = imagePath => {
@@ -215,7 +225,79 @@ const AdminRoomsPage = () => {
     setOpenMenuId(null); // Cerrar menú de acciones si está abierto
   };
 
-  // Componente del menú de acciones (similar al de AdminReservationsPage)
+  // Función para renderizar características
+  const renderFeatures = room => {
+    const features = [];
+
+    if (room.isAccessible) {
+      features.push(
+        <div key="accessible" className="flex items-center text-green-700">
+          <FaWheelchair className="mr-2" /> Accesible
+        </div>
+      );
+    }
+    if (room.hasInternet) {
+      features.push(
+        <div key="internet" className="flex items-center text-blue-700">
+          <FaWifi className="mr-2" /> Internet
+        </div>
+      );
+    }
+    if (room.hasBathrooms) {
+      features.push(
+        <div key="bathrooms" className="flex items-center text-purple-700">
+          <FaToilet className="mr-2" /> Baños
+        </div>
+      );
+    }
+    if (room.hasAudioEquipment) {
+      features.push(
+        <div key="audio" className="flex items-center text-yellow-700">
+          <FaMicrophoneAlt className="mr-2" /> Audio
+        </div>
+      );
+    }
+    if (room.hasVideoEquipment) {
+      features.push(
+        <div key="video" className="flex items-center text-red-700">
+          <FaVideo className="mr-2" /> Video
+        </div>
+      );
+    }
+    if (room.canExonerate) {
+      features.push(
+        <div key="exonerate" className="flex items-center text-green-700">
+          <FaMoneyBillWave className="mr-2" /> Exonerable
+        </div>
+      );
+    }
+
+    return features;
+  };
+
+  // Función para renderizar métodos de pago
+  const renderPaymentMethods = room => {
+    const methods = [];
+
+    if (room.acceptsTransfer) {
+      methods.push(
+        <div key="transfer" className="flex items-center text-blue-700">
+          <FaExchangeAlt className="mr-2" /> Transferencia
+        </div>
+      );
+    }
+    if (room.acceptsMaterials) {
+      methods.push(
+        <div key="materials" className="flex items-center text-orange-700">
+          <FaBox className="mr-2" /> Materiales
+        </div>
+      );
+    }
+
+    return methods;
+  };
+
+  // Componente del menú de acciones
   const ActionMenu = ({ room, index }) => {
     const isMenuOpen = openMenuId === room.id;
     const menuRef = useRef(null);
@@ -266,12 +348,18 @@ const AdminRoomsPage = () => {
     );
   };
 
-  // Obtener nombre de dependencia (puede tener múltiples dependencias, tomamos la primera)
+  // Obtener nombre de dependencia
   const getDependencyName = room => {
     if (!room.dependencies || room.dependencies.length === 0) {
       return 'Sin dependencia';
     }
     return room.dependencies[0].name;
+  };
+
+  // Función para formatear el costo
+  const formatCost = cost => {
+    if (!cost || cost === '0') return 'Gratuito';
+    return `$${cost}`;
   };
 
   if (loading) {
@@ -320,7 +408,8 @@ const AdminRoomsPage = () => {
                 onClick={() => setShowManageDepsModal(true)}
                 className="flex-1 lg:flex-none bg-gray-800 hover:bg-gray-900 text-white px-4 py-3 rounded-lg flex items-center justify-center transition duration-200"
               >
-                <FaBuilding className="mr-2" /> Dependencias
+                <FaUsers className="mr-2" size={14} />
+                <span className="text-sm">Dependencias</span>
               </button>
             )}
 
@@ -381,11 +470,10 @@ const AdminRoomsPage = () => {
               <tr className="bg-blue-100">
                 <th className="py-3 px-4 border-b text-left">Nombre</th>
                 <th className="py-3 px-4 border-b text-center">Imagen</th>
-                <th className="py-3 px-4 border-b text-center">Descripción</th>
+                <th className="py-3 px-4 border-b text-center">Datos</th>
                 <th className="py-3 px-4 border-b text-center">Capacidad</th>
-                <th className="py-3 px-4 border-b text-center">Ubicación</th>
+                <th className="py-3 px-4 border-b text-center">Costo</th>
                 <th className="py-3 px-4 border-b text-center">Dependencia</th>
-                <th className="py-3 px-4 border-b text-center">CUC</th>
                 <th className="py-3 px-4 border-b text-center">Encargado</th>
                 <th className="py-3 px-4 border-b text-center">Opciones</th>
               </tr>
@@ -417,12 +505,12 @@ const AdminRoomsPage = () => {
                       )}
                     </td>
 
-                    {/* Descripción */}
+                    {/* Botón de datos */}
                     <td className="py-3 px-4 border-b text-center">
                       <button
-                        onClick={() => handleShowDescription(room.description)}
+                        onClick={() => handleShowData(room)}
                         className="text-blue-600 hover:text-blue-800 transition-colors"
-                        title="Ver descripción"
+                        title="Ver datos completos"
                       >
                         <IoInformationCircleOutline size={22} />
                       </button>
@@ -431,8 +519,18 @@ const AdminRoomsPage = () => {
                     <td className="py-3 px-4 border-b text-center">
                       {room.capacity}
                     </td>
+
+                    {/* Costo */}
                     <td className="py-3 px-4 border-b text-center">
-                      {room.location}
+                      <div className="flex items-center justify-center">
+                        <FaDollarSign
+                          className="mr-1 text-green-600"
+                          size={14}
+                        />
+                        <span className="font-medium text-gray-800">
+                          {formatCost(room.cost)}
+                        </span>
+                      </div>
                     </td>
 
                     {/* Dependencia */}
@@ -442,19 +540,6 @@ const AdminRoomsPage = () => {
                           {getDependencyName(room)}
                         </span>
                       </div>
-                    </td>
-
-                    {/* CUC */}
-                    <td className="py-3 px-4 border-b text-center">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          room.isInCUC
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}
-                      >
-                        {room.isInCUC ? 'Sí' : 'No'}
-                      </span>
                     </td>
 
                     <td className="py-3 px-4 border-b text-center">
@@ -469,13 +554,13 @@ const AdminRoomsPage = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="9" className="py-8 text-center text-gray-500">
+                  <td colSpan="8" className="py-8 text-center text-gray-500">
                     No hay espacios disponibles.
                   </td>
                 </tr>
               )}
               <tr className="bg-gray-50 hover:bg-gray-100 transition-colors">
-                <td colSpan="11" className="py-8 px-4 text-center">
+                <td colSpan="8" className="py-8 px-4 text-center">
                   <div className="flex justify-center items-center">
                     <button
                       onClick={() => navigate('/rooms')}
@@ -505,25 +590,20 @@ const AdminRoomsPage = () => {
                       {room.name}
                     </h3>
                     <div className="flex items-center text-sm text-gray-600 mb-1">
-                      <FaMapPin className="mr-2 text-blue-500" size={14} />
-                      <span>{room.location}</span>
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600">
                       <FaBuilding className="mr-2 text-purple-500" size={14} />
                       <span>{getDependencyName(room)}</span>
+                    </div>
+                    <div className="flex items-center text-sm text-gray-600">
+                      <FaUser className="mr-2 text-blue-500" size={14} />
+                      <span>{room.staffowner}</span>
                     </div>
                   </div>
 
                   <div className="flex flex-col items-end space-y-2">
-                    <span
-                      className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                        room.isInCUC
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {room.isInCUC ? 'CUC' : 'No CUC'}
-                    </span>
+                    <div className="flex items-center text-green-600 font-semibold">
+                      <FaDollarSign className="mr-1" size={14} />
+                      <span>{formatCost(room.cost)}</span>
+                    </div>
 
                     {/* Menú de opciones */}
                     <ActionMenu room={room} index={index} />
@@ -549,19 +629,19 @@ const AdminRoomsPage = () => {
                     <span>Capacidad: {room.capacity}</span>
                   </div>
                   <div className="flex items-center text-sm text-gray-600">
-                    <FaUser className="mr-2 text-purple-500" size={14} />
-                    <span>Encargado: {room.staffowner}</span>
+                    <FaMapPin className="mr-2 text-red-500" size={14} />
+                    <span>Ubicación: {room.location}</span>
                   </div>
                 </div>
 
-                {/* Botón de descripción */}
+                {/* Botón de datos */}
                 <div className="mb-3">
                   <button
-                    onClick={() => handleShowDescription(room.description)}
+                    onClick={() => handleShowData(room)}
                     className="w-full flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
                   >
                     <FaInfoCircle className="mb-1" size={14} />
-                    <span>Descripción</span>
+                    <span>Ver Datos</span>
                   </button>
                 </div>
 
@@ -595,24 +675,135 @@ const AdminRoomsPage = () => {
       </div>
       <Footer />
 
-      {/* MODALES DE DESCRIPCIÓN E IMAGEN */}
-      {showDescriptionModal && (
-        <RenderModal onClose={handleCloseDescriptionModal}>
+      {/* MODAL DE DATOS */}
+      {showDataModal && selectedRoomData && (
+        <RenderModal onClose={handleCloseDataModal}>
           <div className="p-5 border-b border-gray-200">
             <h2 className="text-lg font-bold text-gray-800">
-              Descripción del Espacio
+              Datos del Espacio: {selectedRoomData.name}
             </h2>
           </div>
-          <div className="flex-1 p-5 overflow-y-auto">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
-                {selectedDescription || 'No hay descripción disponible.'}
-              </p>
+          <div className="flex-1 p-5 overflow-y-auto max-h-[70vh]">
+            <div className="space-y-4">
+              {/* Descripción */}
+              <div>
+                <h3 className="font-medium text-gray-700 mb-2">Descripción:</h3>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                    {selectedRoomData.description ||
+                      'No hay descripción disponible.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Ubicación y CUC */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h3 className="font-medium text-gray-700 mb-2">Ubicación:</h3>
+                  <div className="bg-blue-50 rounded-lg p-3">
+                    <p className="text-sm text-gray-700">
+                      {selectedRoomData.location}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-700 mb-2">CUC:</h3>
+                  <div
+                    className={`rounded-lg p-3 ${selectedRoomData.isInCUC ? 'bg-green-50' : 'bg-red-50'}`}
+                  >
+                    <p
+                      className={`text-sm font-medium ${selectedRoomData.isInCUC ? 'text-green-700' : 'text-red-700'}`}
+                    >
+                      {selectedRoomData.isInCUC
+                        ? 'Sí, ubicado en la Ciudad Universitaria de Caracas'
+                        : 'No ubicado en CUC'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Costo */}
+              <div>
+                <h3 className="font-medium text-gray-700 mb-2">Costo:</h3>
+                <div className="bg-green-50 rounded-lg p-3">
+                  <div className="flex items-center">
+                    <FaDollarSign className="mr-2 text-green-600" />
+                    <span className="text-lg font-semibold text-gray-800">
+                      {formatCost(selectedRoomData.cost)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Características del espacio */}
+              <div>
+                <h3 className="font-medium text-gray-700 mb-2">
+                  Características:
+                </h3>
+                <div className="bg-purple-50 rounded-lg p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {renderFeatures(selectedRoomData).length > 0 ? (
+                      renderFeatures(selectedRoomData)
+                    ) : (
+                      <p className="text-gray-500 text-sm">
+                        No hay características especiales
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Métodos de pago */}
+              <div>
+                <h3 className="font-medium text-gray-700 mb-2">
+                  Métodos de Pago Aceptados:
+                </h3>
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {renderPaymentMethods(selectedRoomData).length > 0 ? (
+                      renderPaymentMethods(selectedRoomData)
+                    ) : (
+                      <p className="text-gray-500 text-sm">
+                        No se han especificado métodos de pago
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Información adicional */}
+              <div>
+                <h3 className="font-medium text-gray-700 mb-2">
+                  Información Adicional:
+                </h3>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Capacidad:</p>
+                      <p className="font-medium">
+                        {selectedRoomData.capacity} personas
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Dependencia:</p>
+                      <p className="font-medium">
+                        {getDependencyName(selectedRoomData)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Encargado:</p>
+                      <p className="font-medium">
+                        {selectedRoomData.staffowner}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           <div className="p-5 border-t border-gray-200">
             <button
-              onClick={handleCloseDescriptionModal}
+              onClick={handleCloseDataModal}
               className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-medium transition-colors text-sm"
             >
               Cerrar
@@ -621,6 +812,7 @@ const AdminRoomsPage = () => {
         </RenderModal>
       )}
 
+      {/* MODAL DE IMAGEN */}
       {showImageModal && (
         <RenderModal onClose={handleCloseImageModal}>
           <div className="p-5 border-b border-gray-200">
@@ -646,6 +838,7 @@ const AdminRoomsPage = () => {
         </RenderModal>
       )}
 
+      {/* MODALES DE DEPENDENCIAS, CREACIÓN Y ACTUALIZACIÓN */}
       {showManageDepsModal && (
         <ManageDependenciesModal
           isOpen={showManageDepsModal}
@@ -656,7 +849,6 @@ const AdminRoomsPage = () => {
         />
       )}
 
-      {/* MODALES DE CREACIÓN Y ACTUALIZACIÓN */}
       {showCreateRoomModal && (
         <CreateRoomModal
           isOpen={showCreateRoomModal}
