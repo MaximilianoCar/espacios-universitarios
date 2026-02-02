@@ -17,6 +17,11 @@ import Swal from '../utils/swal';
 const AdminPendingRequestsPage = () => {
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [pageSize] = useState(25);
+  const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
@@ -36,13 +41,19 @@ const AdminPendingRequestsPage = () => {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  const fetchPendingUsers = () => {
+  const fetchPendingUsers = (page = 1, search = '') => {
     setLoading(true);
     axiosInstance
-      .get('/users/pending')
+      .get(
+        `/users/pending?page=${page}&pageSize=${pageSize}&search=${encodeURIComponent(search)}`
+      )
       .then(response => {
-        setUsers(response.data);
-        setFilteredUsers(response.data);
+        const data = response.data;
+        setUsers(data.users || []);
+        setFilteredUsers(data.users || []);
+        setCurrentPage(data.currentPage || 1);
+        setTotalPages(data.totalPages || 1);
+        setTotalUsers(data.totalUsers || data.users?.length || 0);
         setLoading(false);
         setError('');
       })
@@ -54,24 +65,26 @@ const AdminPendingRequestsPage = () => {
   };
 
   useEffect(() => {
-    fetchPendingUsers();
+    fetchPendingUsers(currentPage, searchTerm);
   }, []);
 
-  // Función para manejar la búsqueda
+  // Función para manejar la búsqueda (consulta al servidor)
   const handleSearch = term => {
-    if (term === '') {
-      setFilteredUsers(users);
-    } else {
-      const lowerCaseTerm = term.toLowerCase();
-      const filtered = users.filter(user => {
-        return (
-          user.name.toLowerCase().includes(lowerCaseTerm) ||
-          user.email.toLowerCase().includes(lowerCaseTerm) ||
-          (user.ci && user.ci.toLowerCase().includes(lowerCaseTerm))
-        );
-      });
-      setFilteredUsers(filtered);
-    }
+    setSearchTerm(term);
+    setCurrentPage(1);
+    fetchPendingUsers(1, term);
+  };
+
+  const handlePageChange = newPage => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setCurrentPage(newPage);
+    fetchPendingUsers(newPage, searchTerm);
+  };
+
+  const getUserType = user => {
+    if (user.isCompanyRepresentative) return 'company';
+    if (user.isExternal) return 'external';
+    return 'internal';
   };
 
   const handleApproveRequest = async (userId, userName) => {
@@ -107,6 +120,7 @@ const AdminPendingRequestsPage = () => {
         setFilteredUsers(prevUsers =>
           prevUsers.filter(user => user.id !== userId)
         );
+        setTotalUsers(prev => Math.max(0, prev - 1)); // Reducir el contador total
 
         Swal.fire(
           '¡Aprobado!',
@@ -211,6 +225,7 @@ const AdminPendingRequestsPage = () => {
         setFilteredUsers(prevUsers =>
           prevUsers.filter(user => user.id !== userId)
         );
+        setTotalUsers(prev => Math.max(0, prev - 1)); // Reducir el contador total
 
         Swal.fire(
           '¡Rechazado!',
@@ -288,9 +303,11 @@ const AdminPendingRequestsPage = () => {
               <thead>
                 <tr className="bg-blue-100">
                   <th className="py-3 px-4 text-left">Nombre</th>
+                  <th className="py-3 px-4 text-left">Tipo</th>
                   <th className="py-3 px-4 text-left">Correo Electrónico</th>
                   <th className="py-3 px-4 text-left">CI</th>
                   <th className="py-3 px-4 text-left">Documento</th>
+                  <th className="py-3 px-4 text-left">Empresa / RIF</th>
                   <th className="py-3 px-4 text-center">Acciones</th>
                 </tr>
               </thead>
@@ -304,6 +321,23 @@ const AdminPendingRequestsPage = () => {
                   >
                     <td className="py-3 px-4 border-b text-gray-800 font-medium">
                       {user.name}
+                    </td>
+                    <td className="py-3 px-4 border-b">
+                      {getUserType(user) === 'company' && (
+                        <span className="text-xs px-2 py-1 rounded bg-green-100 text-green-700">
+                          Empresa
+                        </span>
+                      )}
+                      {getUserType(user) === 'external' && (
+                        <span className="text-xs px-2 py-1 rounded bg-purple-100 text-purple-700">
+                          Externo
+                        </span>
+                      )}
+                      {getUserType(user) === 'internal' && (
+                        <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-700">
+                          Interno
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4 border-b">{user.email}</td>
                     <td className="py-3 px-4 border-b">{user.ci || 'N/A'}</td>
@@ -321,6 +355,19 @@ const AdminPendingRequestsPage = () => {
                         </a>
                       ) : (
                         <span className="text-gray-500">No subido</span>
+                      )}
+                    </td>
+
+                    <td className="py-3 px-4 border-b">
+                      {user.isCompanyRepresentative ? (
+                        <div className="text-sm">
+                          <div className="font-medium">{user.companyName}</div>
+                          <div className="text-xs text-gray-600">
+                            {user.companyRif}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">-</span>
                       )}
                     </td>
 
@@ -372,6 +419,23 @@ const AdminPendingRequestsPage = () => {
                     <p className="text-xs text-gray-600 break-words mb-1">
                       {user.email}
                     </p>
+                    <div className="mb-2">
+                      {getUserType(user) === 'company' && (
+                        <span className="inline-block text-xs px-2 py-1 rounded bg-green-100 text-green-700">
+                          Empresa
+                        </span>
+                      )}
+                      {getUserType(user) === 'external' && (
+                        <span className="inline-block text-xs px-2 py-1 rounded bg-purple-100 text-purple-700">
+                          Externo
+                        </span>
+                      )}
+                      {getUserType(user) === 'internal' && (
+                        <span className="inline-block text-xs px-2 py-1 rounded bg-blue-100 text-blue-700">
+                          Interno
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center text-xs text-gray-700">
                       <span className="font-medium mr-1">CI:</span>
                       <span>{user.ci || 'N/A'}</span>
@@ -417,6 +481,15 @@ const AdminPendingRequestsPage = () => {
                       <span>Rechazar</span>
                     </button>
                   </div>
+                  {/* Empresa (móvil) */}
+                  {user.isCompanyRepresentative && (
+                    <div className="mt-3 text-sm border-t pt-3">
+                      <div className="font-medium">{user.companyName}</div>
+                      <div className="text-xs text-gray-600">
+                        {user.companyRif}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))
             ) : (
@@ -432,6 +505,41 @@ const AdminPendingRequestsPage = () => {
           <p className="text-center text-gray-600 p-8 border rounded-lg">
             No hay solicitudes de acceso pendientes de revisión.
           </p>
+        )}
+
+        {/* Paginación - Estilo igual a UsersPage */}
+        {filteredUsers.length > 0 && (
+          <div className="flex flex-col lg:flex-row justify-between items-center p-4 bg-gray-50 border-t rounded-lg mt-4">
+            <p className="text-sm text-gray-600 mb-2 lg:mb-0">
+              Mostrando {filteredUsers.length} de {totalUsers} solicitudes
+              {!isMobile && ` (Pág. ${currentPage} de ${totalPages})`}
+            </p>
+
+            {isMobile && (
+              <p className="text-sm text-gray-600 mb-3">
+                Pág. {currentPage} de {totalPages}
+              </p>
+            )}
+
+            <div className="flex space-x-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-4 py-2 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                title="Página anterior"
+              >
+                Anterior
+              </button>
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="px-4 py-2 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                title="Página siguiente"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
         )}
       </div>
       <Footer />

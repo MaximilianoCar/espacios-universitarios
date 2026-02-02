@@ -10,11 +10,18 @@ const fs = require('fs').promises;
 const emailService = require('../services/emailService');
 require('dotenv').config();
 
-// Controlador para crear un usuario normal
+// Controlador para crear un usuario normal (registro público)
 exports.createUser = async (req, res) => {
   try {
-    let { name, email, password, ci } = req.body;
+    let { name, email, password, ci, isExternal } = req.body;
     email = email.toLowerCase();
+
+    // Validar campos requeridos
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        error: 'Nombre, email y contraseña son obligatorios.',
+      });
+    }
 
     // Verificar si el correo ya está registrado
     const existingUser = await User.findOne({ where: { email } });
@@ -22,25 +29,88 @@ exports.createUser = async (req, res) => {
       return res.status(400).json({ error: 'El correo ya está en uso.' });
     }
 
-    // Crear un nuevo usuario utilizando el método estático
-    const newUser = await User.createVisitor({
-      name,
-      email,
-      password,
-      ci,
-    });
+    // Validar CI si se proporciona
+    if (ci) {
+      const existingUserCI = await User.findOne({ where: { ci } });
+      if (existingUserCI) {
+        return res.status(400).json({ error: 'La cédula ya está en uso.' });
+      }
+    }
 
-    res.status(201).json(newUser);
+    // Convertir isExternal a booleano (por defecto false - interno)
+    const externalFlag = isExternal !== undefined ? Boolean(isExternal) : false;
+
+    let newUser;
+
+    // Crear usuario según si es externo o interno
+    if (externalFlag) {
+      // Usuario externo - crear como externalvisitor
+      newUser = await User.createExternalVisitor({
+        name,
+        email,
+        password,
+        ci: ci || null,
+        isExternal: true,
+        isCompanyRepresentative: false, // Por defecto false en registro público
+        companyRif: null, // Por defecto null en registro público
+        companyName: null, // Por defecto null en registro público
+      });
+    } else {
+      // Usuario interno - crear como visitor
+      newUser = await User.createInternalVisitor({
+        name,
+        email,
+        password,
+        ci: ci || null,
+        isExternal: false,
+        isCompanyRepresentative: false,
+        companyRif: null,
+        companyName: null,
+      });
+    }
+
+    // No retornar la contraseña en la respuesta
+    const { password: _, ...userWithoutPassword } = newUser.toJSON();
+
+    res.status(201).json(userWithoutPassword);
   } catch (error) {
-    console.warn(error);
-    res.status(500).json({ error: 'Error al crear el usuario.' });
+    console.error('Error al crear usuario:', error);
+
+    // Manejo de errores específicos de validación
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map(err => err.message).join(', ');
+      return res.status(400).json({ error: messages });
+    }
+
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({
+        error: 'El correo o cédula ya están registrados.',
+      });
+    }
+
+    res.status(500).json({
+      error: 'Error al crear el usuario.',
+      details:
+        process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
   }
 };
 
 // crear cualquier usuario
+// crear cualquier usuario (panel de admin)
 exports.createAnyUser = async (req, res) => {
   try {
-    let { name, email, password, ci, role } = req.body;
+    let {
+      name,
+      email,
+      password,
+      ci,
+      role,
+      isExternal,
+      isCompanyRepresentative,
+      companyRif,
+      companyName,
+    } = req.body;
     email = email.toLowerCase();
 
     // Validaciones básicas
@@ -56,9 +126,31 @@ exports.createAnyUser = async (req, res) => {
       return res.status(400).json({ error: 'El correo ya está en uso.' });
     }
 
-    const existingUser2 = await User.findOne({ where: { ci } });
-    if (existingUser2) {
-      return res.status(400).json({ error: 'Cedula ya está en uso.' });
+    if (ci) {
+      const existingUserCI = await User.findOne({ where: { ci } });
+      if (existingUserCI) {
+        return res.status(400).json({ error: 'Cédula ya está en uso.' });
+      }
+    }
+
+    // Procesar campos booleanos
+    const externalFlag = isExternal !== undefined ? Boolean(isExternal) : false;
+    const companyRepFlag =
+      isCompanyRepresentative !== undefined
+        ? Boolean(isCompanyRepresentative)
+        : false;
+
+    // Validar consistencia entre rol y isExternal
+    if (role === 'externalvisitor' && !externalFlag) {
+      return res.status(400).json({
+        error: 'El rol externalvisitor requiere isExternal = true',
+      });
+    }
+
+    if (role === 'visitor' && externalFlag) {
+      return res.status(400).json({
+        error: 'El rol visitor requiere isExternal = false',
+      });
     }
 
     let newUser;
@@ -66,26 +158,78 @@ exports.createAnyUser = async (req, res) => {
     // Crear usuario según el rol especificado
     switch (role) {
       case 'admin':
-        newUser = await User.createAdmin({ name, email, password, ci });
-        break;
-      case 'coordinator':
-        newUser = await User.createCoordinator({ name, email, password, ci });
-        break;
-      case 'requester':
-        newUser = await User.createRequester({ name, email, password, ci });
-        break;
-      case 'visitor':
-      case 'pending':
-        newUser = await User.createVisitor({
+        newUser = await User.createAdmin({
           name,
           email,
           password,
-          ci,
+          ci: ci || null,
+          isExternal: externalFlag,
+          isCompanyRepresentative: companyRepFlag,
+          companyRif: companyRepFlag ? companyRif : null,
+          companyName: companyRepFlag ? companyName : null,
         });
-        // Si es pending, actualizar el rol
-        if (role === 'pending') {
-          newUser = await newUser.update({ role: 'pending' });
-        }
+        break;
+      case 'coordinator':
+        newUser = await User.createCoordinator({
+          name,
+          email,
+          password,
+          ci: ci || null,
+          isExternal: externalFlag,
+          isCompanyRepresentative: companyRepFlag,
+          companyRif: companyRepFlag ? companyRif : null,
+          companyName: companyRepFlag ? companyName : null,
+        });
+        break;
+      case 'requester':
+        newUser = await User.createRequester({
+          name,
+          email,
+          password,
+          ci: ci || null,
+          isExternal: externalFlag,
+          isCompanyRepresentative: companyRepFlag,
+          companyRif: companyRepFlag ? companyRif : null,
+          companyName: companyRepFlag ? companyName : null,
+        });
+        break;
+      case 'visitor':
+        newUser = await User.createInternalVisitor({
+          name,
+          email,
+          password,
+          ci: ci || null,
+          isExternal: externalFlag,
+          isCompanyRepresentative: companyRepFlag,
+          companyRif: companyRepFlag ? companyRif : null,
+          companyName: companyRepFlag ? companyName : null,
+        });
+        break;
+      case 'externalvisitor':
+        newUser = await User.createExternalVisitor({
+          name,
+          email,
+          password,
+          ci: ci || null,
+          isExternal: true, // Siempre true para externalvisitor
+          isCompanyRepresentative: companyRepFlag,
+          companyRif: companyRepFlag ? companyRif : null,
+          companyName: companyRepFlag ? companyName : null,
+        });
+        break;
+      case 'pending':
+        // Para pending, creamos como visitor primero y luego cambiamos
+        newUser = await User.createInternalVisitor({
+          name,
+          email,
+          password,
+          ci: ci || null,
+          isExternal: externalFlag,
+          isCompanyRepresentative: companyRepFlag,
+          companyRif: companyRepFlag ? companyRif : null,
+          companyName: companyRepFlag ? companyName : null,
+        });
+        newUser = await newUser.update({ role: 'pending' });
         break;
       default:
         return res.status(400).json({ error: 'Rol no válido.' });
@@ -97,6 +241,19 @@ exports.createAnyUser = async (req, res) => {
     res.status(201).json(userWithoutPassword);
   } catch (error) {
     console.error('Error creating user:', error);
+
+    // Manejo de errores específicos
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map(err => err.message).join(', ');
+      return res.status(400).json({ error: messages });
+    }
+
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({
+        error: 'El correo o cédula ya están registrados.',
+      });
+    }
+
     res.status(500).json({
       error: 'Error al crear el usuario.',
       details:
@@ -104,7 +261,6 @@ exports.createAnyUser = async (req, res) => {
     });
   }
 };
-
 // Controlador para crear un administrador
 exports.createAdmin = async (req, res) => {
   try {
@@ -127,6 +283,100 @@ exports.createAdmin = async (req, res) => {
     res.status(201).json(newAdmin);
   } catch (error) {
     res.status(500).json({ error: 'Error al crear el administrador.' });
+  }
+};
+
+// Completar información de usuario externo
+exports.completeExternalUser = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado.' });
+    }
+
+    // Verificar que el usuario sea EXTERNAL_VISITOR (no solo visitor externo)
+    if (user.role !== User.ROLES.EXTERNAL_VISITOR) {
+      return res.status(400).json({
+        error:
+          'Esta función solo está disponible para usuarios externalvisitor.',
+      });
+    }
+
+    const { isCompanyRepresentative, origin, companyName, companyRif } =
+      req.body;
+    const certificationFile = req.file;
+
+    // Validar archivo
+    if (!certificationFile) {
+      return res.status(400).json({
+        error: 'Debe subir un documento de cédula de identidad.',
+      });
+    }
+
+    // Validar campos
+    if (!origin) {
+      return res.status(400).json({
+        error: 'Debe especificar de dónde viene.',
+      });
+    }
+
+    // Usar el método del modelo para completar la información
+    await user.completeExternalInfo(
+      {
+        isCompanyRepresentative,
+        origin,
+        companyName,
+        companyRif,
+      },
+      certificationFile.path
+    );
+
+    res.status(200).json({
+      message: 'Información completada exitosamente.',
+      user: {
+        id: user.id,
+        isCompanyRepresentative: user.isCompanyRepresentative,
+        companyName: user.companyName,
+        companyRif: user.companyRif,
+        certificationPath: user.certificationPath,
+      },
+    });
+  } catch (error) {
+    console.error('Error al completar información de usuario externo:', error);
+
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res
+        .status(400)
+        .json({ error: 'El archivo es demasiado grande (máx. 5MB).' });
+    }
+
+    // Manejo de errores del modelo
+    if (error.message.includes('Solo los usuarios externalvisitor')) {
+      return res.status(400).json({ error: error.message });
+    }
+
+    res.status(500).json({
+      error: 'Error interno del servidor al completar la información.',
+    });
+  }
+};
+
+exports.getCurrentUser = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.id, {
+      attributes: { exclude: ['password', 'refreshToken'] },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado.' });
+    }
+
+    res.status(200).json(user);
+  } catch (error) {
+    console.error('Error al obtener usuario actual:', error);
+    res.status(500).json({ error: 'Error interno del servidor.' });
   }
 };
 
@@ -215,23 +465,56 @@ exports.getUsers = async (req, res) => {
   }
 };
 
-// obtener usuaruos pending
+// obtener usuarios pending con paginación y búsqueda
 exports.getPendingUsers = async (req, res) => {
+  const page = parseInt(req.query.page) || 1;
+  const pageSize = parseInt(req.query.pageSize) || 25;
+  const searchTerm = req.query.search || '';
+
+  const offset = (page - 1) * pageSize;
+
   try {
-    const users = await User.findAll({
-      where: {
-        role: 'pending',
-      },
-      attributes: ['id', 'name', 'email', 'ci', 'certificationPath'],
-      order: [['createdAt', 'ASC']],
-    });
-    console.log('Usuarios pendientes encontrados:', users);
-    // Si no se encuentran usuarios pendientes, devuelve un array vacío
-    if (users.length === 0) {
-      return res.status(200).json([]);
+    let whereCondition = { role: User.ROLES.PENDING };
+
+    if (searchTerm) {
+      const lowerCaseSearch = `%${searchTerm.toLowerCase()}%`;
+      whereCondition = {
+        ...whereCondition,
+        [Op.or]: [
+          { name: { [Op.iLike]: lowerCaseSearch } },
+          { email: { [Op.iLike]: lowerCaseSearch } },
+          { ci: { [Op.iLike]: lowerCaseSearch } },
+        ],
+      };
     }
 
-    res.status(200).json(users);
+    const { count, rows } = await User.findAndCountAll({
+      where: whereCondition,
+      attributes: [
+        'id',
+        'name',
+        'email',
+        'ci',
+        'certificationPath',
+        'isExternal',
+        'isCompanyRepresentative',
+        'companyName',
+        'companyRif',
+        'createdAt',
+      ],
+      limit: pageSize,
+      offset: offset,
+      order: [['createdAt', 'ASC']],
+    });
+
+    const totalPages = Math.ceil(count / pageSize);
+
+    res.status(200).json({
+      totalUsers: count,
+      totalPages: totalPages,
+      currentPage: page,
+      users: rows,
+    });
   } catch (error) {
     console.error('Error al listar los usuarios pendientes:', error);
     res
@@ -354,8 +637,9 @@ exports.requestUpgrade = async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado.' });
     }
 
-    // Verificar si el usuario ya es REQUESTER o superior.
-    if (user.role !== User.ROLES.VISITOR) {
+    // Permitir tanto VISITOR como EXTERNAL_VISITOR solicitar upgrade
+    const allowedRoles = [User.ROLES.VISITOR, User.ROLES.EXTERNAL_VISITOR];
+    if (!allowedRoles.includes(user.role)) {
       return res.status(400).json({
         error: `Tu rol actual ('${user.role}') no requiere esta solicitud.`,
       });
@@ -371,10 +655,11 @@ exports.requestUpgrade = async (req, res) => {
 
     // La propiedad 'path' es proporcionada por Multer
     user.certificationPath = certificationFile.path;
-    user.role = User.ROLES.PENDING;
-    await user.save();
 
-    //  notidicacion obtener admins y enviar correos
+    // Usar el método del modelo para cambiar a pending
+    await user.changeToPending();
+
+    // Notificar a administradores
     try {
       const admins = await User.findAll({
         where: { role: User.ROLES.ADMINISTRATOR },
@@ -399,9 +684,20 @@ exports.requestUpgrade = async (req, res) => {
       message:
         'Solicitud enviada con éxito. Un administrador revisará tu documento pronto.',
       path: user.certificationPath,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
     });
   } catch (error) {
     console.error('Error al procesar la solicitud de certificación:', error);
+
+    // Manejo de errores del modelo
+    if (error.message.includes('cannot request upgrade')) {
+      return res.status(400).json({ error: error.message });
+    }
 
     // Si el error viene de Multer
     if (
@@ -493,14 +789,30 @@ exports.rejectRequest = async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado.' });
     }
 
+    // Verificar que el usuario esté en estado pending
+    if (user.role !== User.ROLES.PENDING) {
+      return res.status(400).json({
+        error: 'Solo se pueden rechazar solicitudes de usuarios pendientes.',
+      });
+    }
+
+    // Determinar si el usuario original era externalvisitor
+    // Buscar en diferentes lugares donde podría estar almacenado el rol original
+    const wasExternalVisitor =
+      user._previousDataValues?.role === User.ROLES.EXTERNAL_VISITOR ||
+      (user.dataValues &&
+        user.dataValues.originalRole === User.ROLES.EXTERNAL_VISITOR) ||
+      user.originalRole === User.ROLES.EXTERNAL_VISITOR ||
+      // Si no hay datos previos, verificar si tiene isExternal = true como referencia
+      (user.isExternal === true && user.role === User.ROLES.PENDING);
+
     const filePath = user.certificationPath;
 
     // 1. Eliminar el archivo físico (si existe)
     if (filePath) {
       const absolutePath = path.join(process.cwd(), filePath);
-
       try {
-        await fs.unlink(absolutePath); // Borrar el archivo
+        await fs.unlink(absolutePath);
       } catch (fileError) {
         if (fileError.code === 'ENOENT') {
           console.warn(
@@ -515,8 +827,31 @@ exports.rejectRequest = async (req, res) => {
       }
     }
 
-    await user.changeToVisitor();
-    // notificacion al usuario rechazado
+    // Cambiar de rol según si era externalvisitor o visitor
+    try {
+      if (wasExternalVisitor) {
+        await user.changeToExternalVisitor();
+      } else {
+        await user.changeToVisitor();
+      }
+    } catch (modelError) {
+      // Si falla el método del modelo, usar una alternativa
+      if (wasExternalVisitor) {
+        user.role = User.ROLES.EXTERNAL_VISITOR;
+        user.isExternal = true;
+      } else {
+        user.role = User.ROLES.VISITOR;
+        user.isExternal = false;
+      }
+      user.certificationPath = null;
+      await user.save();
+    }
+
+    // Limpiar campos relacionados
+    user.certificationPath = null;
+    await user.save();
+
+    // Notificación al usuario rechazado
     try {
       const comments = req.body.comments || ''; // Opcional: comentarios del admin
       await emailService.notifyUpgradeResult(
@@ -531,18 +866,44 @@ exports.rejectRequest = async (req, res) => {
     }
 
     res.status(200).json({
-      message:
-        'Solicitud rechazada con éxito. El archivo de certificación fue eliminado y el usuario volvió a ser Visitante (Visitor).',
-      user: user,
+      message: wasExternalVisitor
+        ? 'Solicitud rechazada con éxito. El usuario volvió a ser Visitante Externo (External Visitor).'
+        : 'Solicitud rechazada con éxito. El usuario volvió a ser Visitante (Visitor).',
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isExternal: user.isExternal,
+      },
     });
   } catch (error) {
-    if (error.message.includes('Only pending users can apply.')) {
+    console.error('Error al rechazar la solicitud:', error);
+
+    // Manejo específico de errores del modelo
+    if (error.message && error.message.includes('Only pending users')) {
       return res.status(400).json({ error: error.message });
     }
-    console.error('Error al rechazar la solicitud:', error);
-    res
-      .status(500)
-      .json({ error: 'Error al procesar el rechazo de la solicitud.' });
+
+    // Manejo de errores de validación de Sequelize
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+
+    // Manejo de errores de restricción única
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({
+        error: 'Error de restricción única en la base de datos.',
+      });
+    }
+
+    res.status(500).json({
+      error:
+        'Error interno del servidor al procesar el rechazo de la solicitud.',
+      details:
+        process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
   }
 };
 
@@ -793,15 +1154,12 @@ exports.resetPassword = async (req, res) => {
 // notis de usuarios pendientes a ser solicitantes
 exports.getPendingUsersCount = async (req, res) => {
   try {
-    console.log('getPendingUsersCount llamado para admin:', req.user.id);
-
     const count = await User.count({
       where: {
         role: 'pending', //
       },
     });
 
-    console.log(`📊 Usuarios pendientes encontrados: ${count}`);
     res.status(200).json({ count });
   } catch (error) {
     console.error('error en getPendingUsersCount:', error);

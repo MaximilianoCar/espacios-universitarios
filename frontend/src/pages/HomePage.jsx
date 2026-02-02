@@ -1,6 +1,7 @@
 // src/pages/HomePage.jsx
 import React from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import axiosInstance from '../axiosConfig';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import Header from '../components/Header';
@@ -8,6 +9,7 @@ import Footer from '../components/Footer';
 import HeroSection from '../components/HeroSection';
 import Modal from '../components/Modal';
 import RequestUpgradeForm from '../components/RequestUpgradeForm';
+import CompleteExternalUserForm from '../components/CompleteExternalUserForm';
 import MenuCard from '../components/MenuCard';
 import { usePendingReservations } from '../hooks/usePendingReservations';
 import { usePendingUsers } from '../hooks/usePendingUsers';
@@ -27,6 +29,7 @@ import {
   CalendarIcon,
   KeyIcon,
   ClockIcon,
+  UserCircleIcon,
 } from '@heroicons/react/24/outline';
 
 import backgroundImage from '../assets/ucvfondo.jpg';
@@ -38,6 +41,9 @@ const HomePage = () => {
 
   // Estado para controlar el modal de solicitud de ascenso
   const [showRequestUpgradeModal, setShowRequestUpgradeModal] = useState(false);
+  // Estado para controlar el modal de completar información de usuario externo
+  const [showCompleteExternalModal, setShowCompleteExternalModal] =
+    useState(false);
 
   // hook para obtener las reservas pendientes
   const { pendingCount, loading: pendingLoading } = usePendingReservations();
@@ -73,6 +79,21 @@ const HomePage = () => {
       text: 'Tu solicitud ha sido enviada y está en revisión.',
       icon: 'success',
       timer: 3000,
+    });
+  };
+
+  const handleCompleteExternalSuccess = () => {
+    // Actualizar los datos del usuario
+    setShowCompleteExternalModal(false);
+
+    Swal.fire({
+      title: '¡Información completada!',
+      text: 'Tu información como usuario externo ha sido actualizada correctamente.',
+      icon: 'success',
+      timer: 3000,
+    }).then(() => {
+      // Después de completar la información, mostrar el modal de solicitud para ser requester
+      setShowRequestUpgradeModal(true);
     });
   };
 
@@ -154,8 +175,28 @@ const HomePage = () => {
     </>
   );
 
-  // VISITOR
-  const VisitorCards = (
+  // VISITOR - EXTERNO A LA UNIVERSIDAD (rol: externalvisitor)
+  const VisitorExternalCards = (
+    <>
+      <MenuCard
+        title="Eventos Próximos"
+        description="Explora los eventos y actividades programadas."
+        link="/events"
+        icon={<CalendarIcon className="w-12 h-12 text-blue-500" />}
+      />
+      <MenuCard
+        title="Completar Información"
+        description="Como usuario externo, necesitamos algunos datos adicionales para proceder."
+        onClick={() => setShowCompleteExternalModal(true)}
+        icon={<UserCircleIcon className="w-12 h-12 text-blue-500" />}
+        isButton={true}
+        disabled={false}
+      />
+    </>
+  );
+
+  // VISITOR - INTERNO A LA UNIVERSIDAD (rol: visitor)
+  const VisitorInternalCards = (
     <>
       <MenuCard
         title="Eventos Próximos"
@@ -219,11 +260,17 @@ const HomePage = () => {
           cards: PendingCards,
           gridCols: 'lg:grid-cols-2',
         };
+      case 'externalvisitor':
+        return {
+          title: `Panel de Visitante Externo - ${user}`,
+          cards: VisitorExternalCards,
+          gridCols: 'lg:grid-cols-2',
+        };
       case 'visitor':
       default:
         return {
-          title: `Panel de Visitante - ${user}`,
-          cards: VisitorCards,
+          title: `Panel de Visitante Interno - ${user}`,
+          cards: VisitorInternalCards,
           gridCols: 'lg:grid-cols-2',
         };
     }
@@ -261,6 +308,16 @@ const HomePage = () => {
       </div>
 
       <Footer />
+
+      {/* Modal para completar información de usuario externo */}
+      {showCompleteExternalModal && (
+        <Modal onClose={() => setShowCompleteExternalModal(false)}>
+          <CompleteExternalUserForm
+            onClose={() => setShowCompleteExternalModal(false)}
+            onSuccess={handleCompleteExternalSuccess}
+          />
+        </Modal>
+      )}
 
       {/* Modal para la Solicitud de Ascenso de Rol */}
       {showRequestUpgradeModal && (

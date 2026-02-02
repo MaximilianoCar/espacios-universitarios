@@ -25,6 +25,16 @@ router.post(
   userController.createAdmin
 );
 
+// Ruta para completar información de usuario externo
+router.post(
+  '/users/complete-external',
+  protect,
+  uploadCertification.single('certification'),
+  userController.completeExternalUser
+);
+
+router.get('/me', protect, userController.getCurrentUser);
+
 //paaara notis de admin
 router.get(
   '/users/pending-count',

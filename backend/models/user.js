@@ -19,27 +19,24 @@ module.exports = (sequelize, DataTypes) => {
       });
     }
 
-    // Agregamos propiedades estáticas para roles
     static get ROLES() {
-      // Usamos el nombre del rol en inglés como clave y el string de la DB como valor
       return {
         ADMINISTRATOR: 'admin',
         COORDINATOR: 'coordinator',
         REQUESTER: 'requester',
         VISITOR: 'visitor',
+        EXTERNAL_VISITOR: 'externalvisitor',
         PENDING: 'pending',
       };
     }
-
-    // ----------------------------------------------------------------------
-    // MÉTODOS ESTÁTICOS DE CREACIÓN
-    // ----------------------------------------------------------------------
 
     // Método estático para crear un administrador
     static async createAdmin(data) {
       data.role = this.ROLES.ADMINISTRATOR;
       data.password = await bcrypt.hash(data.password, 10);
       data.status = true;
+      data.isExternal = false; // Por defecto, admin no es externo
+      data.isCompanyRepresentative = false; // Por defecto, no representa empresa
       return this.create(data);
     }
 
@@ -48,15 +45,28 @@ module.exports = (sequelize, DataTypes) => {
       data.role = this.ROLES.COORDINATOR;
       data.password = await bcrypt.hash(data.password, 10);
       data.status = true;
+      data.isExternal = false; // Por defecto, coordinador no es externo
+      data.isCompanyRepresentative = false; // Por defecto, no representa empresa
       return this.create(data);
     }
 
-    // Método estático para crear un visitante (rol por defecto al registrarse)
-    static async createVisitor(data) {
-      // Un 'visitor' se registra, por lo que necesita contraseña
+    // Método estático para crear un visitante interno (miembro de la comunidad)
+    static async createInternalVisitor(data) {
       data.role = this.ROLES.VISITOR;
       data.password = await bcrypt.hash(data.password, 10);
       data.status = true;
+      data.isExternal = false; // Siempre false para visitor interno
+      data.isCompanyRepresentative = false; // Por defecto false
+      return this.create(data);
+    }
+
+    // Método estático para crear un visitante externo
+    static async createExternalVisitor(data) {
+      data.role = this.ROLES.EXTERNAL_VISITOR;
+      data.password = await bcrypt.hash(data.password, 10);
+      data.status = true;
+      data.isExternal = true; // Siempre true para externalvisitor
+      data.isCompanyRepresentative = false; // Por defecto false, se completará después
       return this.create(data);
     }
 
@@ -68,12 +78,8 @@ module.exports = (sequelize, DataTypes) => {
       return this.create(data);
     }
 
-    // ----------------------------------------------------------------------
-    // Cambio de rol
-    // ----------------------------------------------------------------------
-
     /**
-     * Permite que un usuario con rol 'visitor' cambie su rol a 'requester'.
+     * Permite que un usuario con rol 'pending' cambie su rol a 'requester'.
      * @returns {User} El usuario actualizado.
      */
     async upgradeToRequester() {
@@ -88,10 +94,14 @@ module.exports = (sequelize, DataTypes) => {
       return this.save();
     }
 
+    /**
+     * Cambia el rol a 'pending' (solicitud en revisión)
+     */
     async changeToPending() {
-      if (this.role !== User.ROLES.VISITOR) {
+      const allowedRoles = [User.ROLES.VISITOR, User.ROLES.EXTERNAL_VISITOR];
+      if (!allowedRoles.includes(this.role)) {
         throw new Error(
-          `User with role '${this.role}' Only 'visitor' users can apply.`
+          `User with role '${this.role}' cannot request upgrade. Only 'visitor' or 'externalvisitor' users can apply.`
         );
       }
 
@@ -100,14 +110,72 @@ module.exports = (sequelize, DataTypes) => {
       return this.save();
     }
 
+    /**
+     * Cambia el rol de 'pending' a 'visitor' (rechazo de solicitud)
+     */
     async changeToVisitor() {
       if (this.role !== User.ROLES.PENDING) {
         throw new Error(
-          `User with role '${this.role}' Only 'pending' users can apply.`
+          `User with role '${this.role}' cannot be changed to visitor. Only 'pending' users can be rejected.`
         );
       }
 
       this.role = User.ROLES.VISITOR;
+
+      return this.save();
+    }
+
+    /**
+     * Cambia el rol de 'pending' a 'externalvisitor' (rechazo de solicitud para externos)
+     */
+    async changeToExternalVisitor() {
+      if (this.role !== User.ROLES.PENDING) {
+        throw new Error(
+          `User with role '${this.role}' cannot be changed to externalvisitor. Only 'pending' users can be rejected.`
+        );
+      }
+
+      this.role = User.ROLES.EXTERNAL_VISITOR;
+
+      return this.save();
+    }
+
+    /**
+     * Completa la información de un usuario externalvisitor
+     */
+    async completeExternalInfo(data, certificationPath) {
+      if (this.role !== User.ROLES.EXTERNAL_VISITOR) {
+        throw new Error(
+          'Solo los usuarios externalvisitor pueden completar información'
+        );
+      }
+
+      const { isCompanyRepresentative, companyName, companyRif, origin } = data;
+
+      // Marcar si es representante de empresa y validar campos cuando aplique
+      this.isCompanyRepresentative = Boolean(isCompanyRepresentative);
+
+      if (this.isCompanyRepresentative) {
+        if (!companyName || !companyRif) {
+          throw new Error(
+            'Los usuarios que representan una empresa deben proporcionar nombre y RIF'
+          );
+        }
+        this.companyName = companyName;
+        this.companyRif = companyRif;
+      } else {
+        this.companyName = null;
+        this.companyRif = null;
+      }
+
+      if (certificationPath) {
+        this.certificationPath = certificationPath;
+      }
+
+      // Asegurar que el usuario se marque como externo y cambiar su rol a pending
+      this.isExternal = true;
+      // Guardar el rol original será manejado por los hooks (beforeUpdate)
+      this.role = User.ROLES.PENDING;
 
       return this.save();
     }
@@ -123,6 +191,7 @@ module.exports = (sequelize, DataTypes) => {
           User.ROLES.COORDINATOR,
           User.ROLES.REQUESTER,
           User.ROLES.VISITOR,
+          User.ROLES.EXTERNAL_VISITOR, // NUEVO ROL
           User.ROLES.PENDING
         ),
         allowNull: false,
@@ -169,19 +238,132 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      isExternal: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        comment: 'Indica si el usuario es externo a la universidad',
+      },
+      isCompanyRepresentative: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        comment: 'Indica si el usuario viene en representación de una empresa',
+      },
+      companyRif: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: {
+            args: [0, 20],
+            msg: 'El RIF debe tener máximo 20 caracteres',
+          },
+        },
+        comment:
+          'RIF de la empresa que representa (solo si isCompanyRepresentative es true)',
+      },
+      companyName: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        validate: {
+          len: {
+            args: [0, 100],
+            msg: 'El nombre de la empresa debe tener máximo 100 caracteres',
+          },
+        },
+        comment:
+          'Nombre de la empresa/organización que representa (solo si isCompanyRepresentative es true)',
+      },
     },
     {
       sequelize,
       modelName: 'User',
       hooks: {
         beforeValidate: user => {
+          // Establecer rol por defecto si no existe
           if (!user.role) {
             user.role = User.ROLES.VISITOR;
           }
+
+          // Establecer valores por defecto si no existen
+          if (user.isExternal === undefined) {
+            // Si es externalvisitor, asegurar que isExternal sea true
+            user.isExternal = user.role === User.ROLES.EXTERNAL_VISITOR;
+          }
+
+          if (user.isCompanyRepresentative === undefined) {
+            user.isCompanyRepresentative = false;
+          }
+
+          // Validación: si no es representante de empresa, limpiar companyRif y companyName
+          if (!user.isCompanyRepresentative) {
+            user.companyRif = null;
+            user.companyName = null;
+          }
+
+          // Validación: si es externalvisitor y representante de empresa, verificar que tenga RIF y nombre
+          if (
+            user.role === User.ROLES.EXTERNAL_VISITOR &&
+            user.isCompanyRepresentative &&
+            (!user.companyRif || !user.companyName)
+          ) {
+            throw new Error(
+              'Los usuarios externos que representan una empresa deben proporcionar el RIF y nombre de la empresa'
+            );
+          }
         },
         beforeCreate: user => {
+          // Limpiar CI si está vacío
           if (user.ci === '') {
             user.ci = null;
+          }
+
+          // Asegurar consistencia entre role e isExternal
+          if (user.role === User.ROLES.EXTERNAL_VISITOR) {
+            user.isExternal = true;
+          } else if (user.role === User.ROLES.VISITOR) {
+            user.isExternal = false;
+          }
+
+          // Asegurar que companyRif y companyName sean null si no es representante de empresa
+          if (!user.isCompanyRepresentative) {
+            user.companyRif = null;
+            user.companyName = null;
+          }
+
+          // Guardar rol original si está cambiando a pending
+          if (user.role === User.ROLES.PENDING && !user.originalRole) {
+            user.originalRole = user.role;
+          }
+        },
+        beforeUpdate: user => {
+          // Mantener consistencia entre role e isExternal
+          if (user.role === User.ROLES.EXTERNAL_VISITOR) {
+            user.isExternal = true;
+          } else if (user.role === User.ROLES.VISITOR) {
+            user.isExternal = false;
+          }
+
+          // Asegurar que companyRif y companyName sean null si no es representante de empresa
+          if (!user.isCompanyRepresentative) {
+            user.companyRif = null;
+            user.companyName = null;
+          }
+
+          // Validación: si es externalvisitor y representante de empresa, verificar que tenga RIF y nombre
+          if (
+            user.role === User.ROLES.EXTERNAL_VISITOR &&
+            user.isCompanyRepresentative &&
+            (!user.companyRif || !user.companyName)
+          ) {
+            throw new Error(
+              'Los usuarios externos que representan una empresa deben proporcionar el RIF y nombre de la empresa'
+            );
+          }
+
+          // Guardar rol original cuando cambia a pending
+          if (user.role === User.ROLES.PENDING && !user.originalRole) {
+            user.originalRole = user._previousDataValues.role;
           }
         },
       },

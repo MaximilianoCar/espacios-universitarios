@@ -16,13 +16,23 @@ import {
   FaUserPlus,
   FaFilter,
   FaEye,
-  FaTimes,
+  FaUser,
+  FaBuilding,
+  FaUniversity,
+  FaInfoCircle,
 } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Swal from '../utils/swal';
 
 // Definición estática de roles para el menú lateral
-const ALL_ROLES = ['admin', 'coordinator', 'requester', 'visitor', 'pending'];
+const ALL_ROLES = [
+  'admin',
+  'coordinator',
+  'requester',
+  'visitor',
+  'externalvisitor',
+  'pending',
+];
 const PAGE_SIZE = 25;
 
 const ROLE_TRANSLATIONS = {
@@ -30,7 +40,138 @@ const ROLE_TRANSLATIONS = {
   coordinator: 'Coordinador',
   requester: 'Solicitante',
   visitor: 'Visitante',
+  externalvisitor: 'Visitante Externo',
   pending: 'Pendiente',
+};
+
+// Colores para tipos de usuario basados en isExternal y isCompanyRepresentative
+const USER_TYPE_COLORS = {
+  internal: {
+    bg: 'bg-blue-50',
+    text: 'text-blue-700',
+    border: 'border-blue-200',
+    icon: 'text-blue-500',
+    label: 'Interno',
+  },
+  external: {
+    bg: 'bg-purple-50',
+    text: 'text-purple-700',
+    border: 'border-purple-200',
+    icon: 'text-purple-500',
+    label: 'Externo',
+  },
+  company: {
+    bg: 'bg-green-50',
+    text: 'text-green-700',
+    border: 'border-green-200',
+    icon: 'text-green-500',
+    label: 'Empresa',
+  },
+};
+
+// Función para determinar el tipo de usuario basado en isExternal y isCompanyRepresentative
+const getUserType = user => {
+  if (user.isExternal) {
+    return user.isCompanyRepresentative ? 'company' : 'external';
+  }
+  return 'internal';
+};
+
+// Componente para mostrar el tipo de usuario con icono
+const UserTypeBadge = ({ user }) => {
+  const userType = getUserType(user);
+  const typeConfig = USER_TYPE_COLORS[userType];
+
+  return (
+    <div
+      className={`flex items-center px-3 py-1 rounded-full ${typeConfig.bg} ${typeConfig.text} ${typeConfig.border} border`}
+    >
+      {userType === 'internal' && <FaUniversity className="mr-1" size={12} />}
+      {userType === 'external' && <FaUser className="mr-1" size={12} />}
+      {userType === 'company' && <FaBuilding className="mr-1" size={12} />}
+      <span className="text-xs font-semibold">{typeConfig.label}</span>
+    </div>
+  );
+};
+
+// Componente Tooltip para mostrar información completa
+const Tooltip = ({ content, children, position = 'top' }) => {
+  const [showTooltip, setShowTooltip] = useState(false);
+
+  const positionClasses = {
+    top: 'bottom-full left-1/2 transform -translate-x-1/2 mb-2',
+    bottom: 'top-full left-1/2 transform -translate-x-1/2 mt-2',
+    left: 'right-full top-1/2 transform -translate-y-1/2 mr-2',
+    right: 'left-full top-1/2 transform -translate-y-1/2 ml-2',
+  };
+
+  return (
+    <div className="relative inline-block">
+      <div
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+        className="inline-block"
+      >
+        {children}
+      </div>
+      {showTooltip && content && (
+        <div
+          className={`absolute z-50 ${positionClasses[position]} bg-gray-900 text-white text-xs py-1 px-2 rounded shadow-lg whitespace-nowrap`}
+        >
+          {content}
+          <div
+            className={`absolute w-2 h-2 bg-gray-900 transform rotate-45 ${
+              position === 'top'
+                ? 'top-full -translate-x-1/2 left-1/2 -mt-1'
+                : position === 'bottom'
+                  ? 'bottom-full -translate-x-1/2 left-1/2 -mb-1'
+                  : position === 'left'
+                    ? 'left-full -translate-y-1/2 top-1/2 -mr-1'
+                    : 'right-full -translate-y-1/2 top-1/2 -ml-1'
+            }`}
+          ></div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Componente para mostrar correo truncado con tooltip
+const TruncatedEmail = ({ email, maxLength = 30 }) => {
+  if (!email) return null;
+
+  const truncated =
+    email.length > maxLength
+      ? email.substring(0, maxLength - 3) + '...'
+      : email;
+
+  if (email.length <= maxLength) {
+    return <span className="truncate">{email}</span>;
+  }
+
+  return (
+    <Tooltip content={email} position="top">
+      <span className="truncate cursor-help border-b border-dotted border-gray-400">
+        {truncated}
+      </span>
+    </Tooltip>
+  );
+};
+
+// Componente para mostrar información de empresa con tooltip
+const CompanyInfo = ({ user }) => {
+  if (!user.isCompanyRepresentative || !user.companyName) return null;
+
+  const fullInfo = `Empresa: ${user.companyName}${user.companyRif ? `\nRIF: ${user.companyRif}` : ''}`;
+
+  return (
+    <Tooltip content={fullInfo} position="top">
+      <div className="flex items-center ml-2 text-gray-500 cursor-help">
+        <FaBuilding size={12} />
+        <FaInfoCircle size={10} className="ml-1" />
+      </div>
+    </Tooltip>
+  );
 };
 
 const UsersPage = () => {
@@ -451,115 +592,177 @@ const UsersPage = () => {
                   <table className="min-w-full bg-white">
                     <thead>
                       <tr className="bg-blue-100">
-                        <th className="py-3 px-4 border-b text-left max-w-[200px]">
+                        <th className="py-3 px-4 border-b text-left w-[20%] min-w-[200px]">
                           Nombre
                         </th>
-                        <th className="py-3 px-4 border-b text-left max-w-[250px]">
+                        <th className="py-3 px-4 border-b text-left w-[22%] min-w-[250px]">
                           Correo Electrónico
                         </th>
-                        <th className="py-3 px-4 border-b text-left">Rol</th>
-                        <th className="py-3 px-4 border-b text-left">CI</th>
-                        <th className="py-3 px-4 border-b text-left">Estado</th>
-                        <th className="py-3 px-4 border-b text-left">
+                        <th className="py-3 px-4 border-b text-left w-[1%]">
+                          Rol
+                        </th>
+                        <th className="py-3 px-4 border-b text-left w-[10%]">
+                          Tipo
+                        </th>
+                        <th className="py-3 px-4 border-b text-left w-[10%]">
+                          CI
+                        </th>
+                        <th className="py-3 px-4 border-b text-left w-[8%]">
+                          Estado
+                        </th>
+                        <th className="py-3 px-4 border-b text-left w-[15%]">
                           Acciones
                         </th>
                       </tr>
                     </thead>
                     <tbody>
                       {users.length > 0 ? (
-                        users.map(user => (
-                          <tr key={user.id} className="hover:bg-gray-50">
-                            <td className="py-3 px-4 border-b font-semibold text-gray-800 truncate max-w-[200px]">
-                              <span
-                                className="truncate block"
-                                title={user.name}
-                              >
-                                {user.name}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 border-b text-gray-700 truncate max-w-[250px]">
-                              <span
-                                className="truncate block"
-                                title={user.email}
-                              >
-                                {user.email}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 border-b">
-                              <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 truncate max-w-[150px] block text-center">
-                                {ROLE_TRANSLATIONS[user.role] || user.role}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 border-b text-gray-700">
-                              {user.ci || 'N/A'}
-                            </td>
-                            <td className="py-3 px-4 border-b">
-                              <span
-                                className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                                  user.status
-                                    ? 'bg-green-100 text-green-800'
-                                    : 'bg-red-100 text-red-800'
-                                }`}
-                              >
-                                {user.status ? 'Activo' : 'Inactivo'}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 border-b">
-                              <div className="flex items-center space-x-1">
-                                {/* Botón de Editar */}
-                                <button
-                                  onClick={() => handleUpdateUser(user)}
-                                  className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-lg transition-colors group relative"
-                                  title="Editar usuario"
-                                >
-                                  <FaEdit size={18} />
-                                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                                    Editar usuario
-                                  </div>
-                                </button>
+                        users.map(user => {
+                          // Determinar tipo basado en isExternal y isCompanyRepresentative
+                          const userType = getUserType(user);
+                          const typeConfig = USER_TYPE_COLORS[userType];
 
-                                {/* Botón de Permisos */}
-                                <button
-                                  onClick={() => handleManagePermissions(user)}
-                                  disabled={user.role !== 'coordinator'}
-                                  className={`p-2 rounded-lg transition-colors group relative ${
-                                    user.role === 'coordinator'
-                                      ? 'text-green-600 hover:text-green-800 hover:bg-green-100'
-                                      : 'text-gray-400 cursor-not-allowed'
+                          return (
+                            <tr key={user.id} className="hover:bg-gray-50">
+                              <td className="py-3 px-4 border-b font-semibold text-gray-800">
+                                <div className="flex items-center">
+                                  <Tooltip content={user.name} position="top">
+                                    <span className="truncate block max-w-[180px] cursor-help">
+                                      {user.name}
+                                    </span>
+                                  </Tooltip>
+                                  <CompanyInfo user={user} />
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 border-b text-gray-700">
+                                <TruncatedEmail
+                                  email={user.email}
+                                  maxLength={30}
+                                />
+                              </td>
+                              <td className="py-3 px-4 border-b">
+                                <span className="px-3 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 truncate max-w-[120px] block text-center">
+                                  {ROLE_TRANSLATIONS[user.role] || user.role}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 border-b">
+                                <div className="flex items-center">
+                                  {userType === 'internal' && (
+                                    <FaUniversity
+                                      className={`mr-2 ${typeConfig.icon}`}
+                                      size={14}
+                                    />
+                                  )}
+                                  {userType === 'external' && (
+                                    <FaUser
+                                      className={`mr-2 ${typeConfig.icon}`}
+                                      size={14}
+                                    />
+                                  )}
+                                  {userType === 'company' && (
+                                    <FaBuilding
+                                      className={`mr-2 ${typeConfig.icon}`}
+                                      size={14}
+                                    />
+                                  )}
+                                  <span
+                                    className={`text-xs font-semibold ${typeConfig.text}`}
+                                  >
+                                    {typeConfig.label}
+                                  </span>
+                                  {userType === 'company' && (
+                                    <Tooltip
+                                      content={`${user.companyName}${user.companyRif ? ` (${user.companyRif})` : ''}`}
+                                      position="top"
+                                    >
+                                      <FaInfoCircle
+                                        className="ml-2 text-gray-400 hover:text-gray-600 cursor-help"
+                                        size={12}
+                                      />
+                                    </Tooltip>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 border-b text-gray-700">
+                                <Tooltip
+                                  content={user.ci || 'No registrada'}
+                                  position="top"
+                                >
+                                  <span className="cursor-help">
+                                    {user.ci || 'N/A'}
+                                  </span>
+                                </Tooltip>
+                              </td>
+                              <td className="py-3 px-4 border-b">
+                                <span
+                                  className={`px-3 py-1 text-xs font-semibold rounded-full ${
+                                    user.status
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-red-100 text-red-800'
                                   }`}
-                                  title={
-                                    user.role === 'coordinator'
-                                      ? 'Gestionar permisos'
-                                      : 'Solo coordinadores pueden tener permisos'
-                                  }
                                 >
-                                  <FaKey size={18} />
-                                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                                    {user.role === 'coordinator'
-                                      ? 'Gestionar permisos'
-                                      : 'Solo coordinadores'}
-                                  </div>
-                                </button>
+                                  {user.status ? 'Activo' : 'Inactivo'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 border-b">
+                                <div className="flex items-center space-x-1">
+                                  {/* Botón de Editar */}
+                                  <button
+                                    onClick={() => handleUpdateUser(user)}
+                                    className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-lg transition-colors group relative"
+                                    title="Editar usuario"
+                                  >
+                                    <FaEdit size={18} />
+                                    <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                      Editar usuario
+                                    </div>
+                                  </button>
 
-                                {/* Botón de Eliminar */}
-                                <button
-                                  onClick={() => handleDeleteUser(user.id)}
-                                  className="p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-colors group relative"
-                                  title="Eliminar usuario"
-                                >
-                                  <FaTrash size={18} />
-                                  <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                                    Eliminar usuario
-                                  </div>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
+                                  {/* Botón de Permisos */}
+                                  <button
+                                    onClick={() =>
+                                      handleManagePermissions(user)
+                                    }
+                                    disabled={user.role !== 'coordinator'}
+                                    className={`p-2 rounded-lg transition-colors group relative ${
+                                      user.role === 'coordinator'
+                                        ? 'text-green-600 hover:text-green-800 hover:bg-green-100'
+                                        : 'text-gray-400 cursor-not-allowed'
+                                    }`}
+                                    title={
+                                      user.role === 'coordinator'
+                                        ? 'Gestionar permisos'
+                                        : 'Solo coordinadores pueden tener permisos'
+                                    }
+                                  >
+                                    <FaKey size={18} />
+                                    <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                      {user.role === 'coordinator'
+                                        ? 'Gestionar permisos'
+                                        : 'Solo coordinadores'}
+                                    </div>
+                                  </button>
+
+                                  {/* Botón de Eliminar */}
+                                  <button
+                                    onClick={() => handleDeleteUser(user.id)}
+                                    className="p-2 text-red-600 hover:text-red-800 hover:bg-red-100 rounded-lg transition-colors group relative"
+                                    title="Eliminar usuario"
+                                  >
+                                    <FaTrash size={18} />
+                                    <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs py-1 px-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                                      Eliminar usuario
+                                    </div>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
                       ) : (
                         <tr>
                           <td
-                            colSpan="6"
+                            colSpan="7"
                             className="py-12 text-center text-gray-500"
                           >
                             <div className="flex flex-col items-center">
@@ -582,70 +785,142 @@ const UsersPage = () => {
                 {/* VISTA MÓVIL - CARDS MÁS COMPACTOS */}
                 <div className="lg:hidden space-y-3">
                   {users.length > 0 ? (
-                    users.map((user, index) => (
-                      <div
-                        key={user.id}
-                        className="bg-white rounded-lg shadow-sm border border-gray-200 p-3"
-                      >
-                        {/* Header de la tarjeta */}
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex-1 pr-2 max-w-[75%]">
-                            <h3
-                              className="font-bold text-base text-gray-800 mb-1 truncate"
-                              title={user.name}
-                            >
-                              {user.name}
-                            </h3>
-                            <p
-                              className="text-xs text-gray-600 truncate"
-                              title={user.email}
-                            >
-                              {user.email}
-                            </p>
-                          </div>
-                          <MobileActionMenu user={user} index={index} />
-                        </div>
+                    users.map((user, index) => {
+                      const userType = getUserType(user);
+                      const typeConfig = USER_TYPE_COLORS[userType];
 
-                        {/* Información del usuario - Solo Rol y CI */}
-                        <div className="flex justify-between items-center text-xs mt-3">
-                          <div className="truncate max-w-[45%]">
-                            <span className="font-medium text-gray-500 mr-1">
-                              Rol:
-                            </span>
-                            <span
-                              className="font-semibold text-gray-800 capitalize truncate block text-center"
-                              title={ROLE_TRANSLATIONS[user.role] || user.role}
-                            >
-                              {ROLE_TRANSLATIONS[user.role] || user.role}
-                            </span>
+                      return (
+                        <div
+                          key={user.id}
+                          className="bg-white rounded-lg shadow-sm border border-gray-200 p-3"
+                        >
+                          {/* Header de la tarjeta */}
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="flex-1 pr-2 max-w-[75%]">
+                              <Tooltip content={user.name} position="top">
+                                <h3
+                                  className="font-bold text-base text-gray-800 mb-1 truncate cursor-help"
+                                  title={user.name}
+                                >
+                                  {user.name}
+                                </h3>
+                              </Tooltip>
+                              <TruncatedEmail
+                                email={user.email}
+                                maxLength={25}
+                              />
+                            </div>
+                            <MobileActionMenu user={user} index={index} />
                           </div>
-                          <div className="truncate max-w-[45%]">
-                            <span className="font-medium text-gray-500 mr-1">
-                              CI:
-                            </span>
-                            <span
-                              className="font-semibold text-gray-800 truncate block"
-                              title={user.ci || 'N/A'}
-                            >
-                              {user.ci || 'N/A'}
-                            </span>
-                          </div>
-                        </div>
 
-                        {/* Estado */}
-                        <div className="mt-2">
-                          <span
-                            className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                              user.status
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}
-                          >
-                            {user.status ? 'Activo' : 'Inactivo'}
-                          </span>
+                          {/* Información del usuario */}
+                          <div className="flex flex-wrap items-center gap-2 text-xs mt-3 mb-2">
+                            {/* Rol */}
+                            <div>
+                              <span className="font-medium text-gray-500 mr-1">
+                                Rol:
+                              </span>
+                              <span
+                                className="font-semibold text-gray-800 capitalize truncate block text-center"
+                                title={
+                                  ROLE_TRANSLATIONS[user.role] || user.role
+                                }
+                              >
+                                {ROLE_TRANSLATIONS[user.role] || user.role}
+                              </span>
+                            </div>
+
+                            {/* Tipo de usuario */}
+                            <div>
+                              <span className="font-medium text-gray-500 mr-1">
+                                Tipo:
+                              </span>
+                              <div className="flex items-center">
+                                {userType === 'internal' && (
+                                  <FaUniversity
+                                    className={`mr-1 ${typeConfig.icon}`}
+                                    size={10}
+                                  />
+                                )}
+                                {userType === 'external' && (
+                                  <FaUser
+                                    className={`mr-1 ${typeConfig.icon}`}
+                                    size={10}
+                                  />
+                                )}
+                                {userType === 'company' && (
+                                  <FaBuilding
+                                    className={`mr-1 ${typeConfig.icon}`}
+                                    size={10}
+                                  />
+                                )}
+                                <span
+                                  className={`font-semibold ${typeConfig.text}`}
+                                >
+                                  {typeConfig.label}
+                                </span>
+                                {userType === 'company' && (
+                                  <Tooltip
+                                    content={`${user.companyName}${user.companyRif ? ` (${user.companyRif})` : ''}`}
+                                    position="top"
+                                  >
+                                    <FaInfoCircle
+                                      className="ml-1 text-gray-400 hover:text-gray-600 cursor-help"
+                                      size={10}
+                                    />
+                                  </Tooltip>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* CI */}
+                            <div>
+                              <span className="font-medium text-gray-500 mr-1">
+                                CI:
+                              </span>
+                              <Tooltip
+                                content={user.ci || 'No registrada'}
+                                position="top"
+                              >
+                                <span
+                                  className="font-semibold text-gray-800 truncate block cursor-help"
+                                  title={user.ci || 'N/A'}
+                                >
+                                  {user.ci || 'N/A'}
+                                </span>
+                              </Tooltip>
+                            </div>
+                          </div>
+
+                          {/* Estado */}
+                          <div className="mt-2 flex justify-between items-center">
+                            <span
+                              className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                user.status
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {user.status ? 'Activo' : 'Inactivo'}
+                            </span>
+
+                            {/* Información de empresa si aplica */}
+                            {user.isCompanyRepresentative &&
+                              user.companyName && (
+                                <Tooltip
+                                  content={`Empresa: ${user.companyName}${user.companyRif ? ` (${user.companyRif})` : ''}`}
+                                  position="top"
+                                >
+                                  <div className="flex items-center text-xs text-gray-500 cursor-help">
+                                    <FaBuilding size={10} className="mr-1" />
+                                    <span>Representante</span>
+                                  </div>
+                                </Tooltip>
+                              )}
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <div className="text-center py-12 text-gray-500">
                       <div className="flex flex-col items-center">
