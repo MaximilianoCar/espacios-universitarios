@@ -9,6 +9,14 @@ module.exports = (sequelize, DataTypes) => {
         DENIED: 'denied',
       };
     }
+
+    static get RATING() {
+      return {
+        MIN: 1,
+        MAX: 5,
+      };
+    }
+
     static associate(models) {
       Event.belongsTo(models.User, {
         foreignKey: 'userId',
@@ -87,10 +95,48 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      specialRequirements: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'special_requirements',
+        comment:
+          'Requerimientos especiales como logística, protocolo, vigilancia, estacionamiento, etc.',
+      },
+      spaceConditionRating: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'space_condition_rating',
+        validate: {
+          min: Event.RATING.MIN,
+          max: Event.RATING.MAX,
+        },
+        comment: 'Calificación de condiciones del espacio (1-5)',
+      },
+      staffTreatmentRating: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'staff_treatment_rating',
+        validate: {
+          min: Event.RATING.MIN,
+          max: Event.RATING.MAX,
+        },
+        comment: 'Calificación de trato del personal (1-5)',
+      },
+      reservationProcessRating: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'reservation_process_rating',
+        validate: {
+          min: Event.RATING.MIN,
+          max: Event.RATING.MAX,
+        },
+        comment: 'Calificación de proceso de reserva (1-5)',
+      },
     },
     {
       sequelize,
       modelName: 'Event',
+      underscored: true,
     }
   );
   return Event;

@@ -19,6 +19,7 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    specialRequirements: '',
     capacity: '',
     cost: '',
     contact: '',
@@ -102,6 +103,12 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
     if (!formData.name.trim()) newErrors.name = 'El nombre es requerido';
     if (!formData.description.trim())
       newErrors.description = 'La descripción es requerida';
+    if (
+      formData.specialRequirements &&
+      formData.specialRequirements.length > 2000
+    )
+      newErrors.specialRequirements =
+        'Los requerimientos especiales no pueden exceder 2000 caracteres';
     if (formData.description.length > 5000)
       newErrors.description =
         'La descripción no puede exceder los 5000 caracteres';
@@ -239,6 +246,10 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
     data.append('reservationTo', formData.reservationTo);
     data.append('status', 'pending'); // Por defecto pendiente
 
+    if (formData.specialRequirements) {
+      data.append('specialRequirements', formData.specialRequirements);
+    }
+
     if (formData.imageFile) {
       data.append('imageFile', formData.imageFile);
     }
@@ -261,6 +272,7 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
       setFormData({
         name: '',
         description: '',
+        specialRequirements: '',
         capacity: '',
         cost: '',
         contact: '',

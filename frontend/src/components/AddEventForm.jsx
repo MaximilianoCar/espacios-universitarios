@@ -21,6 +21,7 @@ const AddEventForm = ({ onEventCreated }) => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    specialRequirements: '',
     capacity: '',
     cost: '',
     contact: '',
@@ -438,6 +439,7 @@ const AddEventForm = ({ onEventCreated }) => {
         setFormData({
           name: '',
           description: '',
+          specialRequirements: '',
           capacity: '',
           cost: '',
           contact: '',
@@ -1037,25 +1039,50 @@ const AddEventForm = ({ onEventCreated }) => {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Descripción del Evento
-              </label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                rows="4"
-                className={`block w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  errors.description ? 'border-red-500' : 'border-gray-300'
-                }`}
-                placeholder="Describe los detalles de tu evento..."
-              />
-              {errors.description && (
-                <p className="text-red-500 text-sm mt-1">
-                  {errors.description}
-                </p>
-              )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Descripción del Evento
+                </label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  rows="4"
+                  className={`block w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    errors.description ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  placeholder="Describe los detalles de tu evento..."
+                />
+                {errors.description && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.description}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Requerimientos Especiales (opcional)
+                </label>
+                <textarea
+                  name="specialRequirements"
+                  value={formData.specialRequirements}
+                  onChange={handleChange}
+                  rows="4"
+                  className={`block w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    errors.specialRequirements
+                      ? 'border-red-500'
+                      : 'border-gray-300'
+                  }`}
+                  placeholder="Ej: Necesito montaje de audio, acceso para personas con movilidad reducida, vigilancia adicional, estacionamiento para 2 vehículos, requerimiento de energía eléctrica, etc."
+                />
+                {errors.specialRequirements && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.specialRequirements}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         )}

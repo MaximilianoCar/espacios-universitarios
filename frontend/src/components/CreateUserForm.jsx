@@ -31,6 +31,24 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
     { value: 'pending', label: 'Pendiente', internal: false },
   ];
 
+  // Roles que NO pueden ser externos
+  const ROLES_NO_EXTERNOS = ['coordinator', 'admin'];
+
+  // Roles que SÍ pueden ser externos (además de externalvisitor que ya es externo por defecto)
+  const ROLES_PUEDEN_SER_EXTERNOS = ['requester', 'pending'];
+
+  // Determinar si el rol actual permite ser externo
+  const puedeSerExterno = () => {
+    if (formData.role === 'externalvisitor') return true;
+    if (formData.role === 'visitor') return false;
+    return ROLES_PUEDEN_SER_EXTERNOS.includes(formData.role);
+  };
+
+  // Determinar si el rol actual NO permite ser externo
+  const noPuedeSerExterno = () => {
+    return ROLES_NO_EXTERNOS.includes(formData.role);
+  };
+
   const handleChange = e => {
     const { name, value, type, checked } = e.target;
 
@@ -44,14 +62,42 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
       if (name === 'role') {
         if (value === 'externalvisitor') {
           newData.isExternal = true;
+          newData.isCompanyRepresentative = false;
+          setShowCompanyFields(false);
         } else if (value === 'visitor') {
           newData.isExternal = false;
+          newData.isCompanyRepresentative = false;
+          setShowCompanyFields(false);
+        } else if (ROLES_NO_EXTERNOS.includes(value)) {
+          // Coordinador y Admin NO pueden ser externos
+          newData.isExternal = false;
+          newData.isCompanyRepresentative = false;
+          setShowCompanyFields(false);
+        } else {
+          // Para otros roles (requester, pending), mantener el valor actual de isExternal
+          // pero resetear campos de empresa si no es externo
+          if (!newData.isExternal) {
+            newData.isCompanyRepresentative = false;
+            setShowCompanyFields(false);
+          }
         }
       }
 
       // Mostrar/ocultar campos de empresa
       if (name === 'isCompanyRepresentative') {
         setShowCompanyFields(checked);
+      }
+
+      // Si se marca isExternal para roles que no lo permiten, mostrar error
+      if (name === 'isExternal' && checked && noPuedeSerExterno()) {
+        // No permitir marcar externo para estos roles
+        Swal.fire({
+          title: 'Error',
+          text: 'Los roles de Coordinador y Administrador no pueden ser usuarios externos.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
+        return { ...prev }; // Devolver estado anterior
       }
 
       return newData;
@@ -67,19 +113,28 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
         role: value,
       };
 
-      // Auto-ajustar isExternal según el rol
+      // Auto-ajustar según el rol
       if (value === 'externalvisitor') {
         newData.isExternal = true;
-        newData.isCompanyRepresentative = false; // Resetear por defecto
+        newData.isCompanyRepresentative = false;
         setShowCompanyFields(false);
       } else if (value === 'visitor') {
         newData.isExternal = false;
         newData.isCompanyRepresentative = false;
         setShowCompanyFields(false);
-      } else {
+      } else if (ROLES_NO_EXTERNOS.includes(value)) {
+        // Coordinador y Admin NO pueden ser externos
         newData.isExternal = false;
         newData.isCompanyRepresentative = false;
         setShowCompanyFields(false);
+      } else {
+        // Para solicitante y pendiente, mantener isExternal si ya estaba marcado
+        // pero solo si es compatible
+        if (!puedeSerExterno() && newData.isExternal) {
+          newData.isExternal = false;
+          newData.isCompanyRepresentative = false;
+          setShowCompanyFields(false);
+        }
       }
 
       return newData;
@@ -91,11 +146,20 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
     setIsSubmitting(true);
     setError('');
 
-    // Validaciones adicionales
-    if (
-      formData.role === 'externalvisitor' &&
-      formData.isCompanyRepresentative
-    ) {
+    // Validación: Coordinador y Admin no pueden ser externos
+    if (noPuedeSerExterno() && formData.isExternal) {
+      Swal.fire({
+        title: 'Error',
+        text: 'Los roles de Coordinador y Administrador no pueden ser usuarios externos.',
+        icon: 'error',
+        confirmButtonColor: '#d33',
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Validación: Campos de empresa para externos que son representantes
+    if (formData.isExternal && formData.isCompanyRepresentative) {
       if (!formData.companyName.trim() || !formData.companyRif.trim()) {
         Swal.fire({
           title: 'Error',
@@ -111,16 +175,18 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
     // Preparar datos para enviar
     const dataToSend = {
       ...formData,
-      companyName: formData.isCompanyRepresentative
-        ? formData.companyName.trim()
-        : null,
-      companyRif: formData.isCompanyRepresentative
-        ? formData.companyRif.trim()
-        : null,
+      companyName:
+        formData.isExternal && formData.isCompanyRepresentative
+          ? formData.companyName.trim()
+          : null,
+      companyRif:
+        formData.isExternal && formData.isCompanyRepresentative
+          ? formData.companyRif.trim()
+          : null,
     };
 
-    // Limpiar campos de empresa si no es representante
-    if (!formData.isCompanyRepresentative) {
+    // Limpiar campos de empresa si no es externo o no es representante
+    if (!formData.isExternal || !formData.isCompanyRepresentative) {
       dataToSend.companyName = null;
       dataToSend.companyRif = null;
     }
@@ -162,25 +228,55 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
 
   // Determinar el tipo de usuario para mostrar información
   const getUserTypeInfo = () => {
-    if (formData.role === 'externalvisitor') {
-      if (formData.isCompanyRepresentative) {
+    if (formData.isExternal) {
+      if (formData.role === 'externalvisitor') {
+        if (formData.isCompanyRepresentative) {
+          return {
+            icon: <FaBuilding className="text-green-500" />,
+            text: 'Representante de Empresa Externa',
+            color: 'text-green-700',
+            bgColor: 'bg-green-50',
+          };
+        }
         return {
-          icon: <FaBuilding className="text-green-500" />,
-          text: 'Representante de Empresa',
-          color: 'text-green-700',
-          bgColor: 'bg-green-50',
+          icon: <FaUser className="text-purple-500" />,
+          text: 'Visitante Externo',
+          color: 'text-purple-700',
+          bgColor: 'bg-purple-50',
+        };
+      } else if (ROLES_PUEDEN_SER_EXTERNOS.includes(formData.role)) {
+        if (formData.isCompanyRepresentative) {
+          return {
+            icon: <FaBuilding className="text-orange-500" />,
+            text: `${formData.role === 'requester' ? 'Solicitante' : 'Pendiente'} Externo - Representante`,
+            color: 'text-orange-700',
+            bgColor: 'bg-orange-50',
+          };
+        }
+        return {
+          icon: <FaUser className="text-orange-500" />,
+          text: `${formData.role === 'requester' ? 'Solicitante' : 'Pendiente'} Externo`,
+          color: 'text-orange-700',
+          bgColor: 'bg-orange-50',
         };
       }
-      return {
-        icon: <FaUser className="text-purple-500" />,
-        text: 'Visitante Externo',
-        color: 'text-purple-700',
-        bgColor: 'bg-purple-50',
-      };
     }
+
+    // Usuario interno
     return {
       icon: <FaUniversity className="text-blue-500" />,
-      text: 'Usuario Interno',
+      text:
+        formData.role === 'visitor'
+          ? 'Visitante Interno'
+          : formData.role === 'requester'
+            ? 'Solicitante Interno'
+            : formData.role === 'pending'
+              ? 'Pendiente Interno'
+              : formData.role === 'coordinator'
+                ? 'Coordinador'
+                : formData.role === 'admin'
+                  ? 'Administrador'
+                  : 'Usuario Interno',
       color: 'text-blue-700',
       bgColor: 'bg-blue-50',
     };
@@ -299,11 +395,13 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
                 ? 'Usuarios externos a la institución'
                 : formData.role === 'visitor'
                   ? 'Usuarios internos de la institución'
-                  : 'Roles administrativos'}
+                  : ROLES_NO_EXTERNOS.includes(formData.role)
+                    ? 'Roles administrativos (solo internos)'
+                    : 'Puede ser usuario interno o externo'}
             </p>
           </div>
 
-          {/* Campo isExternal (auto-ajustado según rol) */}
+          {/* Campo isExternal - solo para roles que pueden ser externos */}
           <div className="flex items-center">
             <label className="flex items-center cursor-pointer">
               <input
@@ -313,7 +411,9 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
                 onChange={handleChange}
                 disabled={
                   formData.role === 'externalvisitor' ||
-                  formData.role === 'visitor'
+                  formData.role === 'visitor' ||
+                  noPuedeSerExterno() ||
+                  !puedeSerExterno()
                 }
                 className="h-4 w-4 text-blue-600 border-gray-300 rounded mr-2"
               />
@@ -323,10 +423,90 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
             </label>
             <FaInfoCircle
               className="ml-2 text-gray-400"
-              title="Automáticamente ajustado según el rol seleccionado"
+              title={
+                noPuedeSerExterno()
+                  ? 'Los coordinadores y administradores no pueden ser externos'
+                  : formData.role === 'externalvisitor'
+                    ? 'Automáticamente externo por ser visitante externo'
+                    : formData.role === 'visitor'
+                      ? 'Solo para usuarios internos'
+                      : 'Puede marcar si el usuario es externo a la institución'
+              }
             />
           </div>
         </div>
+
+        {/* Campos para usuarios externos (excepto externalvisitor) */}
+        {formData.isExternal && formData.role !== 'externalvisitor' && (
+          <div className="p-4 border border-gray-200 rounded-lg bg-gray-50">
+            <h4 className="text-lg font-semibold text-gray-800 mb-3">
+              Información de Usuario Externo
+              {formData.role === 'requester' && ' (Solicitante)'}
+              {formData.role === 'pending' && ' (Pendiente)'}
+            </h4>
+
+            <div className="mb-3">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="isCompanyRepresentative"
+                  checked={formData.isCompanyRepresentative}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-green-600 border-gray-300 rounded mr-2"
+                />
+                <span className="text-gray-700 font-medium">
+                  ¿Representa una empresa/organización?
+                </span>
+              </label>
+              <p className="text-xs text-gray-500 mt-1 ml-6">
+                Marque si el usuario viene en representación de una empresa u
+                organización externa
+              </p>
+            </div>
+
+            {/* Campos de empresa si es representante */}
+            {formData.isCompanyRepresentative && (
+              <div className="mt-4 space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-gray-700 mb-2 font-medium">
+                      Nombre de la Empresa *
+                    </label>
+                    <input
+                      type="text"
+                      name="companyName"
+                      value={formData.companyName}
+                      onChange={handleChange}
+                      required={formData.isCompanyRepresentative}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      placeholder="Ej: Mi Empresa S.A."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-700 mb-2 font-medium">
+                      RIF de la Empresa *
+                    </label>
+                    <input
+                      type="text"
+                      name="companyRif"
+                      value={formData.companyRif}
+                      onChange={handleChange}
+                      required={formData.isCompanyRepresentative}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      placeholder="Ej: J-12345678-9"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 flex items-center">
+                  <FaInfoCircle className="mr-1" />
+                  Estos campos son obligatorios cuando el usuario representa una
+                  empresa
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Campos específicos para externalvisitor */}
         {formData.role === 'externalvisitor' && (

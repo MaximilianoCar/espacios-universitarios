@@ -69,7 +69,8 @@ const AdminReservationsPage = () => {
   const [selectedEventDates, setSelectedEventDates] = useState({});
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [selectedDescription, setSelectedDescription] = useState('');
-
+  const [selectedSpecialRequirements, setSelectedSpecialRequirements] =
+    useState('');
   // para el modal de imagen
   const [selectedImage, setSelectedImage] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
@@ -98,7 +99,7 @@ const AdminReservationsPage = () => {
           search: searchTerm,
         },
       });
-      console.log('Refreshed events:', response.data);
+      //console.log('Refreshed events:', response.data);
       setEvents(response.data.events || []);
       setTotalEvents(response.data.totalEvents || 0);
       setTotalPages(response.data.totalPages || 1);
@@ -494,14 +495,16 @@ const AdminReservationsPage = () => {
     setSelectedEventContact('');
   };
 
-  const handleShowDescription = description => {
+  const handleShowDescription = (description, specialRequirements) => {
     setSelectedDescription(description);
+    setSelectedSpecialRequirements(specialRequirements);
     setShowDescriptionModal(true);
   };
 
   const handleCloseDescriptionModal = () => {
     setShowDescriptionModal(false);
     setSelectedDescription('');
+    setSelectedSpecialRequirements('');
   };
 
   // Manejador de clic en la imagen para mostrar el modal
@@ -1007,7 +1010,12 @@ const AdminReservationsPage = () => {
                     {/* Descripción */}
                     <td className="py-2 px-4 border-b text-center">
                       <button
-                        onClick={() => handleShowDescription(event.description)}
+                        onClick={() =>
+                          handleShowDescription(
+                            event.description,
+                            event.specialRequirements
+                          )
+                        }
                         className="text-blue-600 hover:text-blue-800 transition-colors"
                         title="Ver descripción"
                       >
@@ -1421,14 +1429,59 @@ const AdminReservationsPage = () => {
         <RenderModal onClose={handleCloseDescriptionModal}>
           <div className="p-5 border-b border-gray-200">
             <h2 className="text-lg font-bold text-gray-800">
-              Descripción del Evento
+              Información del Evento
             </h2>
           </div>
           <div className="flex-1 p-5 overflow-y-auto">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
-                {selectedDescription || 'No hay descripción disponible.'}
-              </p>
+            {/* Sección de Descripción */}
+            <div className="bg-blue-50 rounded-lg p-4 mb-4 space-y-3">
+              <div className="border-b border-blue-200 pb-3">
+                <h3 className="text-sm font-semibold text-blue-800 mb-2">
+                  Descripción del Evento
+                </h3>
+                <div className="bg-white rounded-md p-3 border border-blue-100">
+                  {selectedDescription ? (
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line truncate break-all">
+                      {selectedDescription}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic text-center py-2">
+                      No hay descripción disponible
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Sección de Requerimientos Especiales */}
+              <div>
+                <h3 className="text-sm font-semibold text-blue-800 mb-2">
+                  Requerimientos Especiales
+                </h3>
+                <div className="bg-white rounded-md p-3 border border-blue-100">
+                  {selectedSpecialRequirements ? (
+                    <div className="space-y-2">
+                      <div className="flex items-start">
+                        <FaInfoCircle
+                          className="text-green-500 mt-1 mr-2 flex-shrink-0"
+                          size={14}
+                        />
+                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line truncate break-all">
+                          {selectedSpecialRequirements}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic text-center py-2">
+                      No hay requerimientos especiales
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Nota informativa */}
+            <div className="text-xs text-gray-500 text-center mb-4">
+              <p>Esta información fue proporcionada por el solicitante</p>
             </div>
           </div>
           <div className="p-5 border-t border-gray-200">
