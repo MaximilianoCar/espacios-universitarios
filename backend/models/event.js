@@ -24,77 +24,43 @@ module.exports = (sequelize, DataTypes) => {
         as: 'room', // Alias para la relación
         onDelete: 'SET NULL', // Si la sala se elimina, no elimina el evento pero establece roomId en null
       });
+      // Un evento tiene muchas ocurrencias/horarios
+      Event.hasMany(models.EventSchedule, {
+        foreignKey: 'eventId',
+        as: 'schedules',
+        onDelete: 'CASCADE',
+      });
     }
   }
   Event.init(
     {
-      name: {
-        type: DataTypes.STRING,
-        unique: true,
-        allowNull: false, // Este campo es obligatorio
-      },
+      name: { type: DataTypes.STRING, unique: true, allowNull: false },
       description: DataTypes.TEXT,
       comments: DataTypes.TEXT,
-      capacity: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-      },
-      cost: {
-        type: DataTypes.STRING,
-        allowNull: false,
-      },
-      contact: {
-        type: DataTypes.STRING,
-        allowNull: false,
-      },
+      capacity: { type: DataTypes.INTEGER, allowNull: false },
+      cost: { type: DataTypes.STRING, allowNull: false },
+      contact: { type: DataTypes.STRING, allowNull: false },
       status: {
         type: DataTypes.ENUM(
           Event.STATUS.PENDING,
           Event.STATUS.APPROVED,
           Event.STATUS.DENIED
-        ), // Solo permite los valores 'pending','approved',"denied"
-        allowNull: false, // Campo obligatorio
-      },
-      eventFrom: {
-        type: DataTypes.DATE,
+        ),
         allowNull: false,
       },
-      eventTo: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
-      reservationFrom: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
-      reservationTo: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
-      createdAt: {
-        type: DataTypes.DATE,
-        allowNull: false,
-      },
-      programPath: {
-        type: DataTypes.STRING, // Ruta del archivo del programa
-        allowNull: true,
-      },
-      agreementPath: {
-        type: DataTypes.STRING, // Ruta del archivo del contrato
-        allowNull: true,
-      },
-      imagePath: {
-        type: DataTypes.STRING,
-        allowNull: true, // Puede ser nulo si no se sube imagen
-      },
-      bannerPath: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
+      eventFrom: { type: DataTypes.DATE, allowNull: true },
+      eventTo: { type: DataTypes.DATE, allowNull: true },
+      reservationFrom: { type: DataTypes.DATE, allowNull: true },
+      reservationTo: { type: DataTypes.DATE, allowNull: true },
+      programPath: DataTypes.STRING,
+      agreementPath: DataTypes.STRING,
+      imagePath: DataTypes.STRING,
+      bannerPath: DataTypes.STRING,
     },
     {
       sequelize,
       modelName: 'Event',
+      underscored: true,
     }
   );
   return Event;
