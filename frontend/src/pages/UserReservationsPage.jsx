@@ -2,12 +2,12 @@ import React, { useEffect, useState, useRef } from 'react';
 import axiosInstance from '../axiosConfig';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import SearchBar from '../components/SearchBar';
+import SearchBar from '../components/SearchBar2';
 import {
   FaEye,
   FaUpload,
-  FaEnvelope,
-  FaCalendarAlt,
+  FaRegEnvelope,
+  FaRegCalendarAlt,
   FaInfoCircle,
   FaTrash,
   FaMapPin,
@@ -19,22 +19,31 @@ import {
   FaFilePdf,
   FaFileContract,
   FaArrowLeft,
+  FaCalendarAlt,
 } from 'react-icons/fa';
+import { IoInformationCircleOutline } from 'react-icons/io5';
 import Modal from '../components/Modal';
 import ModalMobile from '../components/ModalMobile';
 
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 import { useNavigate } from 'react-router-dom';
 import getMediaUrl from '../utils/media';
 
+const PAGE_SIZE = 25; // mismo que el backend
+
 const UserReservationsPage = () => {
   const [events, setEvents] = useState([]);
-  const [filteredEvents, setFilteredEvents] = useState([]);
-  const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentSearch, setCurrentSearch] = useState('');
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [uploadingProgramId, setUploadingProgramId] = useState(null);
   const [programFile, setProgramFile] = useState(null);
+
+  // Estados de paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalEvents, setTotalEvents] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [openMenuId, setOpenMenuId] = useState(null);
   // ---------------------------------------------
@@ -54,6 +63,28 @@ const UserReservationsPage = () => {
 
   // Estado para detectar si es móvil
   const [isMobile, setIsMobile] = useState(false);
+
+  // Función para recargar eventos manteniendo la paginación actual
+  const refreshEvents = async () => {
+    try {
+      const response = await axiosInstance.get('/my-events', {
+        params: {
+          page: currentPage,
+          pageSize: PAGE_SIZE,
+          search: searchTerm,
+        },
+      });
+
+      setEvents(response.data.events || []);
+      setTotalEvents(response.data.totalEvents || 0);
+      setTotalPages(response.data.totalPages || 1);
+      // detectar y preguntar por calificaciones (una vez por sesión)
+      checkUnratedAndPrompt(response.data.events || []);
+    } catch (error) {
+      console.error('Error refreshing events:', error);
+      setError('Error al obtener las reservas.');
+    }
+  };
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -85,35 +116,69 @@ const UserReservationsPage = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openMenuId]);
 
+  // Modificar la función handleSearch para buscar solo al presionar Enter
+  const handleSearch = async term => {
+    setSearchTerm(term);
+    setCurrentSearch(term);
+    setCurrentPage(1); // Siempre volver a la página 1 al buscar
+
+    setLoading(true);
+    try {
+      const response = await axiosInstance.get('/my-events', {
+        params: {
+          page: 1,
+          pageSize: PAGE_SIZE,
+          search: term,
+        },
+      });
+
+      setEvents(response.data.events || []);
+      setTotalEvents(response.data.totalEvents || 0);
+      setTotalPages(response.data.totalPages || 1);
+      setError('');
+    } catch (error) {
+      console.error('Error searching events:', error);
+      setError('Error al buscar eventos.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Obtener eventos con paginación del BACKEND
   useEffect(() => {
-    axiosInstance
-      .get(`/my-events`)
-      .then(response => {
-        setEvents(response.data);
-        setFilteredEvents(response.data);
-        setLoading(false);
-      })
-      .catch(error => {
+    const fetchEvents = async () => {
+      setLoading(true);
+      try {
+        const response = await axiosInstance.get('/my-events', {
+          params: {
+            page: currentPage,
+            pageSize: PAGE_SIZE,
+            search: searchTerm,
+          },
+        });
+
+        setEvents(response.data.events || []);
+        setTotalEvents(response.data.totalEvents || 0);
+        setTotalPages(response.data.totalPages || 1);
+        setError('');
+        // detectar y preguntar por calificaciones (una vez por sesión)
+        checkUnratedAndPrompt(response.data.events || []);
+      } catch (error) {
         console.error('Error fetching reservations:', error);
         setError('Error al obtener las reservas.');
+      } finally {
         setLoading(false);
-      });
-  }, []);
+      }
+    };
 
-  // Manejar el cambio en el término de búsqueda
-  const handleSearch = term => {
-    setSearchTerm(term);
+    fetchEvents();
+  }, [currentPage]); // Solo dependencia de currentPage
 
-    const filtered = events.filter(event => {
-      const lowerCaseTerm = term.toLowerCase();
-      const searchableFields = `${event.name} ${event.description} ${
-        event.room?.name || ''
-      }`.toLowerCase();
-
-      return searchableFields.includes(lowerCaseTerm);
-    });
-
-    setFilteredEvents(filtered);
+  // Manejar cambio de página
+  const handlePageChange = newPage => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
   };
 
   // Manejar cambio de archivo para el programa
@@ -122,7 +187,7 @@ const UserReservationsPage = () => {
   };
 
   // Manejar la subida del archivo de programa
-  const handleUploadProgram = eventId => {
+  const handleUploadProgram = async eventId => {
     if (!programFile) return;
 
     const formData = new FormData();
@@ -140,48 +205,44 @@ const UserReservationsPage = () => {
       },
     });
 
-    axiosInstance
-      .post(`/events/${eventId}/upload-files`, formData, {
+    try {
+      await axiosInstance.post(`/events/${eventId}/upload-files`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-      })
-      .then(response => {
-        Swal.close();
-        Swal.fire({
-          title: '¡Éxito!',
-          text: 'El programa ha sido subido exitosamente.',
-          icon: 'success',
-          confirmButtonColor: '#3085d6',
-          confirmButtonText: 'Aceptar',
-        });
-
-        setUploadingProgramId(null);
-        setProgramFile(null);
-
-        // Refrescar los datos para mostrar el nuevo archivo
-        axiosInstance.get(`/my-events`).then(response => {
-          setEvents(response.data);
-          setFilteredEvents(response.data);
-        });
-      })
-      .catch(error => {
-        Swal.close();
-        console.error('Error al subir el programa:', error);
-        Swal.fire({
-          title: 'Error',
-          text: 'Error al subir el programa. Intente nuevamente.',
-          icon: 'error',
-          confirmButtonColor: '#d33',
-          confirmButtonText: 'Aceptar',
-        });
       });
+
+      Swal.close();
+      Swal.fire({
+        title: '¡Éxito!',
+        text: 'El programa ha sido subido exitosamente.',
+        icon: 'success',
+        confirmButtonColor: '#3085d6',
+        confirmButtonText: 'Aceptar',
+      });
+
+      setUploadingProgramId(null);
+      setProgramFile(null);
+
+      // Recargar los datos manteniendo la paginación actual
+      await refreshEvents();
+    } catch (error) {
+      Swal.close();
+      console.error('Error al subir el programa:', error);
+      Swal.fire({
+        title: 'Error',
+        text: 'Error al subir el programa. Intente nuevamente.',
+        icon: 'error',
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Aceptar',
+      });
+    }
   };
 
-  const handleDeleteReservation = reservation => {
+  const handleDeleteReservation = async reservation => {
     setOpenMenuId(null); // Cerrar el menú después de la acción
 
-    Swal.fire({
+    const result = await Swal.fire({
       title: '¿Estás seguro?',
       html: `
         <div class="text-left">
@@ -209,53 +270,47 @@ const UserReservationsPage = () => {
       confirmButtonText: 'Sí, eliminar reserva',
       cancelButtonText: 'Cancelar',
       width: '500px',
-    }).then(result => {
-      if (result.isConfirmed) {
-        // Mostrar loader durante la eliminación
+    });
+
+    if (result.isConfirmed) {
+      // Mostrar loader durante la eliminación
+      Swal.fire({
+        title: 'Eliminando...',
+        text: 'Por favor espere mientras se elimina la reserva',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        willOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      try {
+        await axiosInstance.delete(`/events/${reservation.id}`);
+
+        Swal.close();
         Swal.fire({
-          title: 'Eliminando...',
-          text: 'Por favor espere mientras se elimina la reserva',
-          allowOutsideClick: false,
-          allowEscapeKey: false,
-          showConfirmButton: false,
-          willOpen: () => {
-            Swal.showLoading();
-          },
+          title: '¡Eliminado!',
+          text: 'La reserva ha sido eliminada exitosamente.',
+          icon: 'success',
+          confirmButtonColor: '#3085d6',
+          confirmButtonText: 'Aceptar',
         });
 
-        axiosInstance
-          .delete(`/events/${reservation.id}`)
-          .then(response => {
-            Swal.close();
-            Swal.fire({
-              title: '¡Eliminado!',
-              text: 'La reserva ha sido eliminada exitosamente.',
-              icon: 'success',
-              confirmButtonColor: '#3085d6',
-              confirmButtonText: 'Aceptar',
-            });
-
-            // Actualizar el estado de eventos eliminando la reserva
-            setEvents(prevEvents =>
-              prevEvents.filter(event => event.id !== reservation.id)
-            );
-            setFilteredEvents(prevEvents =>
-              prevEvents.filter(event => event.id !== reservation.id)
-            );
-          })
-          .catch(error => {
-            Swal.close();
-            console.error('Error al eliminar la reserva:', error);
-            Swal.fire({
-              title: 'Error',
-              text: 'Error al eliminar la reserva. Intente nuevamente.',
-              icon: 'error',
-              confirmButtonColor: '#d33',
-              confirmButtonText: 'Aceptar',
-            });
-          });
+        // Recargar desde el backend manteniendo la paginación
+        await refreshEvents();
+      } catch (error) {
+        Swal.close();
+        console.error('Error al eliminar la reserva:', error);
+        Swal.fire({
+          title: 'Error',
+          text: 'Error al eliminar la reserva. Intente nuevamente.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+          confirmButtonText: 'Aceptar',
+        });
       }
-    });
+    }
   };
 
   // para mostrar fechas de forma mas legible
@@ -273,6 +328,259 @@ const UserReservationsPage = () => {
         minute: '2-digit',
       }),
     };
+  };
+
+  // Detectar eventos aprobados y ya ocurridos que no tienen calificaciones
+  const checkUnratedAndPrompt = async fetchedEvents => {
+    try {
+      // Preguntar solo una vez por sesión
+      const sessionKey = 'ratingPromptShown_v2';
+      if (sessionStorage.getItem(sessionKey)) return;
+
+      if (!fetchedEvents || fetchedEvents.length === 0) return;
+
+      const now = new Date();
+      const unrated = fetchedEvents.filter(ev => {
+        return (
+          ev.status === 'approved' &&
+          ev.eventTo &&
+          new Date(ev.eventTo) < now &&
+          (ev.spaceConditionRating == null ||
+            ev.staffTreatmentRating == null ||
+            ev.reservationProcessRating == null)
+        );
+      });
+
+      if (!unrated || unrated.length === 0) return;
+
+      // Mostrar confirmación inicial
+      const first = unrated[0];
+      const confirm = await Swal.fire({
+        title: '¿Quieres calificar tu experiencia?',
+        html: `
+        <div class="text-left">
+          <p class="mb-4 text-gray-700">Tienes <span class="font-semibold text-blue-600">${unrated.length} evento(s)</span> aprobados y ya ocurridos sin calificar.</p>
+          <div class="bg-blue-50 border-l-4 border-blue-400 p-3 mb-4 rounded-r">
+            <p class="text-sm text-blue-700">
+              <strong>Evento:</strong> ${first.name}
+            </p>
+          </div>
+          <p class="text-sm text-gray-600">¿Deseas calificar ahora tu experiencia?</p>
+        </div>
+      `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Sí, calificar',
+        cancelButtonText: 'Ahora no',
+        width: '500px',
+      });
+
+      // Marcar que ya preguntamos esta sesión
+      sessionStorage.setItem(sessionKey, 'true');
+
+      if (!confirm.isConfirmed) return;
+
+      // Mostrar modal de calificación - Diseño similar al de rechazar solicitud
+      const { value: formValues } = await Swal.fire({
+        title: `Calificar: ${first.name}`,
+        html: `
+        <div class="text-left space-y-4">
+          <p class="text-sm text-gray-600 mb-2">Por favor califica del 1 al 5 cada aspecto de tu experiencia:</p>
+          
+          <div>
+            <label for="swal-space" class="block text-sm font-medium text-gray-700 mb-1">
+              Condiciones del espacio:
+            </label>
+            <select 
+              id="swal-space" 
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="">Seleccione una calificación</option>
+              <option value="1">1 - Muy malo</option>
+              <option value="2">2 - Malo</option>
+              <option value="3">3 - Regular</option>
+              <option value="4">4 - Bueno</option>
+              <option value="5">5 - Excelente</option>
+            </select>
+          </div>
+          
+          <div>
+            <label for="swal-staff" class="block text-sm font-medium text-gray-700 mb-1">
+              Trato del personal:
+            </label>
+            <select 
+              id="swal-staff" 
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="">Seleccione una calificación</option>
+              <option value="1">1 - Muy malo</option>
+              <option value="2">2 - Malo</option>
+              <option value="3">3 - Regular</option>
+              <option value="4">4 - Bueno</option>
+              <option value="5">5 - Excelente</option>
+            </select>
+          </div>
+          
+          <div>
+            <label for="swal-reservation" class="block text-sm font-medium text-gray-700 mb-1">
+              Proceso de reserva:
+            </label>
+            <select 
+              id="swal-reservation" 
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="">Seleccione una calificación</option>
+              <option value="1">1 - Muy malo</option>
+              <option value="2">2 - Malo</option>
+              <option value="3">3 - Regular</option>
+              <option value="4">4 - Bueno</option>
+              <option value="5">5 - Excelente</option>
+            </select>
+          </div>
+          
+          <div>
+            <label for="swal-suggestion" class="block text-sm font-medium text-gray-700 mb-1">
+              Sugerencias o comentarios adicionales (opcional):
+            </label>
+            <textarea 
+              id="swal-suggestion" 
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm" 
+              rows="3" 
+              placeholder="Comparte tu experiencia, sugerencias o comentarios para mejorar..."
+              maxlength="500"
+            ></textarea>
+            <div class="text-right text-xs text-gray-500 mt-1">
+              <span id="swal-char-count">0</span>/500 caracteres
+            </div>
+          </div>
+          
+          <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded-r">
+            <p class="text-xs text-yellow-700">
+              <strong>Nota:</strong> Tu calificación nos ayuda a mejorar nuestros servicios. Todas las calificaciones son obligatorias.
+            </p>
+          </div>
+        </div>
+      `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Enviar calificación',
+        cancelButtonText: 'Cancelar',
+        focusConfirm: false,
+        width: '500px',
+        preConfirm: () => {
+          const space = document.getElementById('swal-space').value;
+          const staff = document.getElementById('swal-staff').value;
+          const reservation = document.getElementById('swal-reservation').value;
+          const suggestion = document.getElementById('swal-suggestion').value;
+
+          if (!space || !staff || !reservation) {
+            Swal.showValidationMessage(
+              'Por favor completa las tres calificaciones (1-5).'
+            );
+            return false;
+          }
+
+          if (suggestion && suggestion.length > 500) {
+            Swal.showValidationMessage(
+              'Los comentarios no pueden exceder los 500 caracteres.'
+            );
+            return false;
+          }
+
+          return {
+            spaceConditionRating: parseInt(space, 10),
+            staffTreatmentRating: parseInt(staff, 10),
+            reservationProcessRating: parseInt(reservation, 10),
+            suggestion: suggestion || '',
+          };
+        },
+        didOpen: () => {
+          // Contador de caracteres para sugerencias
+          const textarea = document.getElementById('swal-suggestion');
+          const charCount = document.getElementById('swal-char-count');
+
+          if (textarea && charCount) {
+            textarea.addEventListener('input', () => {
+              const length = textarea.value.length;
+              charCount.textContent = length;
+
+              // Cambiar color según la longitud
+              if (length > 450) {
+                charCount.className = 'text-right text-xs text-red-500 mt-1';
+              } else if (length > 400) {
+                charCount.className = 'text-right text-xs text-orange-500 mt-1';
+              } else {
+                charCount.className = 'text-right text-xs text-gray-500 mt-1';
+              }
+            });
+          }
+        },
+      });
+
+      if (!formValues) return;
+
+      // Enviar al backend
+      Swal.fire({
+        title: 'Enviando calificación...',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        willOpen: () => Swal.showLoading(),
+      });
+
+      try {
+        await axiosInstance.post(`/events/${first.id}/rate`, formValues);
+
+        Swal.close();
+
+        // Mostrar confirmación de éxito
+        await Swal.fire({
+          title: '¡Gracias!',
+          html: `
+          <div class="text-center">
+            <div class="mb-4">
+              <svg class="mx-auto h-12 w-12 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <p class="text-gray-700 mb-2">Tu calificación ha sido enviada exitosamente.</p>
+            <p class="text-sm text-gray-600">Tus comentarios nos ayudan a mejorar nuestros servicios.</p>
+          </div>
+        `,
+          icon: 'success',
+          confirmButtonColor: '#3085d6',
+          confirmButtonText: 'Aceptar',
+        });
+
+        // Recargar eventos para actualizar las calificaciones
+        await refreshEvents();
+      } catch (err) {
+        Swal.close();
+        console.error('Error enviando calificación:', err);
+
+        // Mostrar error específico
+        const errorMessage = err.response?.data?.message || 'Error desconocido';
+        await Swal.fire({
+          title: 'Error',
+          html: `
+          <div class="text-left">
+            <p class="text-gray-700 mb-3">No se pudo enviar tu calificación. Por favor, intenta nuevamente.</p>
+            <div class="bg-red-50 border-l-4 border-red-400 p-3 rounded-r">
+              <p class="text-sm text-red-700">Detalles: ${errorMessage}</p>
+            </div>
+          </div>
+        `,
+          icon: 'error',
+          confirmButtonColor: '#d33',
+          confirmButtonText: 'Entendido',
+        });
+      }
+    } catch (err) {
+      console.error('Error en checkUnratedAndPrompt:', err);
+    }
   };
 
   // Función para mostrar el modal de fechas unificado
@@ -363,6 +671,136 @@ const UserReservationsPage = () => {
       setProgramFile(file);
     };
 
+    const handleProgramOptions = () => {
+      setOpenMenuId(null);
+      Swal.fire({
+        title: '',
+        html: `
+        <div class="max-w-md w-full bg-white rounded-lg shadow-md overflow-hidden text-left">
+          <div class="flex items-center justify-between px-4 py-3 border-b">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-800">Programa</h3>
+              <p class="text-sm text-gray-600 mt-1">Ver, actualizar o eliminar el programa asociado a este evento.</p>
+            </div>
+          </div>
+
+          <div class="px-4 py-4 space-y-3">
+            <div class="text-sm text-gray-700">Acciones disponibles:</div>
+            <div class="flex gap-2">
+              <button id="swal-view-prog" class="w-1/3 px-3 py-2 bg-blue-600 text-white rounded-md text-sm">Ver</button>
+              <button id="swal-update-prog" class="w-1/3 px-3 py-2 bg-yellow-500 text-white rounded-md text-sm">Actualizar</button>
+              <button id="swal-delete-prog" class="w-1/3 px-3 py-2 bg-red-600 text-white rounded-md text-sm">Eliminar</button>
+            </div>
+          </div>
+
+          <div class="px-4 py-3 border-t text-right">
+            <button id="swal-cancel-prog" class="px-3 py-1 text-sm text-gray-600 hover:text-gray-800">Cerrar</button>
+          </div>
+        </div>
+      `,
+        showConfirmButton: false,
+        showCloseButton: true,
+        didOpen: () => {
+          const view = document.getElementById('swal-view-prog');
+          const update = document.getElementById('swal-update-prog');
+          const del = document.getElementById('swal-delete-prog');
+          const cancel = document.getElementById('swal-cancel-prog');
+
+          cancel && cancel.addEventListener('click', () => Swal.close());
+
+          view &&
+            view.addEventListener('click', () => {
+              if (event.programPath)
+                window.open(getMediaUrl(event.programPath), '_blank');
+              Swal.close();
+            });
+
+          update &&
+            update.addEventListener('click', () => {
+              Swal.close();
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
+              input.onchange = async e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const formData = new FormData();
+                formData.append('programPath', file);
+
+                Swal.fire({
+                  title: 'Subiendo programa...',
+                  allowOutsideClick: false,
+                  didOpen: () => Swal.showLoading(),
+                  showConfirmButton: false,
+                });
+                try {
+                  await axiosInstance.post(
+                    `/events/${event.id}/upload-files`,
+                    formData,
+                    { headers: { 'Content-Type': 'multipart/form-data' } }
+                  );
+                  Swal.close();
+                  await Swal.fire(
+                    '¡Listo!',
+                    'Programa actualizado correctamente.',
+                    'success'
+                  );
+                  await refreshEvents();
+                } catch (err) {
+                  Swal.close();
+                  console.error(err);
+                  Swal.fire(
+                    'Error',
+                    'No se pudo actualizar el programa.',
+                    'error'
+                  );
+                }
+              };
+              input.click();
+            });
+
+          del &&
+            del.addEventListener('click', async () => {
+              Swal.close();
+              const r = await Swal.fire({
+                title: '¿Eliminar programa?',
+                text: 'Esta acción eliminará el programa permanentemente.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar',
+              });
+              if (r.isConfirmed) {
+                Swal.fire({
+                  title: 'Eliminando...',
+                  allowOutsideClick: false,
+                  didOpen: () => Swal.showLoading(),
+                  showConfirmButton: false,
+                });
+                try {
+                  await axiosInstance.delete(`/events/${event.id}/program`);
+                  Swal.close();
+                  await Swal.fire(
+                    'Eliminado',
+                    'Programa eliminado correctamente.',
+                    'success'
+                  );
+                  await refreshEvents();
+                } catch (err) {
+                  Swal.close();
+                  console.error(err);
+                  Swal.fire(
+                    'Error',
+                    'No se pudo eliminar el programa.',
+                    'error'
+                  );
+                }
+              }
+            });
+        },
+      });
+    };
+
     return (
       <div
         className="relative action-menu-container flex flex-col items-center justify-center"
@@ -436,15 +874,12 @@ const UserReservationsPage = () => {
               >
                 {/* ACCIONES DE DOCUMENTOS */}
                 {event.programPath ? (
-                  <a
-                    href={getMediaUrl(event.programPath)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setOpenMenuId(null)}
+                  <button
+                    onClick={() => handleProgramOptions()}
                     className="flex items-center w-full px-3 py-2 text-xs text-blue-600 hover:bg-gray-100"
                   >
-                    <FaFilePdf className="mr-2" size={14} /> Ver Programa
-                  </a>
+                    <FaFilePdf className="mr-2" size={14} /> Programa
+                  </button>
                 ) : (
                   <button
                     onClick={startUpload}
@@ -522,6 +957,44 @@ const UserReservationsPage = () => {
           />
         </div>
 
+        {/* Indicador de búsqueda activa */}
+        {currentSearch && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-blue-700">
+                Mostrando resultados para: <strong>"{currentSearch}"</strong>
+                {totalEvents > 0 && (
+                  <span className="ml-2 text-blue-600">
+                    ({totalEvents} resultado{totalEvents !== 1 ? 's' : ''})
+                  </span>
+                )}
+              </p>
+              <button
+                onClick={() => handleSearch('')}
+                className="text-blue-500 hover:text-blue-700 underline text-sm font-medium"
+              >
+                Limpiar búsqueda
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Mensaje cuando no hay resultados */}
+        {currentSearch && events.length === 0 && !loading && (
+          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-center">
+            <p className="text-yellow-700">
+              No se encontraron resultados para:{' '}
+              <strong>"{currentSearch}"</strong>
+            </p>
+            <button
+              onClick={() => handleSearch('')}
+              className="mt-2 text-yellow-600 hover:text-yellow-800 underline text-sm"
+            >
+              Ver todas las reservas
+            </button>
+          </div>
+        )}
+
         {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
 
         {/* Vista Desktop - Tabla MODIFICADA */}
@@ -543,8 +1016,8 @@ const UserReservationsPage = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredEvents.length > 0 ? (
-                filteredEvents.map((event, index) => (
+              {events.length > 0 ? (
+                events.map((event, index) => (
                   <tr
                     key={event.id}
                     className="hover:bg-gray-50 transition-colors"
@@ -577,7 +1050,7 @@ const UserReservationsPage = () => {
                         className="text-blue-600 hover:text-blue-800 transition-colors"
                         title="Ver descripción"
                       >
-                        <FaInfoCircle size={18} />
+                        <IoInformationCircleOutline size={22} />
                       </button>
                     </td>
 
@@ -595,7 +1068,7 @@ const UserReservationsPage = () => {
                         className="text-blue-600 hover:text-blue-800 transition-colors"
                         title="Ver contacto"
                       >
-                        <FaEnvelope size={18} />
+                        <FaRegEnvelope size={18} />
                       </button>
                     </td>
 
@@ -606,7 +1079,7 @@ const UserReservationsPage = () => {
                         className="text-blue-600 hover:text-blue-800 transition-colors"
                         title="Ver fechas"
                       >
-                        <FaCalendarAlt size={18} />
+                        <FaRegCalendarAlt size={18} />
                       </button>
                     </td>
 
@@ -618,15 +1091,15 @@ const UserReservationsPage = () => {
                             event.status === 'approved'
                               ? 'bg-green-100 text-green-800'
                               : event.status === 'denied'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-yellow-100 text-yellow-800'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-yellow-100 text-yellow-800'
                           }`}
                         >
                           {event.status === 'approved'
                             ? 'Aprobado'
                             : event.status === 'denied'
-                            ? 'Rechazado'
-                            : 'Pendiente'}
+                              ? 'Rechazado'
+                              : 'Pendiente'}
                         </span>
                       </div>
                     </td>
@@ -651,30 +1124,69 @@ const UserReservationsPage = () => {
               ) : (
                 <tr>
                   <td colSpan="11" className="py-8 text-center text-gray-500">
-                    No hay eventos disponibles.
+                    {currentSearch
+                      ? 'No se encontraron reservas que coincidan con tu búsqueda.'
+                      : 'No hay reservas disponibles.'}
                   </td>
                 </tr>
               )}
               <tr className="bg-gray-50 hover:bg-gray-100 transition-colors">
                 <td colSpan="11" className="py-6 px-4 text-center">
-                  <div className="flex justify-center items-center">
-                    <button
-                      onClick={() => navigate('/create-reservation')}
-                      className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-8 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-lg"
-                    >
-                      Solicitar Reserva
-                    </button>
+                  <div className="flex flex-col items-center space-y-4">
+                    <div className="max-w-2xl mx-auto mb-2 bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded-r">
+                      <p className="text-sm text-gray-700">
+                        <span className="font-semibold text-yellow-700">
+                          Nota:
+                        </span>{' '}
+                        Las reservas no se pueden editar complementamente, para
+                        editar descripción e imagen previsualizar el evento
+                        (Cambios mayores conllevan eliminar el evento y hacer
+                        una nueva solicitud)
+                      </p>
+                    </div>
+                    <div className="flex justify-center items-center">
+                      <button
+                        onClick={() => navigate('/create-reservation')}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-8 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-lg"
+                      >
+                        Solicitar Reserva
+                      </button>
+                    </div>
                   </div>
                 </td>
               </tr>
             </tbody>
           </table>
+
+          {/* PAGINACIÓN */}
+          <div className="flex justify-between items-center p-4 bg-gray-50 border-t">
+            <p className="text-sm text-gray-600">
+              Mostrando {events.length} de {totalEvents} reservas (Pág.{' '}
+              {currentPage} de {totalPages})
+            </p>
+            <div className="space-x-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Vista Mobile - Cards MEJORADA */}
         <div className="lg:hidden space-y-4">
-          {filteredEvents.length > 0 ? (
-            filteredEvents.map((event, index) => (
+          {events.length > 0 ? (
+            events.map((event, index) => (
               <div
                 key={event.id}
                 className="bg-white rounded-lg shadow-md border border-gray-200 p-4 relative"
@@ -697,18 +1209,18 @@ const UserReservationsPage = () => {
                         event.status === 'approved'
                           ? 'bg-green-100 text-green-800'
                           : event.status === 'denied'
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-yellow-100 text-yellow-800'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-yellow-100 text-yellow-800'
                       }`}
                     >
                       {event.status === 'approved'
                         ? 'Aprobado'
                         : event.status === 'denied'
-                        ? 'Denegado'
-                        : 'Pendiente'}
+                          ? 'Denegado'
+                          : 'Pendiente'}
                     </span>
 
-                    {/* Botón de opciones en posición más intuitiva */}
+                    {/* Botón de opciones */}
                     <div className="relative">
                       <ActionMenu event={event} index={index} />
                     </div>
@@ -752,14 +1264,14 @@ const UserReservationsPage = () => {
                     onClick={() => handleShowContact(event.contact)}
                     className="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
                   >
-                    <FaEnvelope className="mb-1" size={14} />
+                    <FaRegEnvelope className="mb-1" size={14} />
                     <span>Contacto</span>
                   </button>
                   <button
                     onClick={() => handleShowDates(event)}
                     className="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
                   >
-                    <FaCalendarAlt className="mb-1" size={14} />
+                    <FaRegCalendarAlt className="mb-1" size={14} />
                     <span>Fechas</span>
                   </button>
                 </div>
@@ -776,7 +1288,34 @@ const UserReservationsPage = () => {
             ))
           ) : (
             <div className="text-center py-8 text-gray-500">
-              No hay eventos disponibles.
+              {currentSearch
+                ? 'No se encontraron reservas que coincidan con tu búsqueda.'
+                : 'No hay reservas disponibles.'}
+            </div>
+          )}
+
+          {/* PAGINACIÓN PARA MÓVIL */}
+          {events.length > 0 && (
+            <div className="flex justify-between items-center p-4 bg-gray-50 border-t rounded-lg">
+              <p className="text-sm text-gray-600">
+                Pág. {currentPage} de {totalPages}
+              </p>
+              <div className="space-x-2">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+                >
+                  Anterior
+                </button>
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+                >
+                  Siguiente
+                </button>
+              </div>
             </div>
           )}
         </div>

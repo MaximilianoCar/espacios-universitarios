@@ -16,13 +16,14 @@ const uploadBanner = require('../middlewares/eventBannerUploadMiddleware');
 // Crear un nuevo evento con imagen
 router.post(
   '/events',
-  protect, // Usar 'protect' en lugar de 'authMiddleware'
+  protect, //
+  restrictTo('requester', 'admin', 'coordinator'),
   uploadImages.single('imageFile'), // Nombre del campo de imagen en el formulario
   eventController.createEvent
 );
 
 // Obtener solo eventos aprobados (para usuarios normales)
-router.get('/events', protect, eventController.getApprovedEvents);
+router.get('/events', eventController.getApprovedEvents);
 
 // Rutas para admin: obtener todos los eventos (protegido)
 router.get(
@@ -86,6 +87,14 @@ router.post(
   eventController.uploadFiles
 );
 
+// Endpoint para que el solicitante envie calificaciones del evento
+router.post(
+  '/events/:eventId/rate',
+  protect,
+  restrictTo('requester', 'admin', 'coordinator'),
+  eventController.submitRating
+);
+
 // Subir banner opcional para el evento (carpeta uploads/events/banners)
 router.post(
   '/events/:eventId/upload-banner',
@@ -111,5 +120,21 @@ router.delete(
 
 // Eliminar banner (restaurar a default)
 router.delete('/events/:eventId/banner', protect, eventController.removeBanner);
+
+// Eliminar contrato (solo admin/coordinator)
+router.delete(
+  '/events/:eventId/agreement',
+  protect,
+  restrictTo('admin', 'coordinator'),
+  eventController.removeAgreement
+);
+
+// Eliminar programa (requester dueño, admin o coordinador con permiso)
+router.delete(
+  '/events/:eventId/program',
+  protect,
+  restrictTo('requester', 'admin', 'coordinator'),
+  eventController.removeProgram
+);
 
 module.exports = router;

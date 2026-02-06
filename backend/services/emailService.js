@@ -1,7 +1,7 @@
-// services/emailService.js
 const nodemailer = require('nodemailer');
+const Bottleneck = require('bottleneck');
 
-// Configurar el transporter (mantener igual)
+// Configurar el transporter
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -22,6 +22,17 @@ transporter.verify(function (error, success) {
   }
 });
 
+// Limiter para evitar enviar demasiados correos en corto tiempo (configurable)
+const emailRateMs = parseInt(process.env.EMAIL_RATE_MS || '1000', 10); // ms entre envíos
+const emailMaxConcurrent = parseInt(
+  process.env.EMAIL_MAX_CONCURRENT || '1',
+  10
+);
+const limiter = new Bottleneck({
+  maxConcurrent: emailMaxConcurrent,
+  minTime: emailRateMs,
+});
+
 const emailTemplates = {
   // Notificación para admins - Solicitud de upgrade a solicitante
   upgradeRequest: (userEmail, userName) => ({
@@ -34,13 +45,38 @@ const emailTemplates = {
           <p><strong>Email:</strong> ${userEmail}</p>
         </div>
         <p>El usuario ha solicitado convertirse en solicitante y ha subido su documentación.</p>
-        <a href="${process.env.APP_URL}/admin/solicitudes" 
-           style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 0;">
-          Revisar Solicitudes Pendientes
-        </a>
         <p style="margin-top: 20px; color: #666; font-size: 12px;">
           Espacios Universitarios UCV - ${new Date().getFullYear()}
         </p>
+              </div>
+    `,
+  }),
+  // Notificación de calificación de evento por parte del solicitante
+  eventRating: (
+    userName,
+    eventName,
+    spaceName,
+    spaceConditionRating,
+    staffTreatmentRating,
+    reservationProcessRating,
+    suggestion = ''
+  ) => ({
+    subject: `Nueva calificación para ${eventName} - ${spaceName}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Nueva Calificación de Evento</h2>
+        <p>El usuario <strong>${userName}</strong> ha enviado una calificación para el evento <strong>${eventName}</strong> en el espacio <strong>${spaceName}</strong>.</p>
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+          <p><strong>Condiciones del espacio:</strong> ${spaceConditionRating || 'N/A'}</p>
+          <p><strong>Trato del personal:</strong> ${staffTreatmentRating || 'N/A'}</p>
+          <p><strong>Proceso de reserva:</strong> ${reservationProcessRating || 'N/A'}</p>
+        </div>
+        ${
+          suggestion
+            ? `<div style="background: #fff3cd; padding: 12px; border-left: 4px solid #ffeeba; margin: 15px 0;"><strong>Sugerencia del usuario:</strong><br>${suggestion}</div>`
+            : ''
+        }
+        <p style="margin-top: 20px; color: #666; font-size: 12px;">Espacios Universitarios UCV - ${new Date().getFullYear()}</p>
       </div>
     `,
   }),
@@ -71,16 +107,43 @@ const emailTemplates = {
         }
         ${
           approved
-            ? `<p>Ahora puedes solicitar reservas de espacios</p>
-               <a href="${process.env.APP_URL}/login" 
-                  style="background-color: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 0;">
-                 Crear Mi Primera Reserva
-               </a>`
+            ? `<p>Ahora puedes solicitar reservas de espacios</p>`
             : `<p></p>`
         }
         <p style="margin-top: 20px; color: #666; font-size: 12px;">
           Espacios Universitarios UCV - ${new Date().getFullYear()}
         </p>
+      </div>
+    `,
+  }),
+
+  // Plantilla para envío de código de recuperación de contraseña
+  passwordReset: (userName, code) => ({
+    subject:
+      'Código para restablecer tu contraseña - Espacios Universitarios UCV',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Solicitud de Cambio de Contraseña</h2>
+        <p>Hola <strong>${userName}</strong>,</p>
+        <p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta. Usa el siguiente código para continuar con el proceso:</p>
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0; text-align: center; font-size: 20px;">
+          <strong>${code}</strong>
+        </div>
+        <p>Este código expira en 15 minutos. Si no solicitaste este cambio, puedes ignorar este correo.</p>
+        <p style="margin-top: 20px; color: #666; font-size: 12px;">Espacios Universitarios UCV - ${new Date().getFullYear()}</p>
+      </div>
+    `,
+  }),
+
+  // Plantilla para confirmar cambio de contraseña
+  passwordChanged: userName => ({
+    subject: 'Tu contraseña fue cambiada - Espacios Universitarios UCV',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Cambio de Contraseña Realizado</h2>
+        <p>Hola <strong>${userName}</strong>,</p>
+        <p>Se ha realizado un cambio de contraseña en tu cuenta. Si fuiste tú, no necesitas hacer nada más. Si no reconoces esta acción, contacta al administrador del sistema.</p>
+        <p style="margin-top: 20px; color: #666; font-size: 12px;">Espacios Universitarios UCV - ${new Date().getFullYear()}</p>
       </div>
     `,
   }),
@@ -165,11 +228,6 @@ const emailTemplates = {
                </div>`
             : `<div style="background: #f8d7da; padding: 15px; border-radius: 5px; margin: 15px 0;">
                 <p><strong>Reserva no disponible</strong></p>
-                <p>Puedes intentar reservar otro espacio u horario disponible en el sistema.</p>
-                <a href="${process.env.APP_URL}/events" 
-                   style="background-color: #6c757d; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
-                  Ver Espacios Disponibles
-                </a>
                </div>`
         }
         
@@ -223,10 +281,6 @@ const emailTemplates = {
           <p><strong>Contrato generado:</strong> ${new Date().toLocaleString()}</p>
         </div>
         <p>El contrato de tu reserva está disponible para su revisión y descarga.</p>
-        <a href="${process.env.APP_URL}/events/${eventId}" 
-           style="background-color: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 0;">
-          Ver Contrato y Detalles del Evento
-        </a>
         <p style="margin-top: 20px; color: #666; font-size: 12px;">
           Por favor, revisa los términos y condiciones del contrato.
         </p>
@@ -259,8 +313,8 @@ const emailTemplates = {
         <p><strong>Período de reserva:</strong> Desde ${new Date(
           reservationFrom
         ).toLocaleString()} hasta ${new Date(
-      reservationTo
-    ).toLocaleString()}</p>
+          reservationTo
+        ).toLocaleString()}</p>
         <p><strong>Período del evento:</strong> Desde ${new Date(
           eventFrom
         ).toLocaleString()} hasta ${new Date(eventTo).toLocaleString()}</p>
@@ -268,12 +322,6 @@ const emailTemplates = {
         <p><strong>Evento:</strong> ${eventName}</p>
       </div>
 
-      <p>Para consultar más detalles sobre este evento, pueden acceder al siguiente enlace:</p>
-      <a href="${process.env.APP_URL}/events/${eventId}" 
-         style="background-color: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 0;">
-        Ver Detalles Completos del Evento
-      </a>
-      
       <div style="margin-top: 20px; padding: 15px; background: #e9ecef; border-radius: 5px;">
         <p style="margin: 0; color: #666; font-size: 14px;">
           <strong>Nota:</strong> Este mensaje se envía de forma automática a todas las entidades involucradas en la gestión de espacios universitarios.
@@ -309,8 +357,8 @@ const emailTemplates = {
         <p><strong>Período de reserva:</strong> Desde ${new Date(
           reservationFrom
         ).toLocaleString()} hasta ${new Date(
-      reservationTo
-    ).toLocaleString()}</p>
+          reservationTo
+        ).toLocaleString()}</p>
         <p><strong>Período del evento:</strong> Desde ${new Date(
           eventFrom
         ).toLocaleString()} hasta ${new Date(eventTo).toLocaleString()}</p>
@@ -333,6 +381,9 @@ const emailTemplates = {
 };
 
 class EmailService {
+  // Envío "fire-and-forget": agendamos el envío con Bottleneck y retornamos
+  // inmediatamente para no bloquear la petición. Los errores se loguean
+  // desde la tarea programada.
   async sendEmail(to, templateType, templateData, bccEmails = []) {
     try {
       const template = emailTemplates[templateType](...templateData);
@@ -348,22 +399,31 @@ class EmailService {
           .trim(),
       };
 
-      if (bccEmails.length > 0) {
+      if (bccEmails && bccEmails.length > 0) {
         mailOptions.bcc = bccEmails;
       }
 
-      const result = await transporter.sendMail(mailOptions);
-      console.log(
-        `Email enviado a ${to} ${
-          bccEmails.length > 0
-            ? `y ${bccEmails.length} destinatarios en BCC`
-            : ''
-        }: ${template.subject}`
-      );
-      return { success: true, result };
+      limiter
+        .schedule(() => transporter.sendMail(mailOptions))
+        .then(result => {
+          console.log(
+            `Email enviado a ${to} ${
+              bccEmails && bccEmails.length > 0
+                ? `y ${bccEmails.length} destinatarios en BCC`
+                : ''
+            }: ${template.subject}`
+          );
+        })
+        .catch(err => {
+          console.error('Error enviando email (asíncrono):', err);
+        });
+
+      // devolvemos que el email fue encolado
+      return { queued: true, success: true };
     } catch (error) {
-      console.error('Error enviando email:', error);
-      return { success: false, error: error.message };
+      // Errores de construcción del mensaje o plantilla
+      console.error('Error preparando email para envío:', error);
+      return { queued: false, success: false, error: error.message };
     }
   }
 
@@ -371,15 +431,14 @@ class EmailService {
   async notifyUpgradeRequest(adminEmails, userEmail, userName) {
     const emails = Array.isArray(adminEmails) ? adminEmails : [adminEmails];
     const results = [];
-
     for (const email of emails) {
-      const result = await this.sendEmail(email, 'upgradeRequest', [
+      // fire-and-forget: no await
+      const result = this.sendEmail(email, 'upgradeRequest', [
         userEmail,
         userName,
       ]);
       results.push(result);
     }
-
     return results;
   }
 
@@ -400,9 +459,8 @@ class EmailService {
   ) {
     const emails = Array.isArray(coordEmails) ? coordEmails : [coordEmails];
     const results = [];
-
     for (const email of emails) {
-      const result = await this.sendEmail(email, 'reservationRequest', [
+      const result = this.sendEmail(email, 'reservationRequest', [
         solicitanteName,
         spaceName,
         fecha,
@@ -410,7 +468,6 @@ class EmailService {
       ]);
       results.push(result);
     }
-
     return results;
   }
 
@@ -423,7 +480,8 @@ class EmailService {
     coordComments
   ) {
     try {
-      const result = await this.sendEmail(userEmail, 'reservationResult', [
+      // fire-and-forget
+      const result = this.sendEmail(userEmail, 'reservationResult', [
         solicitanteName,
         spaceName,
         fecha,
@@ -431,19 +489,14 @@ class EmailService {
         coordComments,
       ]);
 
-      if (result.success) {
-        console.log(`Notificación de estado enviada a: ${userEmail}`);
-      } else {
-        console.error(
-          `Error enviando notificación a ${userEmail}:`,
-          result.error
-        );
+      if (result && result.queued) {
+        console.log(`Notificación encolada para: ${userEmail}`);
       }
 
       return result;
     } catch (error) {
       console.error('Error en notifyReservationResult:', error);
-      return { success: false, error: error.message };
+      return { queued: false, success: false, error: error.message };
     }
   }
 
@@ -457,9 +510,8 @@ class EmailService {
   ) {
     const emails = Array.isArray(coordEmails) ? coordEmails : [coordEmails];
     const results = [];
-
     for (const email of emails) {
-      const result = await this.sendEmail(email, 'programUploaded', [
+      const result = this.sendEmail(email, 'programUploaded', [
         solicitanteName,
         eventName,
         spaceName,
@@ -467,7 +519,6 @@ class EmailService {
       ]);
       results.push(result);
     }
-
     return results;
   }
 
@@ -510,7 +561,7 @@ class EmailService {
         };
       }
 
-      const result = await this.sendEmail(
+      const result = this.sendEmail(
         process.env.EMAIL_FROM,
         'entitiesApproval',
         [
@@ -525,14 +576,9 @@ class EmailService {
         entityEmails
       );
 
-      if (result.success) {
+      if (result && result.queued) {
         console.log(
-          `Notificación de aprobación enviada a ${entityEmails.length} entidades`
-        );
-      } else {
-        console.error(
-          `Error enviando notificación de aprobación a entidades:`,
-          result.error
+          `Notificación de aprobación encolada para ${entityEmails.length} entidades`
         );
       }
 
@@ -564,7 +610,7 @@ class EmailService {
         };
       }
 
-      const result = await this.sendEmail(
+      const result = this.sendEmail(
         process.env.EMAIL_FROM,
         'entitiesCancellation',
         [
@@ -579,14 +625,9 @@ class EmailService {
         entityEmails
       );
 
-      if (result.success) {
+      if (result && result.queued) {
         console.log(
-          `Notificación de cancelación enviada a ${entityEmails.length} entidades`
-        );
-      } else {
-        console.error(
-          `Error enviando notificación de cancelación a entidades:`,
-          result.error
+          `Notificación de cancelación encolada para ${entityEmails.length} entidades`
         );
       }
 
@@ -594,6 +635,40 @@ class EmailService {
     } catch (error) {
       console.error('Error en notifyAllEntitiesCancellation:', error);
       return { success: false, error: error.message };
+    }
+  }
+
+  async notifyEventRating(
+    coordEmails,
+    userName,
+    eventName,
+    spaceName,
+    spaceConditionRating,
+    staffTreatmentRating,
+    reservationProcessRating,
+    suggestion = ''
+  ) {
+    try {
+      const emails = Array.isArray(coordEmails) ? coordEmails : [coordEmails];
+      const results = [];
+
+      for (const email of emails) {
+        const result = this.sendEmail(email, 'eventRating', [
+          userName,
+          eventName,
+          spaceName,
+          spaceConditionRating,
+          staffTreatmentRating,
+          reservationProcessRating,
+          suggestion,
+        ]);
+        results.push(result);
+      }
+
+      return results;
+    } catch (error) {
+      console.error('Error en notifyEventRating:', error);
+      return { queued: false, success: false, error: error.message };
     }
   }
 
@@ -606,6 +681,16 @@ class EmailService {
       process.env.JefeDeProtocoloMail,
       process.env.COPREDMail,
     ].filter(email => email && email.trim() !== ''); // Filtrar emails vacíos
+  }
+
+  // Notificar código de recuperación
+  async notifyPasswordReset(userEmail, userName, code) {
+    return this.sendEmail(userEmail, 'passwordReset', [userName, code]);
+  }
+
+  // Notificar que la contraseña fue cambiada
+  async notifyPasswordChanged(userEmail, userName) {
+    return this.sendEmail(userEmail, 'passwordChanged', [userName]);
   }
 }
 

@@ -1,4 +1,15 @@
-const { Room, User, CoordinatorRooms } = require('../models');
+const {
+  Room,
+  User,
+  CoordinatorDependencies,
+  Dependency,
+  DependencyRooms,
+} = require('../models');
+const {
+  ForeignKeyConstraintError,
+  UniqueConstraintError,
+  ValidationError,
+} = require('sequelize');
 const { Op } = require('sequelize');
 const path = require('path');
 const fs = require('fs/promises');
@@ -6,18 +17,34 @@ const fs = require('fs/promises');
 // Función auxiliar para verificar permisos
 const checkRoomPermission = async (userId, userRole, roomId) => {
   if (userRole === 'admin' || userRole === 'requester') {
-    return true; // admins tienen acceso a todo
+    return true;
   }
 
   if (userRole === 'coordinator') {
-    // si el coordinador tiene permisos sobre esta sala
-    const permission = await CoordinatorRooms.findOne({
+    // obtener la(s) dependencia(s) a las que pertenece la sala
+    const room = await Room.findByPk(roomId, {
+      include: [
+        {
+          model: Dependency,
+          as: 'dependencies',
+          through: { attributes: [] },
+        },
+      ],
+    });
+
+    if (!room) return false;
+
+    const dependencyIds = room.dependencies.map(d => d.id);
+    if (dependencyIds.length === 0) return false;
+
+    const permission = await CoordinatorDependencies.findOne({
       where: {
         UserId: userId,
-        RoomId: roomId,
+        DependencyId: dependencyIds[0],
       },
     });
-    return !!permission; // retorna true si existe el permiso false si no
+
+    return !!permission;
   }
 
   return false;
@@ -42,24 +69,107 @@ exports.checkRoomPermission = async (req, res) => {
 };
 
 exports.createRoom = async (req, res) => {
+  const transaction = await Room.sequelize.transaction();
   try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
     let roomData = req.body;
+
+    // validar que se haya enviado una dependencia
+    const { dependencyId } = roomData;
+    if (!dependencyId) {
+      return res
+        .status(400)
+        .json({ error: 'Se debe seleccionar una dependencia.' });
+    }
+
+    // verificar que exista la dependencia
+    const dependency = await Dependency.findByPk(dependencyId);
+    if (!dependency) {
+      return res.status(400).json({ error: 'Dependencia no encontrada.' });
+    }
+
+    // si el usuario es coordinador, validar que tenga permiso sobre la dependencia
+    if (userRole === 'coordinator') {
+      const hasPerm = await CoordinatorDependencies.findOne({
+        where: { UserId: userId, DependencyId: dependencyId },
+      });
+      if (!hasPerm) {
+        return res.status(403).json({
+          error: 'No tienes permisos para crear salas en esta dependencia.',
+        });
+      }
+    }
+
+    // Establecer valores por defecto para los nuevos campos booleanos
+    const defaultBooleanFields = [
+      'isAccessible',
+      'canExonerate',
+      'hasBathrooms',
+      'hasInternet',
+      'hasAudioEquipment',
+      'hasVideoEquipment',
+      'acceptsTransfer',
+      'acceptsMaterials',
+    ];
+
+    defaultBooleanFields.forEach(field => {
+      if (roomData[field] === undefined) {
+        roomData[field] = false;
+      }
+    });
+
+    // Establecer valor por defecto para cost si no se proporciona
+    if (!roomData.cost) {
+      roomData.cost = '0';
+    }
+
+    // Validar que al menos un método de pago esté seleccionado
+    if (
+      roomData.acceptsTransfer === false &&
+      roomData.acceptsMaterials === false
+    ) {
+      return res.status(400).json({
+        error:
+          'Debe seleccionar al menos un método de pago (Transferencia o Materiales).',
+      });
+    }
 
     // Si se subió una imagen, agregar la ruta a los datos
     if (req.file) {
       roomData.imagePath = req.file.path;
     }
 
-    const newRoom = await Room.create(roomData);
+    const newRoom = await Room.create(roomData, { transaction });
+
+    // crear la relación dependency - room
+    await DependencyRooms.create(
+      {
+        DependencyId: dependencyId,
+        RoomId: newRoom.id,
+      },
+      { transaction }
+    );
+
+    await transaction.commit();
     res.status(201).json(newRoom);
   } catch (error) {
+    await transaction.rollback();
+
     // Si el error es un error de validación de Sequelize
     if (
       ['SequelizeValidationError', 'SequelizeUniqueConstraintError'].includes(
         error.name
       )
     ) {
+      console.error('Nombre del error:', error.name);
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        return res
+          .status(400)
+          .json({ error: 'Ya existe una sala con ese nombre.' });
+      }
       const validationErrors = error.errors.map(err => err.message);
+      console.log('Errores de validación al crear la sala:', validationErrors);
       res.status(400).json({ errors: validationErrors });
     } else {
       console.error(error);
@@ -79,22 +189,48 @@ exports.getRooms = async (req, res) => {
 
     if (userRole === 'admin') {
       rooms = await Room.findAll({
+        include: [
+          {
+            model: Dependency,
+            as: 'dependencies',
+            through: { attributes: [] },
+          },
+        ],
         order: [['name', 'ASC']],
       });
     } else if (userRole === 'coordinator') {
-      const userWithRooms = await User.findByPk(userId, {
+      // obtener dependencias que el coordinador maneja
+      const coordDeps = await CoordinatorDependencies.findAll({
+        where: { UserId: userId },
+      });
+      const dependencyIds = coordDeps.map(cd => cd.DependencyId);
+
+      if (dependencyIds.length === 0) {
+        rooms = [];
+      } else {
+        // buscar salas que pertenezcan a esas dependencias
+        rooms = await Room.findAll({
+          include: [
+            {
+              model: Dependency,
+              as: 'dependencies',
+              where: { id: dependencyIds },
+              through: { attributes: [] },
+            },
+          ],
+          order: [['name', 'ASC']],
+        });
+      }
+    } else {
+      rooms = await Room.findAll({
         include: [
           {
-            model: Room,
-            as: 'managedRooms',
+            model: Dependency,
+            as: 'dependencies',
             through: { attributes: [] },
           },
         ],
       });
-
-      rooms = userWithRooms ? userWithRooms.managedRooms : [];
-    } else {
-      rooms = await Room.findAll();
     }
     res.status(200).json(rooms);
   } catch (error) {
@@ -121,7 +257,11 @@ exports.getRoomById = async (req, res) => {
       });
     }
 
-    const room = await Room.findByPk(roomId);
+    const room = await Room.findByPk(roomId, {
+      include: [
+        { model: Dependency, as: 'dependencies', through: { attributes: [] } },
+      ],
+    });
     if (room) {
       res.status(200).json(room);
     } else {
@@ -152,16 +292,137 @@ exports.updateRoom = async (req, res) => {
       return res.status(404).json({ error: 'Sala no encontrada.' });
     }
 
-    // Si se subió una nueva imagen, actualizar la ruta
+    // Validar métodos de pago si se están actualizando
+    if (
+      req.body.acceptsTransfer !== undefined ||
+      req.body.acceptsMaterials !== undefined
+    ) {
+      const newAcceptsTransfer =
+        req.body.acceptsTransfer !== undefined
+          ? req.body.acceptsTransfer
+          : room.acceptsTransfer;
+      const newAcceptsMaterials =
+        req.body.acceptsMaterials !== undefined
+          ? req.body.acceptsMaterials
+          : room.acceptsMaterials;
+
+      if (newAcceptsTransfer === false && newAcceptsMaterials === false) {
+        return res.status(400).json({
+          error:
+            'Debe tener al menos un método de pago seleccionado (Transferencia o Materiales).',
+        });
+      }
+    }
+
+    // Si se subió una nueva imagen, eliminar la anterior y actualizar la ruta
     if (req.file) {
+      // Eliminar imagen anterior si existe
+      if (room.imagePath) {
+        const absolutePath = path.join(process.cwd(), room.imagePath);
+        try {
+          await fs.unlink(absolutePath);
+        } catch (fileError) {
+          if (fileError.code !== 'ENOENT') {
+            console.error(`Error al eliminar la imagen anterior: ${fileError}`);
+          }
+        }
+      }
       req.body.imagePath = req.file.path;
     }
 
+    // Si se cambia la dependencia asociada a la sala
+    if (req.body.dependencyId) {
+      const newDepId = req.body.dependencyId;
+      const dep = await Dependency.findByPk(newDepId);
+      if (!dep) {
+        return res.status(400).json({ error: 'Dependencia no encontrada.' });
+      }
+
+      // Si el usuario es coordinador, validar permiso sobre la nueva dependencia
+      if (userRole === 'coordinator') {
+        const hasPerm = await CoordinatorDependencies.findOne({
+          where: { UserId: userId, DependencyId: newDepId },
+        });
+        if (!hasPerm) {
+          return res.status(403).json({
+            error:
+              'No tienes permisos para asignar esta dependencia a la sala.',
+          });
+        }
+      }
+
+      // borrar relaciones previas y crear la nueva relación
+      await DependencyRooms.destroy({ where: { RoomId: room.id } });
+      await DependencyRooms.create({ DependencyId: newDepId, RoomId: room.id });
+      delete req.body.dependencyId;
+    }
+
     await room.update(req.body);
-    res.status(200).json(room);
+
+    // volver a cargar relaciones
+    const updated = await Room.findByPk(room.id, {
+      include: [
+        { model: Dependency, as: 'dependencies', through: { attributes: [] } },
+      ],
+    });
+    res.status(200).json(updated);
   } catch (error) {
     console.error('Error updating room:', error);
+    if (error instanceof UniqueConstraintError) {
+      return res.status(409).json({
+        error: error.errors[0]?.message || 'Ya existe una sala con ese nombre.',
+      });
+    }
+    if (error instanceof ValidationError) {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+
     res.status(500).json({ error: 'Error al actualizar la sala.' });
+  }
+};
+
+// Subir o reemplazar imagen de la sala
+exports.uploadImage = async (req, res) => {
+  try {
+    const userRole = req.user.role;
+    const userId = req.user.id;
+    const roomId = req.params.id;
+
+    // Verificar permisos
+    const hasPermission = await checkRoomPermission(userId, userRole, roomId);
+    if (!hasPermission) {
+      return res.status(404).json({
+        error: 'Sala no encontrada o no tienes permisos para modificarla.',
+      });
+    }
+
+    const room = await Room.findByPk(roomId);
+    if (!room) {
+      return res.status(404).json({ error: 'Sala no encontrada.' });
+    }
+
+    // Si se subió una nueva imagen, actualizar la ruta
+    if (req.file) {
+      // Eliminar la imagen anterior si existe
+      if (room.imagePath) {
+        const absolutePath = path.join(process.cwd(), room.imagePath);
+        try {
+          await fs.unlink(absolutePath);
+        } catch (fileError) {
+          if (fileError.code !== 'ENOENT') {
+            console.error(`Error al eliminar la imagen anterior: ${fileError}`);
+          }
+        }
+      }
+      room.imagePath = req.file.path;
+      await room.save();
+    }
+
+    res.status(200).json(room);
+  } catch (error) {
+    console.error('Error uploading room image:', error);
+    res.status(500).json({ error: 'Error al subir la imagen de la sala.' });
   }
 };
 
@@ -218,6 +479,22 @@ exports.deleteRoom = async (req, res) => {
     }
   } catch (error) {
     console.error('Error deleting room:', error);
+    if (error instanceof ForeignKeyConstraintError) {
+      return res.status(409).json({
+        error:
+          'No se puede eliminar la sala porque existen registros relacionados (p.ej. reservas o eventos). Elimine o reasigne esos registros antes de intentar eliminar.',
+      });
+    }
+    if (error instanceof UniqueConstraintError) {
+      return res.status(409).json({
+        error: error.errors[0]?.message || 'Conflicto de integridad.',
+      });
+    }
+    if (error instanceof ValidationError) {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+
     res.status(500).json({ error: 'Error al eliminar la sala.' });
   }
 };

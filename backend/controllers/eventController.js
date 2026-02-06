@@ -1,4 +1,10 @@
-const { Event, User, CoordinatorRooms, Room } = require('../models');
+const {
+  Event,
+  User,
+  CoordinatorDependencies,
+  Room,
+  Dependency,
+} = require('../models');
 const { Op } = require('sequelize');
 const upload = require('../middlewares/eventFileUploadMiddleware');
 const path = require('path');
@@ -11,6 +17,106 @@ const normalizeFilePath = filePath => {
   let p = filePath.replace(/\\/g, '/');
   p = p.replace(/^\.\//, '').replace(/^\//, '');
   return p;
+};
+
+// Enviar calificación de evento (por solicitante)
+exports.submitRating = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const eventId = req.params.eventId;
+    const {
+      spaceConditionRating,
+      staffTreatmentRating,
+      reservationProcessRating,
+      suggestion,
+    } = req.body;
+
+    const event = await Event.findByPk(eventId);
+    if (!event) {
+      return res.status(404).json({ message: 'Evento no encontrado.' });
+    }
+
+    // Solo el creador o admin puede calificar este evento
+    if (userRole !== 'admin' && event.userId !== userId) {
+      return res
+        .status(403)
+        .json({ message: 'No autorizado para calificar este evento.' });
+    }
+
+    // Debe ser evento aprobado y ya ocurrido
+    if (event.status !== Event.STATUS.APPROVED) {
+      return res
+        .status(400)
+        .json({ message: 'Solo se pueden calificar eventos aprobados.' });
+    }
+
+    const now = new Date();
+    if (new Date(event.eventTo) > now) {
+      return res.status(400).json({ message: 'El evento aún no ha ocurrido.' });
+    }
+
+    // Validar rangos
+    const min = Event.RATING.MIN;
+    const max = Event.RATING.MAX;
+
+    const toValidate = {
+      spaceConditionRating,
+      staffTreatmentRating,
+      reservationProcessRating,
+    };
+
+    for (const [key, val] of Object.entries(toValidate)) {
+      if (val != null) {
+        const num = parseInt(val, 10);
+        if (Number.isNaN(num) || num < min || num > max) {
+          return res
+            .status(400)
+            .json({ message: `Valor inválido para ${key}` });
+        }
+      }
+    }
+
+    // Actualizar campos
+    event.spaceConditionRating = spaceConditionRating;
+    event.staffTreatmentRating = staffTreatmentRating;
+    event.reservationProcessRating = reservationProcessRating;
+    if (suggestion) {
+      event.comments = event.comments
+        ? `${event.comments}\n\nSugerencia de calificación: ${suggestion}`
+        : `Sugerencia de calificación: ${suggestion}`;
+    }
+
+    await event.save();
+
+    // Notificar a coordinadores del espacio
+    try {
+      const coordinators = await getCoordinatorsByRoom(event.roomId);
+      const roomName = await getRoomName(event.roomId);
+      const user = await User.findByPk(userId);
+
+      if (coordinators && coordinators.length > 0) {
+        const coordEmails = coordinators.map(c => c.email).filter(Boolean);
+        await emailService.notifyEventRating(
+          coordEmails,
+          user ? user.name : 'Usuario',
+          event.name,
+          roomName,
+          spaceConditionRating,
+          staffTreatmentRating,
+          reservationProcessRating,
+          suggestion
+        );
+      }
+    } catch (emailErr) {
+      console.error('Error enviando email de calificación:', emailErr);
+    }
+
+    return res.status(200).json({ message: 'Calificación guardada', event });
+  } catch (error) {
+    console.error('Error en submitRating:', error);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
 };
 
 // Eliminar un archivo seguro
@@ -40,16 +146,21 @@ const safeUnlink = async (relativePath, allowedSubPath) => {
 
 // Función auxiliar para verificar permisos de sala
 const checkRoomPermission = async (userId, userRole, roomId) => {
-  if (userRole === 'admin') {
-    return true;
-  }
+  if (userRole === 'admin') return true;
 
   if (userRole === 'coordinator') {
-    const permission = await CoordinatorRooms.findOne({
-      where: {
-        UserId: userId,
-        RoomId: roomId,
-      },
+    // obtener dependencias de la sala
+    const room = await Room.findByPk(roomId, {
+      include: [
+        { model: Dependency, as: 'dependencies', through: { attributes: [] } },
+      ],
+    });
+    if (!room) return false;
+    const dependencyIds = room.dependencies.map(d => d.id);
+    if (dependencyIds.length === 0) return false;
+
+    const permission = await CoordinatorDependencies.findOne({
+      where: { UserId: userId, DependencyId: dependencyIds[0] },
     });
     return !!permission;
   }
@@ -65,23 +176,57 @@ const getAllowedRoomIds = async (userId, userRole) => {
   }
 
   if (userRole === 'coordinator') {
-    const coordinatorRooms = await CoordinatorRooms.findAll({
+    const coordDeps = await CoordinatorDependencies.findAll({
       where: { UserId: userId },
-      attributes: ['RoomId'],
     });
-    return coordinatorRooms.map(cr => cr.RoomId);
+    const dependencyIds = coordDeps.map(cd => cd.DependencyId);
+    if (dependencyIds.length === 0) return [];
+
+    const rooms = await Room.findAll({
+      include: [
+        {
+          model: Dependency,
+          as: 'dependencies',
+          where: { id: dependencyIds },
+          through: { attributes: [] },
+        },
+      ],
+      attributes: ['id'],
+    });
+
+    return rooms.map(r => r.id);
   }
 
   return [];
 };
 
-// Crear un nuevo evento (Create)
+// Crear un nuevo evento
 exports.createEvent = async (req, res) => {
   try {
+    const userRole = req.user.role;
+    const userId = req.user.id;
+    const roomId = req.body.roomId;
+
+    // Verificar permisos si el usuario es coordinador
+    if (userRole === 'coordinator') {
+      const hasPermission = await checkRoomPermission(userId, userRole, roomId);
+      if (!hasPermission) {
+        return res.status(403).json({
+          message: 'No tienes permisos para crear eventos en esta sala',
+        });
+      }
+    }
+
+    // Determinar el estado basado en el rol del usuario
+    let eventStatus = Event.STATUS.PENDING;
+    if (userRole === 'admin' || userRole === 'coordinator') {
+      eventStatus = Event.STATUS.APPROVED;
+    }
+
     const eventData = {
       ...req.body,
-      status: Event.STATUS.PENDING,
-      userId: req.user.id,
+      status: eventStatus,
+      userId: userId,
     };
 
     if (req.file) {
@@ -91,43 +236,116 @@ exports.createEvent = async (req, res) => {
 
     const newEvent = await Event.create(eventData);
 
-    // notificacion obteniendo los coordinadores especificos
-    try {
-      const coordinators = await getCoordinatorsByRoom(newEvent.roomId);
-      const roomName = await getRoomName(newEvent.roomId);
+    // Si el evento fue creado por un requester (estado PENDING), notificar a los coordinadores
+    if (eventStatus === Event.STATUS.PENDING) {
+      try {
+        const coordinators = await getCoordinatorsByRoom(newEvent.roomId);
+        const roomName = await getRoomName(newEvent.roomId);
 
-      if (coordinators.length > 0) {
-        const coordEmails = coordinators.map(coord => coord.email);
-        const user = await User.findByPk(req.user.id);
+        if (coordinators.length > 0) {
+          const coordEmails = coordinators.map(coord => coord.email);
+          const user = await User.findByPk(userId);
 
-        const eventDetails =
-          newEvent.description || 'Sin descripción adicional';
-        const fecha = newEvent.reservationFrom
-          ? new Date(newEvent.reservationFrom).toLocaleString()
-          : 'Fecha no especificada';
+          const eventDetails =
+            newEvent.description || 'Sin descripción adicional';
+          const fecha = newEvent.reservationFrom
+            ? new Date(newEvent.reservationFrom).toLocaleString()
+            : 'Fecha no especificada';
 
-        await emailService.notifyReservationRequest(
-          //enviar correo
-          coordEmails,
-          user.name,
+          await emailService.notifyReservationRequest(
+            //enviar correo
+            coordEmails,
+            user.name,
+            roomName,
+            fecha,
+            `Evento: ${newEvent.name} - ${eventDetails}`
+          );
+
+          console.log(
+            `Notificaciones de reserva enviadas a ${coordinators.length} coordinadores de ${roomName}`
+          );
+        } else {
+          console.log(
+            `No se encontraron coordinadores para la sala ${roomName}`
+          );
+        }
+      } catch (emailError) {
+        console.error('Error enviando notificaciones de reserva:', emailError);
+      }
+    } else {
+      // Si el evento fue creado por admin/coordinator (estado APPROVED), notificar al usuario creador
+      try {
+        const user = await User.findByPk(userId);
+        const roomName = await getRoomName(newEvent.roomId);
+
+        if (user && user.email) {
+          const fecha = newEvent.eventFrom
+            ? new Date(newEvent.eventFrom).toLocaleString()
+            : 'Fecha no especificada';
+
+          await emailService.notifyReservationResult(
+            user.email,
+            user.name,
+            roomName,
+            fecha,
+            true, // Aprobado automáticamente
+            `Evento creado directamente por ${
+              userRole === 'admin' ? 'administrador' : 'coordinador'
+            }`
+          );
+
+          console.log(
+            `Notificación de aprobación automática enviada a: ${user.email}`
+          );
+        }
+      } catch (emailError) {
+        console.error(
+          'Error enviando notificación de aprobación automática:',
+          emailError
+        );
+      }
+
+      // Notificar a las entidades sobre la aprobación automática
+      try {
+        const roomName = await getRoomName(newEvent.roomId);
+
+        await emailService.notifyAllEntitiesApproval(
           roomName,
-          fecha,
-          `Evento: ${newEvent.name} - ${eventDetails}`
+          newEvent.reservationFrom,
+          newEvent.reservationTo,
+          newEvent.eventFrom,
+          newEvent.eventTo,
+          newEvent.id,
+          newEvent.name
         );
 
         console.log(
-          `Notificaciones de reserva enviadas a ${coordinators.length} coordinadores de ${roomName}`
+          'Notificación de aprobación automática enviada a todas las entidades'
         );
-      } else {
-        console.log(`No se encontraron coordinadores para la sala ${roomName}`);
+      } catch (approvalError) {
+        console.error(
+          'Error enviando notificación de aprobación automática a entidades:',
+          approvalError
+        );
       }
-    } catch (emailError) {
-      console.error('Error enviando notificaciones de reserva:', emailError);
     }
 
     res.status(201).json(newEvent); // Responder con el nuevo evento creado
   } catch (error) {
     console.error(error);
+
+    // Manejar errores de validación de Sequelize
+    if (error.name === 'SequelizeValidationError') {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+
+    // Manejar errores de restricción única
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(409).json({ error: messages });
+    }
+
     res.status(500).json({ error: 'Error al crear el evento.' });
   }
 };
@@ -135,8 +353,18 @@ exports.createEvent = async (req, res) => {
 // obtener coordinadores de una sala específica
 const getCoordinatorsByRoom = async roomId => {
   try {
-    const coordinatorRooms = await CoordinatorRooms.findAll({
-      where: { RoomId: roomId },
+    const room = await Room.findByPk(roomId, {
+      include: [
+        { model: Dependency, as: 'dependencies', through: { attributes: [] } },
+      ],
+    });
+    if (!room) return [];
+
+    const dependencyIds = room.dependencies.map(d => d.id);
+    if (dependencyIds.length === 0) return [];
+
+    const coordDeps = await CoordinatorDependencies.findAll({
+      where: { DependencyId: dependencyIds },
       include: [
         {
           model: User,
@@ -145,14 +373,20 @@ const getCoordinatorsByRoom = async roomId => {
           where: { role: 'coordinator' },
         },
       ],
-      attributes: [],
     });
 
-    return coordinatorRooms.map(cr => ({
-      id: cr.user.id,
-      name: cr.user.name,
-      email: cr.user.email,
-    }));
+    const unique = {};
+    coordDeps.forEach(cd => {
+      if (cd.user && !unique[cd.user.id]) {
+        unique[cd.user.id] = {
+          id: cd.user.id,
+          name: cd.user.name,
+          email: cd.user.email,
+        };
+      }
+    });
+
+    return Object.values(unique);
   } catch (error) {
     console.error('Error obteniendo coordinadores de la sala:', error);
     return [];
@@ -173,7 +407,7 @@ const getRoomName = async roomId => {
 };
 
 // Obtener todos los eventos (Read - Get All)
-exports.getAllEvents = async (req, res) => {
+exports.getAllEventsVieja = async (req, res) => {
   try {
     const userRole = req.user.role;
     const userId = req.user.id;
@@ -225,12 +459,147 @@ exports.getAllEvents = async (req, res) => {
     res.status(500).json({ error: 'Error al obtener los eventos.' });
   }
 };
+
+// Obtener todos los eventos (Read - Get All)
+
+exports.getAllEvents = async (req, res) => {
+  try {
+    const userRole = req.user.role;
+    const userId = req.user.id;
+
+    // Parámetros de paginación y búsqueda
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 25;
+    const search = req.query.search || '';
+    const offset = (page - 1) * pageSize;
+
+    let events;
+    let count;
+
+    // Construir condiciones de búsqueda
+    let whereConditions = {};
+    let includeConditions = [
+      {
+        model: Room,
+        as: 'room',
+      },
+      {
+        model: User,
+        as: 'user',
+        attributes: ['name', 'email', 'companyName', 'companyRif'],
+      },
+    ];
+
+    // Aplicar filtro de búsqueda si existe
+    if (search) {
+      whereConditions = {
+        [Op.or]: [
+          { name: { [Op.like]: `%${search}%` } },
+          { description: { [Op.like]: `%${search}%` } },
+          { contact: { [Op.like]: `%${search}%` } },
+          { '$room.name$': { [Op.like]: `%${search}%` } },
+          { '$user.name$': { [Op.like]: `%${search}%` } },
+          { '$user.email$': { [Op.like]: `%${search}%` } },
+        ],
+      };
+    }
+
+    if (userRole === 'admin') {
+      // Admin ve todos los eventos con paginación y búsqueda
+      const result = await Event.findAndCountAll({
+        where: whereConditions,
+        include: includeConditions,
+        limit: pageSize,
+        offset: offset,
+        order: [['createdAt', 'DESC']],
+      });
+      events = result.rows;
+      count = result.count;
+    } else if (userRole === 'coordinator') {
+      // Coordinator ve solo eventos de salas que gestiona con paginación y búsqueda
+      const allowedRoomIds = await getAllowedRoomIds(userId, userRole);
+
+      if (allowedRoomIds.length > 0) {
+        // Combinar condiciones de búsqueda con restricción de salas permitidas
+        const coordinatorWhere = {
+          ...whereConditions,
+          roomId: {
+            [Op.in]: allowedRoomIds,
+          },
+        };
+
+        const result = await Event.findAndCountAll({
+          where: coordinatorWhere,
+          include: includeConditions,
+          limit: pageSize,
+          offset: offset,
+          order: [['createdAt', 'DESC']],
+        });
+        events = result.rows;
+        count = result.count;
+      } else {
+        events = [];
+        count = 0;
+      }
+    } else {
+      return res.status(403).json({
+        message: 'No tienes permisos para realizar esta acción',
+      });
+    }
+
+    // Calcular el total de páginas
+    const totalPages = Math.ceil(count / pageSize);
+
+    res.status(200).json({
+      totalEvents: count,
+      totalPages: totalPages,
+      currentPage: page,
+      events: events,
+    });
+  } catch (error) {
+    console.error('Error al obtener eventos:', error);
+    res.status(500).json({
+      message: 'Error interno del servidor',
+      error: error.message,
+    });
+  }
+};
 // Obtener solo los eventos aprobados (para usuarios normales)
 exports.getApprovedEvents = async (req, res) => {
   try {
+    // Obtener la fecha y hora actual
+    const currentDate = new Date();
+
     const events = await Event.findAll({
-      where: { status: Event.STATUS.APPROVED },
-      attributes: ['id', 'name', 'description', 'imagePath'],
+      where: {
+        status: Event.STATUS.APPROVED,
+        // Solo eventos que NO hayan terminado (eventTo > fecha actual)
+        eventTo: {
+          [Op.gt]: currentDate,
+        },
+      },
+      attributes: [
+        'id',
+        'name',
+        'description',
+        'imagePath',
+        'eventFrom',
+        'eventTo',
+        'reservationFrom',
+        'reservationTo',
+        'roomId',
+        'capacity',
+        'cost',
+        'contact',
+      ],
+      include: [
+        {
+          model: Room,
+          as: 'room',
+          attributes: ['id', 'name'],
+        },
+      ],
+      order: [['eventFrom', 'ASC']],
     });
 
     res.status(200).json(events);
@@ -418,6 +787,17 @@ exports.updateEvent = async (req, res) => {
     res.status(200).json(event);
   } catch (error) {
     console.error('Error updating event:', error);
+    const { UniqueConstraintError, ValidationError } = require('sequelize');
+    if (error instanceof UniqueConstraintError) {
+      return res.status(409).json({
+        error: error.errors[0]?.message || 'Conflicto de integridad.',
+      });
+    }
+    if (error instanceof ValidationError) {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+
     res.status(500).json({ error: 'Error al actualizar el evento.' });
   }
 };
@@ -438,7 +818,28 @@ exports.deleteEvent = async (req, res) => {
     await event.destroy(); // Eliminar el evento
     res.status(204).json(); // Responder sin contenido
   } catch (error) {
-    console.error(error);
+    console.error('Error deleting event:', error);
+    const {
+      ForeignKeyConstraintError,
+      UniqueConstraintError,
+      ValidationError,
+    } = require('sequelize');
+    if (error instanceof ForeignKeyConstraintError) {
+      return res.status(409).json({
+        error:
+          'No se puede eliminar el evento porque existen registros relacionados. Elimine o reasigne esos registros antes de intentar eliminar.',
+      });
+    }
+    if (error instanceof UniqueConstraintError) {
+      return res.status(409).json({
+        error: error.errors[0]?.message || 'Conflicto de integridad.',
+      });
+    }
+    if (error instanceof ValidationError) {
+      const messages = error.errors.map(e => e.message).join('; ');
+      return res.status(400).json({ error: messages });
+    }
+
     res.status(500).json({ error: 'Error al eliminar el evento.' });
   }
 };
@@ -782,7 +1183,7 @@ exports.removeEventImage = async (req, res) => {
 };
 
 // Obtener todos los eventos asociados a un usuario por userId
-exports.getEventsByUser = async (req, res) => {
+exports.getEventsByUserVieja = async (req, res) => {
   console.log(req.user);
   const userId = req.user.id;
   try {
@@ -815,6 +1216,73 @@ exports.getEventsByUser = async (req, res) => {
   }
 };
 
+// Obtener todos los eventos asociados a un usuario por userId
+exports.getEventsByUser = async (req, res) => {
+  console.log(req.user);
+  const userId = req.user.id;
+
+  // Parámetros de paginación y búsqueda
+  const page = parseInt(req.query.page) || 1;
+  const pageSize = parseInt(req.query.pageSize) || 25;
+  const search = req.query.search || '';
+  const offset = (page - 1) * pageSize;
+
+  try {
+    // Construir condiciones de búsqueda
+    let whereConditions = {
+      userId: userId,
+    };
+
+    let includeConditions = [
+      {
+        model: Room,
+        as: 'room',
+        attributes: ['id', 'name'],
+      },
+    ];
+
+    // Si hay un término de búsqueda, agregar condiciones
+    if (search) {
+      whereConditions = {
+        ...whereConditions,
+        [Op.or]: [
+          { name: { [Op.like]: `%${search}%` } },
+          { description: { [Op.like]: `%${search}%` } },
+          { contact: { [Op.like]: `%${search}%` } },
+          { '$room.name$': { [Op.like]: `%${search}%` } },
+        ],
+      };
+    }
+
+    const { count, rows: events } = await Event.findAndCountAll({
+      where: whereConditions,
+      include: includeConditions,
+      limit: pageSize,
+      offset: offset,
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (!events || events.length === 0) {
+      return res
+        .status(404)
+        .json({ error: 'No se encontraron eventos para este usuario.' });
+    }
+
+    const totalPages = Math.ceil(count / pageSize);
+
+    res.status(200).json({
+      totalEvents: count,
+      totalPages: totalPages,
+      currentPage: page,
+      events: events,
+    });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ error: 'Error al obtener los eventos del usuario.' });
+  }
+};
 // para notificaciones
 exports.getPendingEventsCount = async (req, res) => {
   try {
@@ -912,5 +1380,91 @@ exports.getUserEventsCount = async (req, res) => {
       details:
         process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
+  }
+};
+
+// Eliminar agreement (contrato) de un evento
+exports.removeAgreement = async (req, res) => {
+  try {
+    const eventId = req.params.eventId;
+    const userRole = req.user.role;
+    const userId = req.user.id;
+
+    const event = await Event.findByPk(eventId);
+    if (!event) return res.status(404).json({ error: 'Evento no encontrado.' });
+
+    // permisos: solo admin o coordinator pueden eliminar el contrato
+    if (userRole === 'requester') {
+      return res
+        .status(403)
+        .json({ message: 'No tienes permisos para eliminar el contrato.' });
+    }
+
+    if (userRole === 'coordinator') {
+      const hasPermission = await checkRoomPermission(
+        userId,
+        userRole,
+        event.roomId
+      );
+      if (!hasPermission) {
+        return res.status(403).json({
+          message: 'No tienes permisos para eliminar el contrato de esta sala',
+        });
+      }
+    }
+
+    if (event.agreementPath) {
+      await safeUnlink(event.agreementPath, './uploads/events');
+      event.agreementPath = null;
+      await event.save();
+    }
+
+    res.status(200).json({ message: 'Contrato eliminado', event });
+  } catch (error) {
+    console.error('Error removing agreement:', error);
+    res.status(500).json({ error: 'Error al eliminar el contrato.' });
+  }
+};
+
+// Eliminar program (programa) de un evento
+exports.removeProgram = async (req, res) => {
+  try {
+    const eventId = req.params.eventId;
+    const userRole = req.user.role;
+    const userId = req.user.id;
+
+    const event = await Event.findByPk(eventId);
+    if (!event) return res.status(404).json({ error: 'Evento no encontrado.' });
+
+    // permisos: requester puede eliminar su programa; admin/coordinator también pueden
+    if (userRole === 'requester' && event.userId !== userId) {
+      return res.status(403).json({
+        message: 'No tienes permisos para eliminar el programa de este evento.',
+      });
+    }
+
+    if (userRole === 'coordinator') {
+      const hasPermission = await checkRoomPermission(
+        userId,
+        userRole,
+        event.roomId
+      );
+      if (!hasPermission) {
+        return res.status(403).json({
+          message: 'No tienes permisos para eliminar el programa de esta sala',
+        });
+      }
+    }
+
+    if (event.programPath) {
+      await safeUnlink(event.programPath, './uploads/events');
+      event.programPath = null;
+      await event.save();
+    }
+
+    res.status(200).json({ message: 'Programa eliminado', event });
+  } catch (error) {
+    console.error('Error removing program:', error);
+    res.status(500).json({ error: 'Error al eliminar el programa.' });
   }
 };

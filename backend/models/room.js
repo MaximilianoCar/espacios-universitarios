@@ -2,22 +2,17 @@
 const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
   class Room extends Model {
-    /**
-     * Helper method for defining associations.
-     * This method is not a part of Sequelize lifecycle.
-     * The `models/index` file will call this method automatically.
-     */
     static associate(models) {
       Room.hasMany(models.Event, {
         foreignKey: 'roomId',
-        as: 'events', // Alias para los eventos asociados
+        as: 'events',
       });
 
-      Room.belongsToMany(models.User, {
-        through: models.CoordinatorRooms,
+      Room.belongsToMany(models.Dependency, {
+        through: models.DependencyRooms,
         foreignKey: 'RoomId',
-        otherKey: 'UserId',
-        as: 'coordinators',
+        otherKey: 'DependencyId',
+        as: 'dependencies',
       });
     }
   }
@@ -26,7 +21,7 @@ module.exports = (sequelize, DataTypes) => {
       name: {
         type: DataTypes.STRING,
         unique: true,
-        allowNull: false, // Este campo es obligatorio
+        allowNull: false,
       },
       description: DataTypes.TEXT,
       capacity: {
@@ -43,12 +38,57 @@ module.exports = (sequelize, DataTypes) => {
       },
       imagePath: {
         type: DataTypes.STRING,
-        allowNull: true, // Puede ser nulo si no se sube imagen
+        allowNull: true,
       },
       isInCUC: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
-        defaultValue: false, // Valor por defecto
+        defaultValue: false,
+      },
+      cost: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: 0,
+      },
+      isAccessible: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      canExonerate: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      hasBathrooms: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      hasInternet: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      hasAudioEquipment: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      hasVideoEquipment: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      acceptsTransfer: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      acceptsMaterials: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
       },
     },
     {

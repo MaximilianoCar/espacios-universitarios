@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import axiosInstance from '../axiosConfig';
+import Swal from '../utils/swal';
 
 const PermissionsModal = ({ user, onClose }) => {
   const [allRooms, setAllRooms] = useState([]);
@@ -15,24 +16,31 @@ const PermissionsModal = ({ user, onClose }) => {
     const fetchPermissionsData = async () => {
       setLoading(true);
       try {
-        // Obtener TODAS las salas disponibles
-        const roomsResponse = await axiosInstance.get('/rooms');
-        setAllRooms(roomsResponse.data);
+        const depsResponse = await axiosInstance.get('/dependencies');
+        setAllRooms(depsResponse.data);
 
-        // obtener los permisos (managedRooms)
+        // obtener los permisos (managedDependencies)
         const userPermissionsResponse = await axiosInstance.get(
           `/users/${user.id}/permissions`
         );
 
-        // Mapear los IDs de las salas que el usuario ya administra
-        const currentRoomIds = userPermissionsResponse.data.managedRooms
-          ? userPermissionsResponse.data.managedRooms.map(room => room.id)
+        // Mapear los IDs de las dependencias que el usuario ya administra
+        const currentDepIds = userPermissionsResponse.data.managedDependencies
+          ? userPermissionsResponse.data.managedDependencies.map(d => d.id)
           : [];
 
-        setSelectedRoomIds(currentRoomIds);
+        setSelectedRoomIds(currentDepIds);
       } catch (err) {
         console.error('Error fetching permissions data:', err);
         setError('Error al cargar la lista de salas o los permisos actuales.');
+
+        // Mostrar error con SweetAlert2
+        Swal.fire({
+          title: 'Error',
+          text: 'Error al cargar la lista de salas o los permisos actuales.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
       } finally {
         setLoading(false);
       }
@@ -44,29 +52,65 @@ const PermissionsModal = ({ user, onClose }) => {
   const handleCheckboxChange = roomId => {
     setSelectedRoomIds(prevIds => {
       if (prevIds.includes(roomId)) {
-        // Desmarcar: quitar el ID
         return prevIds.filter(id => id !== roomId);
       } else {
-        // Marcar: añadir el ID
         return [...prevIds, roomId];
       }
     });
   };
 
   const handleSavePermissions = async () => {
+    // Confirmar antes de guardar
+    const confirmResult = await Swal.fire({
+      title: '¿Actualizar permisos?',
+      text: `¿Estás seguro de que deseas guardar los cambios en los permisos de ${user.name}?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Sí, guardar',
+      cancelButtonText: 'Cancelar',
+    });
+
+    if (!confirmResult.isConfirmed) return;
+
     setIsSaving(true);
     setError('');
+
+    // Mostrar loading
+    Swal.fire({
+      title: 'Guardando permisos...',
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading(),
+    });
+
     try {
-      // Endpoint para actualizar los permisos del coordinador
-      // Este endpoint debe aceptar un array de Room IDs en el body
       await axiosInstance.put(`/users/${user.id}/permissions`, {
-        roomIds: selectedRoomIds,
+        dependencyIds: selectedRoomIds,
       });
 
-      alert(`Permisos actualizados para ${user.name} con éxito.`);
+      // Cerrar loading y mostrar éxito
+      Swal.close();
+      await Swal.fire({
+        title: '¡Éxito!',
+        text: `Permisos actualizados para ${user.name} con éxito.`,
+        icon: 'success',
+        confirmButtonColor: '#3085d6',
+      });
+
       onClose();
     } catch (err) {
       console.error('Error saving permissions:', err);
+
+      // Cerrar loading y mostrar error
+      Swal.close();
+      Swal.fire({
+        title: 'Error',
+        text: 'Error al guardar los permisos. Verifique la conexión.',
+        icon: 'error',
+        confirmButtonColor: '#d33',
+      });
+
       setError('Error al guardar los permisos. Verifique la conexión.');
     } finally {
       setIsSaving(false);
@@ -80,8 +124,7 @@ const PermissionsModal = ({ user, onClose }) => {
           Gestión de Permisos para {user.name}
         </h3>
         <p className="mb-4 text-sm text-gray-600">
-          Asigna permisos de control total sobre los siguientes espacios al
-          coordinador.
+          Asigna permisos sobre dependencias al coordinador.
         </p>
         {error && <p className="text-red-500 mb-4">{error}</p>}
 
@@ -90,23 +133,23 @@ const PermissionsModal = ({ user, onClose }) => {
         ) : (
           <div className="max-h-60 overflow-y-auto border p-3 rounded mb-4">
             {allRooms.length > 0 ? (
-              allRooms.map(room => (
+              allRooms.map(dep => (
                 <div
-                  key={room.id}
+                  key={dep.id}
                   className="flex items-center justify-between py-1 border-b last:border-b-0"
                 >
-                  <span className="text-gray-700">{room.name}</span>
+                  <span className="text-gray-700">{dep.name}</span>
                   <input
                     type="checkbox"
-                    checked={selectedRoomIds.includes(room.id)}
-                    onChange={() => handleCheckboxChange(room.id)}
+                    checked={selectedRoomIds.includes(dep.id)}
+                    onChange={() => handleCheckboxChange(dep.id)}
                     className="h-4 w-4 text-blue-600 border-gray-300 rounded"
                   />
                 </div>
               ))
             ) : (
               <p className="text-center text-gray-500">
-                No hay salas disponibles para asignar.
+                No hay dependencias disponibles para asignar.
               </p>
             )}
           </div>

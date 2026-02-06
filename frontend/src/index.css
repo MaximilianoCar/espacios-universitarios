@@ -60,3 +60,37 @@ footer {
 .notification-badge-ping {
   animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
+
+/* SweetAlert2 custom button styles to standardize modals */
+.swal2-custom-popup {
+  font-family: inherit;
+}
+
+.btn-blue {
+  background-color: #1d4ed8; /* blue-700 */
+  color: #fff;
+  border: none;
+  padding: 0.5rem 0.9rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+}
+.btn-blue:hover {
+  background-color: #1e40af; /* blue-800 */
+}
+
+.btn-red {
+  background-color: #dc2626; /* red-600 */
+  color: #fff;
+  border: none;
+  padding: 0.5rem 0.9rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+}
+.btn-red:hover {
+  background-color: #b91c1c; /* red-700 */
+}
+
+/* Ensure consistent spacing inside Swal buttons */
+.swal2-popup .swal2-actions {
+  gap: 0.5rem;
+}

@@ -1,25 +1,26 @@
-import axiosInstance from '../../axiosConfig';
+import axiosInstance, { setAuthToken, clearAuthToken } from '../../axiosConfig';
 import { loginSuccess, refreshAccessToken, logout } from './authSlice';
-import Swal from 'sweetalert2';
-
-const API_URL = ''; //  la URL de tu API
+import Swal from '../../utils/swal';
 
 // Acción para iniciar sesión
 export const login = (email, password, navigate) => async dispatch => {
   try {
-    const response = await axiosInstance.post(`${API_URL}/login`, {
-      email,
-      password,
-    });
-    const { token, refreshToken, name, role } = response.data.data;
+    console.log('[auth] POST /login (via axiosInstance)');
+    const response = await axiosInstance.post('/login', { email, password });
+
+    // respuesta en distintos formatos: .data.data o .data
+    const payload = response.data.data || response.data;
+    const { token, refreshToken, name, role } = payload;
 
     // Guardar tokens en localStorage
-
     localStorage.setItem('user', name);
     localStorage.setItem('role', role);
     localStorage.setItem('token', token);
     localStorage.setItem('refreshToken', refreshToken);
     localStorage.setItem('isAuthenticated', true);
+
+    // Establecer header en axios.defaults para evitar token antiguo en memoria
+    setAuthToken(token);
 
     // Actualizar el estado global con Redux
     dispatch(loginSuccess({ name, role, token, refreshToken }));
@@ -27,14 +28,33 @@ export const login = (email, password, navigate) => async dispatch => {
     // Redirigir al usuario a la vista de Home
     navigate('/home');
   } catch (error) {
-    console.error('Error al iniciar sesión:', error);
-    // Mostrar SweetAlert de error
-    Swal.fire({
-      title: 'Error',
-      text: 'El correo o la contraseña son incorrectos',
-      icon: 'error',
-      confirmButtonText: 'Intentar de nuevo',
-    });
+    // Distinción de errores para depuración
+    console.error('[auth] Error al iniciar sesión:', error);
+    if (!error.response) {
+      // Network / CORS / proxy
+      Swal.fire({
+        title: 'Error de conexión',
+        text: 'No se pudo conectar con el servidor. Verifica que el backend esté disponible y que el proxy esté configurado. Prueba http://localhost:5173/api/ping',
+        icon: 'error',
+        confirmButtonText: 'Aceptar',
+      });
+    } else if (error.response.status === 404) {
+      Swal.fire({
+        title: 'Ruta no encontrada (404)',
+        text: 'El servidor respondió 404 para /api/login. Revisa que la ruta exista en el backend y que el proxy esté apuntando al servidor correcto.',
+        icon: 'error',
+        confirmButtonText: 'Aceptar',
+      });
+    } else {
+      Swal.fire({
+        title: 'Error',
+        text:
+          error.response?.data?.error ||
+          'El correo o la contraseña son incorrectos',
+        icon: 'error',
+        confirmButtonText: 'Intentar de nuevo',
+      });
+    }
   }
 };
 
@@ -45,10 +65,11 @@ export const refreshToken = () => async dispatch => {
     if (!refreshToken) {
       dispatch(logout());
       localStorage.clear();
+      clearAuthToken();
       return;
     }
 
-    const response = await axiosInstance.post(`${API_URL}/refresh-token`, {
+    const response = await axiosInstance.post('/refresh-token', {
       refreshToken,
     });
     const { token: newToken } = response.data;
@@ -56,12 +77,16 @@ export const refreshToken = () => async dispatch => {
     // Guardar el nuevo token en localStorage
     localStorage.setItem('token', newToken);
 
+    // Actualizar header en axios
+    setAuthToken(newToken);
+
     // Actualizar el token en el estado global con Redux
     dispatch(refreshAccessToken({ token: newToken }));
   } catch (error) {
     console.error('Error al refrescar el token:', error);
     dispatch(logout());
     localStorage.clear();
+    clearAuthToken();
   }
 };
 
@@ -74,13 +99,16 @@ export const logoutUser = () => dispatch => {
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('isAuthenticated');
 
+  // Limpiar header en axios
+  clearAuthToken();
+
   // Despachar la acción de logout para limpiar el estado de Redux
   dispatch(logout());
 };
 
 export const logoutAndRedirect = navigate => async dispatch => {
   try {
-    await axiosInstance.post(`${API_URL}/logout`);
+    await axiosInstance.post('/logout');
     //  limpia tu estado global y el almacenamiento persistente.
     dispatch(logoutUser());
 

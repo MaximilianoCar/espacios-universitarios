@@ -20,7 +20,7 @@ router.get(
 router.post(
   '/rooms',
   protect,
-  restrictTo('admin'),
+  restrictTo('admin', 'coordinator'),
   upload.single('image'), // Aplicar el middleware de subida de imagen
   roomController.createRoom
 );
@@ -44,7 +44,7 @@ router.put(
 router.delete(
   '/rooms/:id',
   protect,
-  restrictTo('admin'),
+  restrictTo('admin', 'coordinator'),
   roomController.deleteRoom
 );
 

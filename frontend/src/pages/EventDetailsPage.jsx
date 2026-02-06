@@ -5,7 +5,7 @@ import { useSelector } from 'react-redux';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import HeroSection from '../components/HeroSection';
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 import defaultBanner from '../assets/ucvfondo.jpg';
 import { CameraIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
 import { FaArrowLeft } from 'react-icons/fa';
@@ -104,21 +104,23 @@ const EventDetailsPage = () => {
         axiosInstance
           .delete(`/events/${event.id}`)
           .then(() => {
-            Swal.fire(
-              '¡Eliminado!',
-              'El evento ha sido eliminado exitosamente.',
-              'success'
-            ).then(() => {
+            Swal.fire({
+              title: '¡Eliminado!',
+              text: 'El evento ha sido eliminado exitosamente.',
+              icon: 'success',
+              confirmButtonColor: '#3085d6',
+            }).then(() => {
               navigate('/events');
             });
           })
           .catch(error => {
             console.error('Error deleting event:', error);
-            Swal.fire(
-              'Error',
-              'Error al eliminar el evento. Por favor, intente nuevamente.',
-              'error'
-            );
+            Swal.fire({
+              title: 'Error',
+              text: 'Error al eliminar el evento. Por favor, intente nuevamente.',
+              icon: 'error',
+              confirmButtonColor: '#d33',
+            });
           });
       }
     });
@@ -133,7 +135,11 @@ const EventDetailsPage = () => {
         showDenyButton: true,
         showCancelButton: true,
         confirmButtonText: 'Subir nuevo',
+        confirmButtonColor: '#3085d6',
         denyButtonText: 'Quitar banner',
+        denyButtonColor: '#3085d6',
+        cancelButtonText: 'Cancelar',
+        cancelButtonColor: '#d33',
         icon: 'question',
       });
 
@@ -141,17 +147,23 @@ const EventDetailsPage = () => {
         // quitar banner
         try {
           await axiosInstance.delete(`/events/${event.id}/banner`);
-          Swal.fire(
-            'Eliminado',
-            'Banner restaurado al predeterminado.',
-            'success'
-          );
+          Swal.fire({
+            title: 'Eliminado',
+            text: 'Banner restaurado al predeterminado.',
+            icon: 'success',
+            confirmButtonColor: '#3085d6',
+          });
           // refrescar evento
           const resp = await axiosInstance.get(`/events/${event.id}`);
           setEvent(resp.data);
         } catch (err) {
           console.error(err);
-          Swal.fire('Error', 'No se pudo eliminar el banner.', 'error');
+          Swal.fire({
+            title: 'Error',
+            text: 'No se pudo eliminar el banner.',
+            icon: 'error',
+            confirmButtonColor: '#d33',
+          });
         }
         return;
       }
@@ -169,7 +181,12 @@ const EventDetailsPage = () => {
 
       // Validar tamaño del archivo (máximo 5MB)
       if (file.size > 5 * 1024 * 1024) {
-        Swal.fire('Error', 'La imagen no puede ser mayor a 5MB.', 'error');
+        Swal.fire({
+          title: 'Error',
+          text: 'La imagen no puede ser mayor a 5MB.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
         return;
       }
 
@@ -191,12 +208,22 @@ const EventDetailsPage = () => {
         // refrescar el evento
         const refreshed = await axiosInstance.get(`/events/${event.id}`);
         Swal.close();
-        Swal.fire('¡Listo!', 'Banner subido correctamente.', 'success');
+        Swal.fire({
+          title: '¡Listo!',
+          text: 'Banner subido correctamente.',
+          icon: 'success',
+          confirmButtonColor: '#3085d6',
+        });
         setEvent(refreshed.data);
       } catch (err) {
         Swal.close();
         console.error(err);
-        Swal.fire('Error', 'No se pudo subir el banner.', 'error');
+        Swal.fire({
+          title: 'Error',
+          text: 'No se pudo subir el banner.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
       }
     };
     input.click();
@@ -211,19 +238,33 @@ const EventDetailsPage = () => {
         showDenyButton: true,
         showCancelButton: true,
         confirmButtonText: 'Subir nueva',
+        confirmButtonColor: '#3085d6',
         denyButtonText: 'Quitar imagen',
+        denyButtonColor: '#3085d6',
+        cancelButtonText: 'Cancelar',
+        cancelButtonColor: '#d33',
         icon: 'question',
       });
 
       if (result.isDenied) {
         try {
           await axiosInstance.delete(`/events/${event.id}/image`);
-          Swal.fire('Eliminado', 'Imagen del evento eliminada.', 'success');
+          Swal.fire({
+            title: 'Eliminado',
+            text: 'Imagen del evento eliminada.',
+            icon: 'success',
+            confirmButtonColor: '#3085d6',
+          });
           const resp = await axiosInstance.get(`/events/${event.id}`);
           setEvent(resp.data);
         } catch (err) {
           console.error(err);
-          Swal.fire('Error', 'No se pudo eliminar la imagen.', 'error');
+          Swal.fire({
+            title: 'Error',
+            text: 'No se pudo eliminar la imagen.',
+            icon: 'error',
+            confirmButtonColor: '#d33',
+          });
         }
         return;
       }
@@ -240,7 +281,12 @@ const EventDetailsPage = () => {
 
       // Validar tamaño del archivo (máximo 5MB)
       if (file.size > 5 * 1024 * 1024) {
-        Swal.fire('Error', 'La imagen no puede ser mayor a 5MB.', 'error');
+        Swal.fire({
+          title: 'Error',
+          text: 'La imagen no puede ser mayor a 5MB.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
         return;
       }
 
@@ -260,12 +306,22 @@ const EventDetailsPage = () => {
         // refrescar el evento
         const refreshed = await axiosInstance.get(`/events/${event.id}`);
         Swal.close();
-        Swal.fire('¡Listo!', 'Imagen subida correctamente.', 'success');
+        Swal.fire({
+          title: '¡Listo!',
+          text: 'Imagen subida correctamente.',
+          icon: 'success',
+          confirmButtonColor: '#3085d6',
+        });
         setEvent(refreshed.data);
       } catch (err) {
         Swal.close();
         console.error(err);
-        Swal.fire('Error', 'No se pudo subir la imagen.', 'error');
+        Swal.fire({
+          title: 'Error',
+          text: 'No se pudo subir la imagen.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
       }
     };
     input.click();
@@ -376,7 +432,9 @@ const EventDetailsPage = () => {
       `,
       showCancelButton: true,
       confirmButtonText: 'Actualizar',
+      confirmButtonColor: '#3085d6',
       cancelButtonText: 'Cancelar',
+      cancelButtonColor: '#d33',
       width: '800px',
       focusConfirm: false,
       preConfirm: () => {
@@ -394,7 +452,7 @@ const EventDetailsPage = () => {
           document.getElementById('swal-reservationTo').value;
 
         // Validaciones básicas de campos requeridos
-        if (!name || !description || !capacity || !cost || !contact) {
+        if (!name || !capacity || !cost || !contact) {
           Swal.showValidationMessage(
             'Todos los campos básicos son obligatorios'
           );
@@ -474,19 +532,21 @@ const EventDetailsPage = () => {
       try {
         const resp = await axiosInstance.put(`/events/${event.id}`, formValues);
 
-        Swal.fire(
-          '¡Actualizado!',
-          'El evento ha sido actualizado exitosamente.',
-          'success'
-        );
+        Swal.fire({
+          title: '¡Actualizado!',
+          text: 'El evento ha sido actualizado exitosamente.',
+          icon: 'success',
+          confirmButtonColor: '#3085d6',
+        });
         setEvent(resp.data);
       } catch (error) {
         console.error('Error updating event:', error);
-        Swal.fire(
-          'Error',
-          'Error al actualizar el evento. Por favor, intente nuevamente.',
-          'error'
-        );
+        Swal.fire({
+          title: 'Error',
+          text: 'Error al actualizar el evento. Por favor, intente nuevamente.',
+          icon: 'error',
+          confirmButtonColor: '#d33',
+        });
       }
     }
   };
@@ -583,7 +643,7 @@ const EventDetailsPage = () => {
             </div>
 
             <div className="bg-gray-50 p-4 rounded-lg mb-6 border">
-              <p className="text-gray-700 whitespace-pre-line">
+              <p className="text-gray-700 whitespace-pre-line break-words">
                 {event?.description || 'Sin descripción'}
               </p>
             </div>
@@ -606,22 +666,30 @@ const EventDetailsPage = () => {
                     {event?.capacity} personas
                   </p>
                 </div>
-                <div>
-                  <strong className="text-gray-700 text-sm lg:text-base">
-                    Costo:
-                  </strong>
-                  <p className="text-gray-600 text-sm lg:text-base">
-                    {event?.cost}
-                  </p>
-                </div>
-                <div>
-                  <strong className="text-gray-700 text-sm lg:text-base">
-                    Contacto:
-                  </strong>
-                  <p className="text-gray-600 text-sm lg:text-base">
-                    {event?.contact}
-                  </p>
-                </div>
+
+                {/* Mostrar costo solo si el usuario puede editar */}
+                {canEdit && (
+                  <div>
+                    <strong className="text-gray-700 text-sm lg:text-base">
+                      Costo:
+                    </strong>
+                    <p className="text-gray-600 text-sm lg:text-base">
+                      {event?.cost}
+                    </p>
+                  </div>
+                )}
+
+                {/* Mostrar contacto solo si el usuario puede editar */}
+                {canEdit && (
+                  <div>
+                    <strong className="text-gray-700 text-sm lg:text-base">
+                      Contacto:
+                    </strong>
+                    <p className="text-gray-600 text-sm lg:text-base">
+                      {event?.contact}
+                    </p>
+                  </div>
+                )}
               </div>
               <div className="space-y-3 lg:space-y-4">
                 <div>
@@ -633,15 +701,15 @@ const EventDetailsPage = () => {
                       event?.status === 'approved'
                         ? 'bg-green-100 text-green-800'
                         : event?.status === 'denied'
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-yellow-100 text-yellow-800'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-yellow-100 text-yellow-800'
                     }`}
                   >
                     {event?.status === 'approved'
                       ? 'Aprobado'
                       : event?.status === 'denied'
-                      ? 'Rechazado'
-                      : 'Pendiente'}
+                        ? 'Rechazado'
+                        : 'Pendiente'}
                   </span>
                 </div>
                 <div>

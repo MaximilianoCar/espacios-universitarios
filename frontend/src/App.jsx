@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
 import HomePage from './pages/HomePage';
 import EventsPage from './pages/EventsPage';
 import EventDetailsPage from './pages/EventDetailsPage';
@@ -16,95 +17,185 @@ import ProtectedRoute from './components/ProtectedRoute';
 import ProtectedRouteCoord from './components/ProtectedRouteCoord';
 import AdminPendingRequestsPage from './pages/AdminPendingRequestsPage';
 import PreviewEventPage from './pages/PreviewEventPage';
-import { useDispatch } from 'react-redux';
 import { refreshToken } from './features/auth/authActions';
 import Layout from './components/Layout';
 
 function App() {
   const dispatch = useDispatch();
+  const { isAuthenticated } = useSelector(state => state.auth);
 
   useEffect(() => {
     // Intentar renovar el token al cargar la app
     dispatch(refreshToken());
 
     const interval = setInterval(() => {
-      // Renovar el token cada 50 minutos (o el tiempo adecuado según tu configuración)
+      // Renovar el token cada 50 minutos
       dispatch(refreshToken());
     }, 50 * 60 * 1000);
 
-    return () => clearInterval(interval); // Limpiar el intervalo al desmontar
+    return () => clearInterval(interval);
   }, [dispatch]);
+
+  // Función para proteger todas las rutas excepto login y register
+  const ProtectedElement = ({ children }) => {
+    if (!isAuthenticated) {
+      return <Navigate to="/login" replace />;
+    }
+    return children;
+  };
 
   return (
     <Layout>
       <Routes>
+        {/* Rutas públicas */}
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/home" element={<HomePage />} />
 
-        {/* Rutas públicas */}
-        <Route path="/events" element={<EventsPage />} />
-        <Route path="/events/:id" element={<EventDetailsPage />} />
-        <Route path="/preview/:id" element={<PreviewEventPage />} />
-        <Route path="/rooms" element={<RoomsPage />} />
-        <Route path="/rooms/:id" element={<RoomDetailsPage />} />
+        {/* Todas las demás rutas son protegidas */}
+        <Route
+          path="/home"
+          element={
+            <ProtectedElement>
+              <HomePage />
+            </ProtectedElement>
+          }
+        />
 
-        {/* Rutas protegidas solo para autenticados */}
+        <Route
+          path="/events"
+          element={
+            <ProtectedElement>
+              <EventsPage />
+            </ProtectedElement>
+          }
+        />
+
+        <Route
+          path="/events/:id"
+          element={
+            <ProtectedElement>
+              <EventDetailsPage />
+            </ProtectedElement>
+          }
+        />
+
+        <Route
+          path="/preview/:id"
+          element={
+            <ProtectedElement>
+              <PreviewEventPage />
+            </ProtectedElement>
+          }
+        />
+
+        <Route
+          path="/rooms"
+          element={
+            <ProtectedElement>
+              <RoomsPage />
+            </ProtectedElement>
+          }
+        />
+
+        <Route
+          path="/rooms/:id"
+          element={
+            <ProtectedElement>
+              <RoomDetailsPage />
+            </ProtectedElement>
+          }
+        />
+
+        {/* Rutas con protección adicional de roles */}
         <Route
           path="/create-reservation"
           element={
-            <ProtectedRoute>
-              <CreateReservationPage />
-            </ProtectedRoute>
+            <ProtectedElement>
+              <ProtectedRoute>
+                <CreateReservationPage />
+              </ProtectedRoute>
+            </ProtectedElement>
           }
         />
 
         <Route
           path="/my-reservations"
           element={
-            <ProtectedRoute>
-              <UserReservationsPage />
-            </ProtectedRoute>
+            <ProtectedElement>
+              <ProtectedRoute>
+                <UserReservationsPage />
+              </ProtectedRoute>
+            </ProtectedElement>
           }
         />
 
-        {/* Rutas protegidas solo para administradores */}
         <Route
           path="/reservations"
           element={
-            <ProtectedRouteCoord adminOnly={true}>
-              <AdminReservationsPage />
-            </ProtectedRouteCoord>
+            <ProtectedElement>
+              <ProtectedRouteCoord adminOnly={true}>
+                <AdminReservationsPage />
+              </ProtectedRouteCoord>
+            </ProtectedElement>
           }
         />
+
         <Route
           path="/pending"
           element={
-            <ProtectedRouteCoord adminOnly={true}>
-              <AdminPendingRequestsPage />
-            </ProtectedRouteCoord>
+            <ProtectedElement>
+              <ProtectedRouteCoord adminOnly={true}>
+                <AdminPendingRequestsPage />
+              </ProtectedRouteCoord>
+            </ProtectedElement>
           }
         />
+
         <Route
           path="/users"
           element={
-            <ProtectedRoute adminOnly={true}>
-              <UsersPage />
-            </ProtectedRoute>
+            <ProtectedElement>
+              <ProtectedRoute adminOnly={true}>
+                <UsersPage />
+              </ProtectedRoute>
+            </ProtectedElement>
           }
         />
 
         <Route
           path="/admin/rooms"
           element={
-            <ProtectedRouteCoord adminOnly={true}>
-              <AdminRoomsPage />
-            </ProtectedRouteCoord>
+            <ProtectedElement>
+              <ProtectedRouteCoord adminOnly={true}>
+                <AdminRoomsPage />
+              </ProtectedRouteCoord>
+            </ProtectedElement>
+          }
+        />
+
+        {/* Ruta por defecto - redirige basado en autenticación */}
+        <Route
+          path="/"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/home" replace />
+            ) : (
+              <Navigate to="/login" replace />
+            )
           }
         />
 
         {/* Ruta para manejar cualquier ruta no válida */}
-        <Route path="*" element={<Navigate to="/home" replace />} />
+        <Route
+          path="*"
+          element={
+            isAuthenticated ? (
+              <Navigate to="/home" replace />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
       </Routes>
     </Layout>
   );

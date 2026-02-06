@@ -25,6 +25,16 @@ router.post(
   userController.createAdmin
 );
 
+// Ruta para completar información de usuario externo
+router.post(
+  '/users/complete-external',
+  protect,
+  uploadCertification.single('certification'),
+  userController.completeExternalUser
+);
+
+router.get('/me', protect, userController.getCurrentUser);
+
 //paaara notis de admin
 router.get(
   '/users/pending-count',
@@ -86,6 +96,11 @@ router.post('/login', userController.login);
 router.post('/logout', protect, userController.logout);
 
 router.post('/refresh-token', userController.refreshToken);
+
+// Rutas públicas para restablecimiento de contraseña
+router.post('/password-reset-request', userController.requestPasswordReset);
+router.post('/password-reset-verify', userController.verifyResetCode);
+router.post('/password-reset', userController.resetPassword);
 
 // ----------------------------------------------------------------------
 // RUTAS DE GESTIÓN DE PERMISOS (PARA ADMINISTRADORES)

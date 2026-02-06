@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axiosInstance from '../axiosConfig';
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 import {
   CalendarIcon,
   MapPinIcon,
@@ -21,6 +21,7 @@ const AddEventForm = ({ onEventCreated }) => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    specialRequirements: '',
     capacity: '',
     cost: '',
     contact: '',
@@ -67,7 +68,6 @@ const AddEventForm = ({ onEventCreated }) => {
       'Instalar publicidad masiva (vallas, pendones) sin autorización',
     ],
     requisitos: [
-      'La mayoría de las actividades requieren que se gestionen con antelación (1 semana a 1 mes)',
       'Sera necesario que suba la programacion del proyecto detallado de la actividad',
     ],
     compromiso:
@@ -205,7 +205,7 @@ const AddEventForm = ({ onEventCreated }) => {
             <p class="text-xs text-gray-600 mb-2">Alcohol, armas, fogatas, ruido excesivo, daño al patrimonio</p>
             
             <p class="font-semibold text-blue-700 mb-2 text-sm">REQUISITOS:</p>
-            <p class="text-xs text-gray-600">Aval de COPRED puede ser requerido</p>
+            <p class="text-xs text-gray-600">Subir programación del evento</p>
           </div>
 
           <div class="border-t pt-4">
@@ -439,6 +439,7 @@ const AddEventForm = ({ onEventCreated }) => {
         setFormData({
           name: '',
           description: '',
+          specialRequirements: '',
           capacity: '',
           cost: '',
           contact: '',
@@ -586,8 +587,8 @@ const AddEventForm = ({ onEventCreated }) => {
                     isActive
                       ? 'bg-blue-600 border-blue-600 text-white'
                       : isCompleted
-                      ? 'bg-green-500 border-green-500 text-white'
-                      : 'border-gray-300 text-gray-500'
+                        ? 'bg-green-500 border-green-500 text-white'
+                        : 'border-gray-300 text-gray-500'
                   }`}
                 >
                   <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -613,7 +614,6 @@ const AddEventForm = ({ onEventCreated }) => {
             <p className="text-red-700 text-center">{error}</p>
           </div>
         )}
-
         {/* Sección 1: Espacio */}
         {activeSection === 0 && (
           <div className="space-y-6">
@@ -639,51 +639,323 @@ const AddEventForm = ({ onEventCreated }) => {
               </div>
             )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Espacio para el Evento *
-              </label>
-              <SelectWithIcon
-                icon={MapPinIcon}
-                name="roomId"
-                value={formData.roomId}
-                onChange={handleChange}
-                error={errors.roomId}
-              >
-                <option value="">Selecciona un espacio...</option>
-                {rooms.map(room => (
-                  <option key={room.id} value={room.id}>
-                    {room.name} - Capacidad: {room.capacity} personas
-                    {room.isInCUC && ' (CUC)'}
-                  </option>
-                ))}
-              </SelectWithIcon>
-              {errors.roomId && (
-                <p className="text-red-500 text-sm mt-1">{errors.roomId}</p>
-              )}
-            </div>
-
-            <div className="bg-blue-50 p-3 sm:p-4 rounded-lg">
-              <div className="flex items-start gap-2 sm:gap-3">
-                <InformationCircleIcon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Columna izquierda: Select de espacio */}
+              <div className="space-y-4">
                 <div>
-                  <p className="text-xs sm:text-sm text-blue-800">
-                    <strong>Tip:</strong> Selecciona el espacio que mejor se
-                    adapte al tamaño y necesidades de tu evento.
-                  </p>
-                  <p className="text-xs sm:text-sm text-blue-800 mt-1">
-                    Los espacios marcados con <strong>(CUC)</strong> están en la
-                    Ciudad Universitaria y tienen normativas especiales.
-                  </p>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Espacio para el Evento *
+                  </label>
+                  <SelectWithIcon
+                    icon={MapPinIcon}
+                    name="roomId"
+                    value={formData.roomId}
+                    onChange={handleChange}
+                    error={errors.roomId}
+                  >
+                    <option value="">Selecciona un espacio...</option>
+                    {rooms.map(room => (
+                      <option key={room.id} value={room.id}>
+                        {room.name} ({room.capacity} pers.)
+                      </option>
+                    ))}
+                  </SelectWithIcon>
+                  {errors.roomId && (
+                    <p className="text-red-500 text-sm mt-1">{errors.roomId}</p>
+                  )}
+                </div>
+
+                {/* Información adicional sobre el select */}
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <InformationCircleIcon className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm text-blue-800">
+                        <strong>Tip:</strong> Selecciona el espacio que mejor se
+                        adapte al tamaño y necesidades de tu evento.
+                      </p>
+                      <p className="text-sm text-blue-800 mt-1">
+                        Los espacios marcados con <strong>(CUC)</strong> están
+                        en la Ciudad Universitaria y tienen normativas
+                        especiales.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Columna derecha: Detalles del espacio seleccionado */}
+              <div className="space-y-4">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-800 mb-3 pb-2 border-b">
+                    Detalles del Espacio
+                  </h4>
+
+                  {formData.roomId ? (
+                    <div className="space-y-4">
+                      {(() => {
+                        const selectedRoom = rooms.find(
+                          room => room.id == formData.roomId
+                        );
+                        if (!selectedRoom) return null;
+
+                        return (
+                          <>
+                            {/* Información básica */}
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm font-medium text-gray-700">
+                                  Nombre:
+                                </span>
+                                <span className="text-sm font-semibold text-blue-600">
+                                  {selectedRoom.name}
+                                </span>
+                              </div>
+
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm font-medium text-gray-700">
+                                  Capacidad:
+                                </span>
+                                <span className="text-sm font-semibold text-gray-800">
+                                  {selectedRoom.capacity} personas
+                                </span>
+                              </div>
+
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm font-medium text-gray-700">
+                                  Ubicación:
+                                </span>
+                                <span className="text-sm font-semibold text-gray-800">
+                                  {selectedRoom.location}
+                                </span>
+                              </div>
+
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm font-medium text-gray-700">
+                                  Costo base:
+                                </span>
+                                <span className="text-sm font-semibold text-green-600">
+                                  {selectedRoom.cost === '0' ||
+                                  selectedRoom.cost === 0
+                                    ? 'Gratuito'
+                                    : `$${parseFloat(selectedRoom.cost).toFixed(2)}`}
+                                </span>
+                              </div>
+
+                              {selectedRoom.isInCUC && (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm font-medium text-gray-700">
+                                    Ubicación:
+                                  </span>
+                                  <span className="text-sm font-semibold text-yellow-600 bg-yellow-50 px-2 py-1 rounded">
+                                    Ciudad Universitaria (CUC)
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Servicios disponibles */}
+                            <div className="pt-3 border-t border-gray-200">
+                              <h5 className="text-sm font-medium text-gray-700 mb-2">
+                                Servicios disponibles:
+                              </h5>
+
+                              <div className="grid grid-cols-2 gap-2">
+                                {selectedRoom.isAccessible && (
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
+                                      <svg
+                                        className="w-3 h-3 text-green-600"
+                                        fill="currentColor"
+                                        viewBox="0 0 20 20"
+                                      >
+                                        <path
+                                          fillRule="evenodd"
+                                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                          clipRule="evenodd"
+                                        />
+                                      </svg>
+                                    </div>
+                                    <span className="text-xs text-gray-600">
+                                      Accesible
+                                    </span>
+                                  </div>
+                                )}
+
+                                {selectedRoom.hasBathrooms && (
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
+                                      <svg
+                                        className="w-3 h-3 text-green-600"
+                                        fill="currentColor"
+                                        viewBox="0 0 20 20"
+                                      >
+                                        <path
+                                          fillRule="evenodd"
+                                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                          clipRule="evenodd"
+                                        />
+                                      </svg>
+                                    </div>
+                                    <span className="text-xs text-gray-600">
+                                      Baños
+                                    </span>
+                                  </div>
+                                )}
+
+                                {selectedRoom.hasInternet && (
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
+                                      <svg
+                                        className="w-3 h-3 text-green-600"
+                                        fill="currentColor"
+                                        viewBox="0 0 20 20"
+                                      >
+                                        <path
+                                          fillRule="evenodd"
+                                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                          clipRule="evenodd"
+                                        />
+                                      </svg>
+                                    </div>
+                                    <span className="text-xs text-gray-600">
+                                      Internet
+                                    </span>
+                                  </div>
+                                )}
+
+                                {selectedRoom.hasAudioEquipment && (
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
+                                      <svg
+                                        className="w-3 h-3 text-green-600"
+                                        fill="currentColor"
+                                        viewBox="0 0 20 20"
+                                      >
+                                        <path
+                                          fillRule="evenodd"
+                                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                          clipRule="evenodd"
+                                        />
+                                      </svg>
+                                    </div>
+                                    <span className="text-xs text-gray-600">
+                                      Audio
+                                    </span>
+                                  </div>
+                                )}
+
+                                {selectedRoom.hasVideoEquipment && (
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
+                                      <svg
+                                        className="w-3 h-3 text-green-600"
+                                        fill="currentColor"
+                                        viewBox="0 0 20 20"
+                                      >
+                                        <path
+                                          fillRule="evenodd"
+                                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                          clipRule="evenodd"
+                                        />
+                                      </svg>
+                                    </div>
+                                    <span className="text-xs text-gray-600">
+                                      Video
+                                    </span>
+                                  </div>
+                                )}
+
+                                {selectedRoom.canExonerate && (
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center">
+                                      <svg
+                                        className="w-3 h-3 text-green-600"
+                                        fill="currentColor"
+                                        viewBox="0 0 20 20"
+                                      >
+                                        <path
+                                          fillRule="evenodd"
+                                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                          clipRule="evenodd"
+                                        />
+                                      </svg>
+                                    </div>
+                                    <span className="text-xs text-gray-600">
+                                      Exonerable
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Métodos de pago */}
+                            {(selectedRoom.acceptsTransfer ||
+                              selectedRoom.acceptsMaterials) && (
+                              <div className="pt-3 border-t border-gray-200">
+                                <h5 className="text-sm font-medium text-gray-700 mb-2">
+                                  Métodos de pago:
+                                </h5>
+
+                                <div className="flex flex-wrap gap-2">
+                                  {selectedRoom.acceptsTransfer && (
+                                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                      Transferencia
+                                    </span>
+                                  )}
+
+                                  {selectedRoom.acceptsMaterials && (
+                                    <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
+                                      Materiales
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Dependencia */}
+                            {selectedRoom.dependencies &&
+                              selectedRoom.dependencies.length > 0 && (
+                                <div className="pt-3 border-t border-gray-200">
+                                  <h5 className="text-sm font-medium text-gray-700 mb-1">
+                                    Dependencia:
+                                  </h5>
+                                  <p className="text-xs text-gray-600">
+                                    {selectedRoom.dependencies[0].name}
+                                  </p>
+                                </div>
+                              )}
+
+                            {/* Descripción */}
+                            {selectedRoom.description && (
+                              <div className="pt-3 border-t border-gray-200">
+                                <h5 className="text-sm font-medium text-gray-700 mb-1">
+                                  Descripción:
+                                </h5>
+                                <p className="text-xs text-gray-600 line-clamp-3">
+                                  {selectedRoom.description}
+                                </p>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <div className="w-12 h-12 mx-auto mb-3 bg-gray-100 rounded-full flex items-center justify-center">
+                        <InformationCircleIcon className="w-6 h-6 text-gray-400" />
+                      </div>
+                      <p className="text-sm text-gray-500">
+                        Selecciona un espacio para ver sus detalles
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         )}
-
-        {/* Resto del código del formulario se mantiene igual */}
-        {/* ... (las otras secciones permanecen sin cambios) ... */}
-
         {/* Sección 2: Información Básica */}
         {activeSection === 1 && (
           <div className="space-y-6">
@@ -767,29 +1039,53 @@ const AddEventForm = ({ onEventCreated }) => {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Descripción del Evento
-              </label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleChange}
-                rows="4"
-                className={`block w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  errors.description ? 'border-red-500' : 'border-gray-300'
-                }`}
-                placeholder="Describe los detalles de tu evento..."
-              />
-              {errors.description && (
-                <p className="text-red-500 text-sm mt-1">
-                  {errors.description}
-                </p>
-              )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Descripción del Evento
+                </label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  rows="4"
+                  className={`block w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    errors.description ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  placeholder="Describe los detalles de tu evento..."
+                />
+                {errors.description && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.description}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Requerimientos Especiales (opcional)
+                </label>
+                <textarea
+                  name="specialRequirements"
+                  value={formData.specialRequirements}
+                  onChange={handleChange}
+                  rows="4"
+                  className={`block w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    errors.specialRequirements
+                      ? 'border-red-500'
+                      : 'border-gray-300'
+                  }`}
+                  placeholder="Ej: Necesito montaje de audio, acceso para personas con movilidad reducida, vigilancia adicional, estacionamiento para 2 vehículos, requerimiento de energía eléctrica, etc."
+                />
+                {errors.specialRequirements && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.specialRequirements}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         )}
-
         {/* Sección 3: Fechas y Horarios */}
         {activeSection === 2 && (
           <div className="space-y-6">
@@ -913,7 +1209,6 @@ const AddEventForm = ({ onEventCreated }) => {
             </div>
           </div>
         )}
-
         {/* Sección 4: Imagen */}
         {activeSection === 3 && (
           <div className="space-y-6">
@@ -957,7 +1252,6 @@ const AddEventForm = ({ onEventCreated }) => {
             </div>
           </div>
         )}
-
         {/* Navigation Buttons */}
         <div className="flex justify-between mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200">
           <button

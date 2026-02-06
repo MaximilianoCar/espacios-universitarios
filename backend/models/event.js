@@ -2,7 +2,6 @@
 const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
   class Event extends Model {
-    // Agregamos propiedades estáticas para el status
     static get STATUS() {
       return {
         PENDING: 'pending',
@@ -10,19 +9,25 @@ module.exports = (sequelize, DataTypes) => {
         DENIED: 'denied',
       };
     }
+
+    static get RATING() {
+      return {
+        MIN: 1,
+        MAX: 5,
+      };
+    }
+
     static associate(models) {
-      // Relación "muchos a uno" con User
       Event.belongsTo(models.User, {
-        foreignKey: 'userId', // Llave foránea en Event
-        as: 'user', // Alias para la relación
-        onDelete: 'CASCADE', // Si el usuario se elimina, elimina el evento
+        foreignKey: 'userId',
+        as: 'user',
+        onDelete: 'CASCADE',
       });
 
-      // Relación "muchos a uno" con Room
       Event.belongsTo(models.Room, {
-        foreignKey: 'roomId', // Llave foránea en Event
-        as: 'room', // Alias para la relación
-        onDelete: 'SET NULL', // Si la sala se elimina, no elimina el evento pero establece roomId en null
+        foreignKey: 'roomId',
+        as: 'room',
+        onDelete: 'SET NULL',
       });
     }
   }
@@ -30,8 +35,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       name: {
         type: DataTypes.STRING,
-        unique: true,
-        allowNull: false, // Este campo es obligatorio
+        allowNull: false,
       },
       description: DataTypes.TEXT,
       comments: DataTypes.TEXT,
@@ -52,8 +56,8 @@ module.exports = (sequelize, DataTypes) => {
           Event.STATUS.PENDING,
           Event.STATUS.APPROVED,
           Event.STATUS.DENIED
-        ), // Solo permite los valores 'pending','approved',"denied"
-        allowNull: false, // Campo obligatorio
+        ),
+        allowNull: false,
       },
       eventFrom: {
         type: DataTypes.DATE,
@@ -76,25 +80,63 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
       },
       programPath: {
-        type: DataTypes.STRING, // Ruta del archivo del programa
+        type: DataTypes.STRING,
         allowNull: true,
       },
       agreementPath: {
-        type: DataTypes.STRING, // Ruta del archivo del contrato
+        type: DataTypes.STRING,
         allowNull: true,
       },
       imagePath: {
         type: DataTypes.STRING,
-        allowNull: true, // Puede ser nulo si no se sube imagen
+        allowNull: true,
       },
       bannerPath: {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      specialRequirements: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'special_requirements',
+        comment:
+          'Requerimientos especiales como logística, protocolo, vigilancia, estacionamiento, etc.',
+      },
+      spaceConditionRating: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'space_condition_rating',
+        validate: {
+          min: Event.RATING.MIN,
+          max: Event.RATING.MAX,
+        },
+        comment: 'Calificación de condiciones del espacio (1-5)',
+      },
+      staffTreatmentRating: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'staff_treatment_rating',
+        validate: {
+          min: Event.RATING.MIN,
+          max: Event.RATING.MAX,
+        },
+        comment: 'Calificación de trato del personal (1-5)',
+      },
+      reservationProcessRating: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'reservation_process_rating',
+        validate: {
+          min: Event.RATING.MIN,
+          max: Event.RATING.MAX,
+        },
+        comment: 'Calificación de proceso de reserva (1-5)',
+      },
     },
     {
       sequelize,
       modelName: 'Event',
+      underscored: true,
     }
   );
   return Event;
