@@ -48,6 +48,35 @@ const emailTemplates = {
         <p style="margin-top: 20px; color: #666; font-size: 12px;">
           Espacios Universitarios UCV - ${new Date().getFullYear()}
         </p>
+              </div>
+    `,
+  }),
+  // Notificación de calificación de evento por parte del solicitante
+  eventRating: (
+    userName,
+    eventName,
+    spaceName,
+    spaceConditionRating,
+    staffTreatmentRating,
+    reservationProcessRating,
+    suggestion = ''
+  ) => ({
+    subject: `Nueva calificación para ${eventName} - ${spaceName}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #333;">Nueva Calificación de Evento</h2>
+        <p>El usuario <strong>${userName}</strong> ha enviado una calificación para el evento <strong>${eventName}</strong> en el espacio <strong>${spaceName}</strong>.</p>
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+          <p><strong>Condiciones del espacio:</strong> ${spaceConditionRating || 'N/A'}</p>
+          <p><strong>Trato del personal:</strong> ${staffTreatmentRating || 'N/A'}</p>
+          <p><strong>Proceso de reserva:</strong> ${reservationProcessRating || 'N/A'}</p>
+        </div>
+        ${
+          suggestion
+            ? `<div style="background: #fff3cd; padding: 12px; border-left: 4px solid #ffeeba; margin: 15px 0;"><strong>Sugerencia del usuario:</strong><br>${suggestion}</div>`
+            : ''
+        }
+        <p style="margin-top: 20px; color: #666; font-size: 12px;">Espacios Universitarios UCV - ${new Date().getFullYear()}</p>
       </div>
     `,
   }),
@@ -606,6 +635,40 @@ class EmailService {
     } catch (error) {
       console.error('Error en notifyAllEntitiesCancellation:', error);
       return { success: false, error: error.message };
+    }
+  }
+
+  async notifyEventRating(
+    coordEmails,
+    userName,
+    eventName,
+    spaceName,
+    spaceConditionRating,
+    staffTreatmentRating,
+    reservationProcessRating,
+    suggestion = ''
+  ) {
+    try {
+      const emails = Array.isArray(coordEmails) ? coordEmails : [coordEmails];
+      const results = [];
+
+      for (const email of emails) {
+        const result = this.sendEmail(email, 'eventRating', [
+          userName,
+          eventName,
+          spaceName,
+          spaceConditionRating,
+          staffTreatmentRating,
+          reservationProcessRating,
+          suggestion,
+        ]);
+        results.push(result);
+      }
+
+      return results;
+    } catch (error) {
+      console.error('Error en notifyEventRating:', error);
+      return { queued: false, success: false, error: error.message };
     }
   }
 

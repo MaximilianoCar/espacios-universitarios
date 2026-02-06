@@ -10,6 +10,7 @@ import {
   FaUser,
   FaPhone,
   FaFileImage,
+  FaClipboardCheck, // Icono para requerimientos especiales
 } from 'react-icons/fa';
 
 const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
@@ -19,7 +20,7 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    specialRequirements: '',
+    specialRequirements: '', // <-- Campo agregado
     capacity: '',
     cost: '',
     contact: '',
@@ -103,15 +104,19 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
     if (!formData.name.trim()) newErrors.name = 'El nombre es requerido';
     if (!formData.description.trim())
       newErrors.description = 'La descripción es requerida';
+
+    // Validación de requerimientos especiales (opcional pero con límite)
     if (
       formData.specialRequirements &&
       formData.specialRequirements.length > 2000
     )
       newErrors.specialRequirements =
         'Los requerimientos especiales no pueden exceder 2000 caracteres';
+
     if (formData.description.length > 5000)
       newErrors.description =
         'La descripción no puede exceder los 5000 caracteres';
+
     if (!formData.capacity) newErrors.capacity = 'La capacidad es requerida';
     if (parseInt(formData.capacity) <= 0)
       newErrors.capacity = 'La capacidad debe ser un número positivo';
@@ -398,7 +403,7 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
                   className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
                     errors.description ? 'border-red-500' : 'border-gray-300'
                   }`}
-                  placeholder="Describa el evento"
+                  placeholder="Describa el evento (máximo 5000 caracteres)"
                 />
                 <div className="flex justify-between mt-1">
                   {errors.description ? (
@@ -409,6 +414,42 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
                     </p>
                   )}
                 </div>
+              </div>
+
+              {/* Requerimientos Especiales */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <FaClipboardCheck className="inline mr-2 text-green-500" />
+                  Requerimientos Especiales
+                  <span className="text-xs text-gray-500 ml-1">(Opcional)</span>
+                </label>
+                <textarea
+                  name="specialRequirements"
+                  value={formData.specialRequirements}
+                  onChange={handleChange}
+                  rows={3}
+                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition ${
+                    errors.specialRequirements
+                      ? 'border-red-500'
+                      : 'border-gray-300'
+                  }`}
+                  placeholder="Especifique requerimientos especiales como logística, protocolo, vigilancia, estacionamiento, etc. (máximo 2000 caracteres)"
+                />
+                <div className="flex justify-between mt-1">
+                  {errors.specialRequirements ? (
+                    <p className="text-sm text-red-600">
+                      {errors.specialRequirements}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500">
+                      {formData.specialRequirements.length}/2000 caracteres
+                    </p>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Nota: Este campo es opcional, use para especificar necesidades
+                  especiales de logística.
+                </p>
               </div>
 
               {/* Espacio (Room) */}
@@ -442,7 +483,10 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
                   <p className="mt-1 text-sm text-red-600">{errors.roomId}</p>
                 )}
               </div>
+            </div>
 
+            {/* Columna Derecha */}
+            <div className="space-y-4">
               {/* Información de Contacto */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -464,10 +508,7 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
                   <p className="mt-1 text-sm text-red-600">{errors.contact}</p>
                 )}
               </div>
-            </div>
 
-            {/* Columna Derecha */}
-            <div className="space-y-4">
               {/* Capacidad y Costo */}
               <div className="grid grid-cols-2 gap-4">
                 <div>

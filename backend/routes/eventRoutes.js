@@ -87,6 +87,14 @@ router.post(
   eventController.uploadFiles
 );
 
+// Endpoint para que el solicitante envie calificaciones del evento
+router.post(
+  '/events/:eventId/rate',
+  protect,
+  restrictTo('requester', 'admin', 'coordinator'),
+  eventController.submitRating
+);
+
 // Subir banner opcional para el evento (carpeta uploads/events/banners)
 router.post(
   '/events/:eventId/upload-banner',

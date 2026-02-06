@@ -78,6 +78,8 @@ const UserReservationsPage = () => {
       setEvents(response.data.events || []);
       setTotalEvents(response.data.totalEvents || 0);
       setTotalPages(response.data.totalPages || 1);
+      // detectar y preguntar por calificaciones (una vez por sesión)
+      checkUnratedAndPrompt(response.data.events || []);
     } catch (error) {
       console.error('Error refreshing events:', error);
       setError('Error al obtener las reservas.');
@@ -159,6 +161,8 @@ const UserReservationsPage = () => {
         setTotalEvents(response.data.totalEvents || 0);
         setTotalPages(response.data.totalPages || 1);
         setError('');
+        // detectar y preguntar por calificaciones (una vez por sesión)
+        checkUnratedAndPrompt(response.data.events || []);
       } catch (error) {
         console.error('Error fetching reservations:', error);
         setError('Error al obtener las reservas.');
@@ -324,6 +328,259 @@ const UserReservationsPage = () => {
         minute: '2-digit',
       }),
     };
+  };
+
+  // Detectar eventos aprobados y ya ocurridos que no tienen calificaciones
+  const checkUnratedAndPrompt = async fetchedEvents => {
+    try {
+      // Preguntar solo una vez por sesión
+      const sessionKey = 'ratingPromptShown_v2';
+      if (sessionStorage.getItem(sessionKey)) return;
+
+      if (!fetchedEvents || fetchedEvents.length === 0) return;
+
+      const now = new Date();
+      const unrated = fetchedEvents.filter(ev => {
+        return (
+          ev.status === 'approved' &&
+          ev.eventTo &&
+          new Date(ev.eventTo) < now &&
+          (ev.spaceConditionRating == null ||
+            ev.staffTreatmentRating == null ||
+            ev.reservationProcessRating == null)
+        );
+      });
+
+      if (!unrated || unrated.length === 0) return;
+
+      // Mostrar confirmación inicial
+      const first = unrated[0];
+      const confirm = await Swal.fire({
+        title: '¿Quieres calificar tu experiencia?',
+        html: `
+        <div class="text-left">
+          <p class="mb-4 text-gray-700">Tienes <span class="font-semibold text-blue-600">${unrated.length} evento(s)</span> aprobados y ya ocurridos sin calificar.</p>
+          <div class="bg-blue-50 border-l-4 border-blue-400 p-3 mb-4 rounded-r">
+            <p class="text-sm text-blue-700">
+              <strong>Evento:</strong> ${first.name}
+            </p>
+          </div>
+          <p class="text-sm text-gray-600">¿Deseas calificar ahora tu experiencia?</p>
+        </div>
+      `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Sí, calificar',
+        cancelButtonText: 'Ahora no',
+        width: '500px',
+      });
+
+      // Marcar que ya preguntamos esta sesión
+      sessionStorage.setItem(sessionKey, 'true');
+
+      if (!confirm.isConfirmed) return;
+
+      // Mostrar modal de calificación - Diseño similar al de rechazar solicitud
+      const { value: formValues } = await Swal.fire({
+        title: `Calificar: ${first.name}`,
+        html: `
+        <div class="text-left space-y-4">
+          <p class="text-sm text-gray-600 mb-2">Por favor califica del 1 al 5 cada aspecto de tu experiencia:</p>
+          
+          <div>
+            <label for="swal-space" class="block text-sm font-medium text-gray-700 mb-1">
+              Condiciones del espacio:
+            </label>
+            <select 
+              id="swal-space" 
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="">Seleccione una calificación</option>
+              <option value="1">1 - Muy malo</option>
+              <option value="2">2 - Malo</option>
+              <option value="3">3 - Regular</option>
+              <option value="4">4 - Bueno</option>
+              <option value="5">5 - Excelente</option>
+            </select>
+          </div>
+          
+          <div>
+            <label for="swal-staff" class="block text-sm font-medium text-gray-700 mb-1">
+              Trato del personal:
+            </label>
+            <select 
+              id="swal-staff" 
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="">Seleccione una calificación</option>
+              <option value="1">1 - Muy malo</option>
+              <option value="2">2 - Malo</option>
+              <option value="3">3 - Regular</option>
+              <option value="4">4 - Bueno</option>
+              <option value="5">5 - Excelente</option>
+            </select>
+          </div>
+          
+          <div>
+            <label for="swal-reservation" class="block text-sm font-medium text-gray-700 mb-1">
+              Proceso de reserva:
+            </label>
+            <select 
+              id="swal-reservation" 
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            >
+              <option value="">Seleccione una calificación</option>
+              <option value="1">1 - Muy malo</option>
+              <option value="2">2 - Malo</option>
+              <option value="3">3 - Regular</option>
+              <option value="4">4 - Bueno</option>
+              <option value="5">5 - Excelente</option>
+            </select>
+          </div>
+          
+          <div>
+            <label for="swal-suggestion" class="block text-sm font-medium text-gray-700 mb-1">
+              Sugerencias o comentarios adicionales (opcional):
+            </label>
+            <textarea 
+              id="swal-suggestion" 
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm" 
+              rows="3" 
+              placeholder="Comparte tu experiencia, sugerencias o comentarios para mejorar..."
+              maxlength="500"
+            ></textarea>
+            <div class="text-right text-xs text-gray-500 mt-1">
+              <span id="swal-char-count">0</span>/500 caracteres
+            </div>
+          </div>
+          
+          <div class="bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded-r">
+            <p class="text-xs text-yellow-700">
+              <strong>Nota:</strong> Tu calificación nos ayuda a mejorar nuestros servicios. Todas las calificaciones son obligatorias.
+            </p>
+          </div>
+        </div>
+      `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Enviar calificación',
+        cancelButtonText: 'Cancelar',
+        focusConfirm: false,
+        width: '500px',
+        preConfirm: () => {
+          const space = document.getElementById('swal-space').value;
+          const staff = document.getElementById('swal-staff').value;
+          const reservation = document.getElementById('swal-reservation').value;
+          const suggestion = document.getElementById('swal-suggestion').value;
+
+          if (!space || !staff || !reservation) {
+            Swal.showValidationMessage(
+              'Por favor completa las tres calificaciones (1-5).'
+            );
+            return false;
+          }
+
+          if (suggestion && suggestion.length > 500) {
+            Swal.showValidationMessage(
+              'Los comentarios no pueden exceder los 500 caracteres.'
+            );
+            return false;
+          }
+
+          return {
+            spaceConditionRating: parseInt(space, 10),
+            staffTreatmentRating: parseInt(staff, 10),
+            reservationProcessRating: parseInt(reservation, 10),
+            suggestion: suggestion || '',
+          };
+        },
+        didOpen: () => {
+          // Contador de caracteres para sugerencias
+          const textarea = document.getElementById('swal-suggestion');
+          const charCount = document.getElementById('swal-char-count');
+
+          if (textarea && charCount) {
+            textarea.addEventListener('input', () => {
+              const length = textarea.value.length;
+              charCount.textContent = length;
+
+              // Cambiar color según la longitud
+              if (length > 450) {
+                charCount.className = 'text-right text-xs text-red-500 mt-1';
+              } else if (length > 400) {
+                charCount.className = 'text-right text-xs text-orange-500 mt-1';
+              } else {
+                charCount.className = 'text-right text-xs text-gray-500 mt-1';
+              }
+            });
+          }
+        },
+      });
+
+      if (!formValues) return;
+
+      // Enviar al backend
+      Swal.fire({
+        title: 'Enviando calificación...',
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        willOpen: () => Swal.showLoading(),
+      });
+
+      try {
+        await axiosInstance.post(`/events/${first.id}/rate`, formValues);
+
+        Swal.close();
+
+        // Mostrar confirmación de éxito
+        await Swal.fire({
+          title: '¡Gracias!',
+          html: `
+          <div class="text-center">
+            <div class="mb-4">
+              <svg class="mx-auto h-12 w-12 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <p class="text-gray-700 mb-2">Tu calificación ha sido enviada exitosamente.</p>
+            <p class="text-sm text-gray-600">Tus comentarios nos ayudan a mejorar nuestros servicios.</p>
+          </div>
+        `,
+          icon: 'success',
+          confirmButtonColor: '#3085d6',
+          confirmButtonText: 'Aceptar',
+        });
+
+        // Recargar eventos para actualizar las calificaciones
+        await refreshEvents();
+      } catch (err) {
+        Swal.close();
+        console.error('Error enviando calificación:', err);
+
+        // Mostrar error específico
+        const errorMessage = err.response?.data?.message || 'Error desconocido';
+        await Swal.fire({
+          title: 'Error',
+          html: `
+          <div class="text-left">
+            <p class="text-gray-700 mb-3">No se pudo enviar tu calificación. Por favor, intenta nuevamente.</p>
+            <div class="bg-red-50 border-l-4 border-red-400 p-3 rounded-r">
+              <p class="text-sm text-red-700">Detalles: ${errorMessage}</p>
+            </div>
+          </div>
+        `,
+          icon: 'error',
+          confirmButtonColor: '#d33',
+          confirmButtonText: 'Entendido',
+        });
+      }
+    } catch (err) {
+      console.error('Error en checkUnratedAndPrompt:', err);
+    }
   };
 
   // Función para mostrar el modal de fechas unificado
@@ -834,15 +1091,15 @@ const UserReservationsPage = () => {
                             event.status === 'approved'
                               ? 'bg-green-100 text-green-800'
                               : event.status === 'denied'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-yellow-100 text-yellow-800'
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-yellow-100 text-yellow-800'
                           }`}
                         >
                           {event.status === 'approved'
                             ? 'Aprobado'
                             : event.status === 'denied'
-                            ? 'Rechazado'
-                            : 'Pendiente'}
+                              ? 'Rechazado'
+                              : 'Pendiente'}
                         </span>
                       </div>
                     </td>
@@ -952,15 +1209,15 @@ const UserReservationsPage = () => {
                         event.status === 'approved'
                           ? 'bg-green-100 text-green-800'
                           : event.status === 'denied'
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-yellow-100 text-yellow-800'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-yellow-100 text-yellow-800'
                       }`}
                     >
                       {event.status === 'approved'
                         ? 'Aprobado'
                         : event.status === 'denied'
-                        ? 'Denegado'
-                        : 'Pendiente'}
+                          ? 'Denegado'
+                          : 'Pendiente'}
                     </span>
 
                     {/* Botón de opciones */}

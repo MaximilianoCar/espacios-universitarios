@@ -25,6 +25,10 @@ import {
   FaDollarSign,
   FaPlus,
   FaTrash,
+  FaBuilding,
+  FaIdCard,
+  FaUniversity,
+  FaUserTie,
 } from 'react-icons/fa';
 import { IoInformationCircleOutline } from 'react-icons/io5';
 import Modal from '../components/Modal';
@@ -51,6 +55,8 @@ const AdminReservationsPage = () => {
   const [selectedEventUser, setSelectedEventUser] = useState({
     name: '',
     email: '',
+    companyName: null,
+    companyRif: null,
   });
 
   // Estados de paginación
@@ -71,6 +77,7 @@ const AdminReservationsPage = () => {
   const [selectedDescription, setSelectedDescription] = useState('');
   const [selectedSpecialRequirements, setSelectedSpecialRequirements] =
     useState('');
+  const [selectedCapacity, setSelectedCapacity] = useState(null);
   // para el modal de imagen
   const [selectedImage, setSelectedImage] = useState(null);
   const [showImageModal, setShowImageModal] = useState(false);
@@ -486,6 +493,8 @@ const AdminReservationsPage = () => {
     setSelectedEventUser({
       name: user?.name || '',
       email: user?.email || '',
+      companyName: user?.companyName || null,
+      companyRif: user?.companyRif || null,
     });
     setShowContactModal(true);
   };
@@ -493,11 +502,22 @@ const AdminReservationsPage = () => {
   const handleCloseContactModal = () => {
     setShowContactModal(false);
     setSelectedEventContact('');
+    setSelectedEventUser({
+      name: '',
+      email: '',
+      companyName: null,
+      companyRif: null,
+    });
   };
 
-  const handleShowDescription = (description, specialRequirements) => {
+  const handleShowDescription = (
+    description,
+    specialRequirements,
+    capacity
+  ) => {
     setSelectedDescription(description);
     setSelectedSpecialRequirements(specialRequirements);
+    setSelectedCapacity(capacity);
     setShowDescriptionModal(true);
   };
 
@@ -505,6 +525,7 @@ const AdminReservationsPage = () => {
     setShowDescriptionModal(false);
     setSelectedDescription('');
     setSelectedSpecialRequirements('');
+    setSelectedCapacity(null);
   };
 
   // Manejador de clic en la imagen para mostrar el modal
@@ -518,6 +539,11 @@ const AdminReservationsPage = () => {
     if (newPage >= 1 && newPage <= totalPages) {
       setCurrentPage(newPage);
     }
+  };
+
+  // Función para determinar si un usuario es externo
+  const isExternalUser = user => {
+    return user?.companyName !== null && user?.companyName !== undefined;
   };
 
   const ActionMenu = ({ event, index }) => {
@@ -969,8 +995,8 @@ const AdminReservationsPage = () => {
                 <th className="py-2 px-4 border-b text-left">Nombre</th>
                 <th className="py-2 px-4 border-b text-left">Espacio</th>
                 <th className="py-2 px-4 border-b text-center">Imagen</th>
+                <th className="py-2 px-4 border-b text-center">Tipo Usuario</th>
                 <th className="py-2 px-4 border-b text-center">Descripción</th>
-                <th className="py-2 px-4 border-b text-left">Capacidad</th>
                 <th className="py-2 px-4 border-b text-left">Costo</th>
                 <th className="py-2 px-4 border-b text-center">Contacto</th>
                 <th className="py-2 px-4 border-b text-center">Fechas</th>
@@ -981,117 +1007,139 @@ const AdminReservationsPage = () => {
             </thead>
             <tbody>
               {events.length > 0 ? (
-                events.map((event, index) => (
-                  <tr
-                    key={event.id}
-                    className="hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="py-2 px-4 border-b font-semibold text-gray-800">
-                      {event.name}
-                    </td>
-                    <td className="py-2 px-4 border-b">
-                      {event.room?.name || 'N/A'}
-                    </td>
+                events.map((event, index) => {
+                  const externalUser = isExternalUser(event.user);
+                  return (
+                    <tr
+                      key={event.id}
+                      className="hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="py-2 px-4 border-b font-semibold text-gray-800">
+                        {event.name}
+                      </td>
+                      <td className="py-2 px-4 border-b">
+                        {event.room?.name || 'N/A'}
+                      </td>
 
-                    {/* Imagen */}
-                    <td className="py-2 px-4 border-b text-center">
-                      {event.imagePath ? (
-                        <img
-                          src={getMediaUrl(event.imagePath)}
-                          alt={event.name}
-                          className="w-12 h-12 object-cover rounded cursor-pointer hover:opacity-75 transition-opacity duration-200 inline-block"
-                          onClick={() => handleImageClick(event.imagePath)}
-                        />
-                      ) : (
-                        <span className="text-gray-500 text-xs">N/I</span>
-                      )}
-                    </td>
+                      {/* Imagen */}
+                      <td className="py-2 px-4 border-b text-center">
+                        {event.imagePath ? (
+                          <img
+                            src={getMediaUrl(event.imagePath)}
+                            alt={event.name}
+                            className="w-12 h-12 object-cover rounded cursor-pointer hover:opacity-75 transition-opacity duration-200 inline-block"
+                            onClick={() => handleImageClick(event.imagePath)}
+                          />
+                        ) : (
+                          <span className="text-gray-500 text-xs">N/I</span>
+                        )}
+                      </td>
 
-                    {/* Descripción */}
-                    <td className="py-2 px-4 border-b text-center">
-                      <button
-                        onClick={() =>
-                          handleShowDescription(
-                            event.description,
-                            event.specialRequirements
-                          )
-                        }
-                        className="text-blue-600 hover:text-blue-800 transition-colors"
-                        title="Ver descripción"
-                      >
-                        <IoInformationCircleOutline size={22} />
-                      </button>
-                    </td>
-
-                    <td className="py-2 px-4 border-b text-center">
-                      {event.capacity}
-                    </td>
-                    <td className="py-2 px-4 border-b text-center">
-                      {event.cost}
-                    </td>
-
-                    {/* Contacto */}
-                    <td className="py-2 px-4 border-b text-center">
-                      <button
-                        onClick={() =>
-                          handleShowContact(event.contact, event.user)
-                        }
-                        className="text-blue-600 hover:text-blue-800 transition-colors"
-                        title="Ver contacto"
-                      >
-                        <FaRegEnvelope size={18} />
-                      </button>
-                    </td>
-
-                    {/* FECHAS UNIFICADAS */}
-                    <td className="py-2 px-4 border-b text-center">
-                      <button
-                        onClick={() => handleShowDates(event)}
-                        className="text-blue-600 hover:text-blue-800 transition-colors"
-                        title="Ver fechas"
-                      >
-                        <FaRegCalendarAlt size={18} />
-                      </button>
-                    </td>
-
-                    {/* Estado */}
-                    <td className="py-2 px-4 border-b text-center">
-                      <div className="flex justify-center items-center h-full">
+                      {/* Tipo de Usuario */}
+                      <td className="py-2 px-4 border-b text-center">
                         <span
-                          className={`px-2 py-1 rounded text-xs font-semibold ${
-                            event.status === 'approved'
-                              ? 'bg-green-100 text-green-800'
-                              : event.status === 'denied'
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-yellow-100 text-yellow-800'
+                          className={`px-2 py-1 rounded text-xs text-center font-semibold flex items-center justify-center ${
+                            externalUser ? 'text-purple-800' : 'text-blue-800'
                           }`}
                         >
-                          {event.status === 'approved'
-                            ? 'Aprobado'
-                            : event.status === 'denied'
-                              ? 'Rechazado'
-                              : 'Pendiente'}
+                          {externalUser ? (
+                            <span className="flex items-center">
+                              <FaBuilding className="mr-1" size={10} />
+                              Externo
+                            </span>
+                          ) : (
+                            <span className="flex items-center">
+                              <FaUniversity className="mr-1" size={10} />
+                              Interno
+                            </span>
+                          )}
                         </span>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Visualizar */}
-                    <td className="py-2 px-4 border-b text-center">
-                      <div className="flex justify-center items-center h-full">
-                        <Link
-                          to={`/events/${event.id}`}
-                          className="flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs transition-colors w-20"
+                      {/* Descripción */}
+                      <td className="py-2 px-4 border-b text-center">
+                        <button
+                          onClick={() =>
+                            handleShowDescription(
+                              event.description,
+                              event.specialRequirements,
+                              event.capacity
+                            )
+                          }
+                          className="text-blue-600 hover:text-blue-800 transition-colors"
+                          title="Ver descripción y capacidad"
                         >
-                          <FaExternalLinkAlt className="mr-1" size={12} />
-                          Ver
-                        </Link>
-                      </div>
-                    </td>
-                    <td className="py-2 px-4 border-b text-center">
-                      <ActionMenu event={event} index={index} />
-                    </td>
-                  </tr>
-                ))
+                          <IoInformationCircleOutline size={22} />
+                        </button>
+                      </td>
+
+                      <td className="py-2 px-4 border-b text-center">
+                        {event.cost}
+                      </td>
+
+                      {/* Contacto */}
+                      <td className="py-2 px-4 border-b text-center">
+                        <button
+                          onClick={() =>
+                            handleShowContact(event.contact, event.user)
+                          }
+                          className="text-blue-600 hover:text-blue-800 transition-colors"
+                          title="Ver contacto"
+                        >
+                          <FaRegEnvelope size={18} />
+                        </button>
+                      </td>
+
+                      {/* FECHAS UNIFICADAS */}
+                      <td className="py-2 px-4 border-b text-center">
+                        <button
+                          onClick={() => handleShowDates(event)}
+                          className="text-blue-600 hover:text-blue-800 transition-colors"
+                          title="Ver fechas"
+                        >
+                          <FaRegCalendarAlt size={18} />
+                        </button>
+                      </td>
+
+                      {/* Estado */}
+                      <td className="py-2 px-4 border-b text-center">
+                        <div className="flex justify-center items-center h-full">
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-semibold ${
+                              event.status === 'approved'
+                                ? 'bg-green-100 text-green-800'
+                                : event.status === 'denied'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-yellow-100 text-yellow-800'
+                            }`}
+                          >
+                            {event.status === 'approved'
+                              ? 'Aprobado'
+                              : event.status === 'denied'
+                                ? 'Rechazado'
+                                : 'Pendiente'}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Visualizar */}
+                      <td className="py-2 px-4 border-b text-center">
+                        <div className="flex justify-center items-center h-full">
+                          <Link
+                            to={`/events/${event.id}`}
+                            className="flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs transition-colors w-20"
+                          >
+                            <FaExternalLinkAlt className="mr-1" size={12} />
+                            Ver
+                          </Link>
+                        </div>
+                      </td>
+                      <td className="py-2 px-4 border-b text-center">
+                        <ActionMenu event={event} index={index} />
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan="11" className="py-8 text-center text-gray-500">
@@ -1144,106 +1192,133 @@ const AdminReservationsPage = () => {
         {/* Vista Mobile - Cards */}
         <div className="lg:hidden space-y-4">
           {events.length > 0 ? (
-            events.map((event, index) => (
-              <div
-                key={event.id}
-                className="bg-white rounded-lg shadow-md border border-gray-200 p-4 relative"
-              >
-                {/* Header mejorado */}
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex-1 pr-2">
-                    <h3 className="font-bold text-lg text-gray-800 mb-1">
-                      {event.name}
-                    </h3>
-                    <div className="flex items-center text-sm text-gray-600 mb-1">
-                      <FaMapPin className="mr-2 text-blue-500" size={14} />
-                      <span>{event.room?.name || 'N/A'}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-end space-y-2">
-                    <span
-                      className={`px-3 py-1 text-xs font-semibold rounded-full ${
-                        event.status === 'approved'
-                          ? 'bg-green-100 text-green-800'
-                          : event.status === 'denied'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-yellow-100 text-yellow-800'
-                      }`}
-                    >
-                      {event.status === 'approved'
-                        ? 'Aprobado'
-                        : event.status === 'denied'
-                          ? 'Denegado'
-                          : 'Pendiente'}
-                    </span>
-
-                    {/* Botón de opciones */}
-                    <div className="relative">
-                      <ActionMenu event={event} index={index} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Imagen */}
-                {event.imagePath && (
-                  <div className="mb-3">
-                    <img
-                      src={getMediaUrl(event.imagePath)}
-                      alt={event.name}
-                      className="w-full h-40 object-cover rounded cursor-pointer"
-                      onClick={() => handleImageClick(event.imagePath)}
-                    />
-                  </div>
-                )}
-
-                {/* Información básica compacta */}
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="flex items-center text-sm text-gray-600">
-                    <FaUsers className="mr-2 text-green-500" size={14} />
-                    <span>Capacidad: {event.capacity}</span>
-                  </div>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <FaDollarSign className="mr-2 text-yellow-500" size={14} />
-                    <span>Costo: {event.cost}</span>
-                  </div>
-                </div>
-
-                {/* Botones de acción principales */}
-                <div className="grid grid-cols-3 gap-2 mb-3">
-                  <button
-                    onClick={() => handleShowDescription(event.description)}
-                    className="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
-                  >
-                    <FaInfoCircle className="mb-1" size={14} />
-                    <span>Descripción</span>
-                  </button>
-                  <button
-                    onClick={() => handleShowContact(event.contact, event.user)}
-                    className="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
-                  >
-                    <FaRegEnvelope className="mb-1" size={14} />
-                    <span>Contacto</span>
-                  </button>
-                  <button
-                    onClick={() => handleShowDates(event)}
-                    className="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
-                  >
-                    <FaRegCalendarAlt className="mb-1" size={14} />
-                    <span>Fechas</span>
-                  </button>
-                </div>
-
-                {/* Botón de previsualización */}
-                <Link
-                  to={`/events/${event.id}`}
-                  className="w-full flex items-center justify-center bg-green-500 hover:bg-green-600 text-white py-2 px-3 rounded text-sm transition-colors mb-2"
+            events.map((event, index) => {
+              const externalUser = isExternalUser(event.user);
+              return (
+                <div
+                  key={event.id}
+                  className="bg-white rounded-lg shadow-md border border-gray-200 p-4 relative"
                 >
-                  <FaEye className="mr-2" size={14} />
-                  Ver Evento
-                </Link>
-              </div>
-            ))
+                  {/* Header mejorado */}
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex-1 pr-2">
+                      <h3 className="font-bold text-lg text-gray-800 mb-1">
+                        {event.name}
+                      </h3>
+                      <div className="flex items-center text-sm text-gray-600 mb-1">
+                        <FaMapPin className="mr-2 text-blue-500" size={14} />
+                        <span>{event.room?.name || 'N/A'}</span>
+                      </div>
+                      <span
+                        className={`px-2 py-1 rounded text-xs font-semibold ${
+                          externalUser ? 'ext-purple-800' : 'text-blue-800'
+                        }`}
+                      >
+                        {externalUser ? (
+                          <span className="flex items-center">
+                            <FaBuilding className="mr-1" size={10} />
+                            Externo
+                          </span>
+                        ) : (
+                          <span className="flex items-center">
+                            <FaUniversity className="mr-1" size={10} />
+                            Interno
+                          </span>
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-col items-end space-y-2">
+                      <span
+                        className={`px-3 py-1 text-xs font-semibold rounded-full ${
+                          event.status === 'approved'
+                            ? 'bg-green-100 text-green-800'
+                            : event.status === 'denied'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                        }`}
+                      >
+                        {event.status === 'approved'
+                          ? 'Aprobado'
+                          : event.status === 'denied'
+                            ? 'Denegado'
+                            : 'Pendiente'}
+                      </span>
+
+                      {/* Botón de opciones */}
+                      <div className="relative">
+                        <ActionMenu event={event} index={index} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Imagen */}
+                  {event.imagePath && (
+                    <div className="mb-3">
+                      <img
+                        src={getMediaUrl(event.imagePath)}
+                        alt={event.name}
+                        className="w-full h-40 object-cover rounded cursor-pointer"
+                        onClick={() => handleImageClick(event.imagePath)}
+                      />
+                    </div>
+                  )}
+
+                  {/* Información básica compacta */}
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="flex items-center text-sm text-gray-600">
+                      <FaDollarSign
+                        className="mr-2 text-yellow-500"
+                        size={14}
+                      />
+                      <span>Costo: {event.cost}</span>
+                    </div>
+                  </div>
+
+                  {/* Botones de acción principales */}
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <button
+                      onClick={() =>
+                        handleShowDescription(
+                          event.description,
+                          event.specialRequirements,
+                          event.capacity
+                        )
+                      }
+                      className="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
+                    >
+                      <FaInfoCircle className="mb-1" size={14} />
+                      <span>Descripción</span>
+                    </button>
+                    <button
+                      onClick={() =>
+                        handleShowContact(event.contact, event.user)
+                      }
+                      className="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
+                    >
+                      <FaRegEnvelope className="mb-1" size={14} />
+                      <span>Contacto</span>
+                    </button>
+                    <button
+                      onClick={() => handleShowDates(event)}
+                      className="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
+                    >
+                      <FaRegCalendarAlt className="mb-1" size={14} />
+                      <span>Fechas</span>
+                    </button>
+                  </div>
+
+                  {/* Botón de previsualización */}
+                  <Link
+                    to={`/events/${event.id}`}
+                    className="w-full flex items-center justify-center bg-green-500 hover:bg-green-600 text-white py-2 px-3 rounded text-sm transition-colors mb-2"
+                  >
+                    <FaEye className="mr-2" size={14} />
+                    Ver Evento
+                  </Link>
+                </div>
+              );
+            })
           ) : (
             <div className="text-center py-8 text-gray-500">
               {currentSearch
@@ -1290,9 +1365,33 @@ const AdminReservationsPage = () => {
           </div>
           <div className="p-5">
             <div className="bg-blue-50 rounded-lg p-4 mb-4 space-y-3">
+              {/* Tipo de Usuario */}
+              <div className="mb-3">
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                    selectedEventUser.companyName
+                      ? 'text-purple-800'
+                      : 'text-blue-800'
+                  }`}
+                >
+                  {selectedEventUser.companyName ? (
+                    <span className="flex items-center">
+                      <FaBuilding className="mr-2" size={12} />
+                      Usuario Externo - Empresa
+                    </span>
+                  ) : (
+                    <span className="flex items-center">
+                      <FaUniversity className="mr-2" size={12} />
+                      Usuario Interno - Comunidad Universitaria
+                    </span>
+                  )}
+                </span>
+              </div>
+
               {/* Información del Solicitante */}
               <div className="border-b border-blue-200 pb-3">
-                <h3 className="text-sm font-semibold text-blue-800 mb-2">
+                <h3 className="text-sm font-semibold text-blue-800 mb-2 flex items-center">
+                  <FaUserTie className="mr-2" size={14} />
                   Información del Solicitante
                 </h3>
                 <div className="space-y-2">
@@ -1314,6 +1413,37 @@ const AdminReservationsPage = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Información de Empresa (solo para usuarios externos) */}
+              {selectedEventUser.companyName && (
+                <div className="border-b border-blue-200 pb-3">
+                  <h3 className="text-sm font-semibold text-blue-800 mb-2 flex items-center">
+                    <FaBuilding className="mr-2" size={14} />
+                    Información de la Empresa
+                  </h3>
+                  <div className="space-y-2">
+                    <div>
+                      <span className="text-xs font-medium text-blue-600">
+                        Nombre de la Empresa:
+                      </span>
+                      <p className="text-sm text-gray-700">
+                        {selectedEventUser.companyName}
+                      </p>
+                    </div>
+                    {selectedEventUser.companyRif && (
+                      <div>
+                        <span className="text-xs font-medium text-blue-600">
+                          <FaIdCard className="inline mr-1" size={12} />
+                          RIF de la Empresa:
+                        </span>
+                        <p className="text-sm text-gray-700">
+                          {selectedEventUser.companyRif}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Información de Contacto Adicional */}
               <div>
@@ -1433,15 +1563,29 @@ const AdminReservationsPage = () => {
             </h2>
           </div>
           <div className="flex-1 p-5 overflow-y-auto">
-            {/* Sección de Descripción */}
-            <div className="bg-blue-50 rounded-lg p-4 mb-4 space-y-3">
-              <div className="border-b border-blue-200 pb-3">
+            <div className="bg-blue-50 rounded-lg p-4 mb-4 space-y-4">
+              {/* Capacidad */}
+              <div className="bg-white rounded-md p-3 border border-blue-100">
+                <h3 className="text-sm font-semibold text-blue-800 mb-2 flex items-center">
+                  <FaUsers className="mr-2 text-green-500" size={14} />
+                  Capacidad del Evento
+                </h3>
+                <div className="text-center py-2">
+                  <span className="text-2xl font-bold text-green-600">
+                    {selectedCapacity || 'N/A'}
+                  </span>
+                  <p className="text-xs text-gray-500 mt-1">personas</p>
+                </div>
+              </div>
+
+              {/* Sección de Descripción */}
+              <div className="border-t border-blue-200 pt-4">
                 <h3 className="text-sm font-semibold text-blue-800 mb-2">
                   Descripción del Evento
                 </h3>
                 <div className="bg-white rounded-md p-3 border border-blue-100">
                   {selectedDescription ? (
-                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line truncate break-all">
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
                       {selectedDescription}
                     </p>
                   ) : (
@@ -1453,7 +1597,7 @@ const AdminReservationsPage = () => {
               </div>
 
               {/* Sección de Requerimientos Especiales */}
-              <div>
+              <div className="border-t border-blue-200 pt-4">
                 <h3 className="text-sm font-semibold text-blue-800 mb-2">
                   Requerimientos Especiales
                 </h3>
@@ -1465,7 +1609,7 @@ const AdminReservationsPage = () => {
                           className="text-green-500 mt-1 mr-2 flex-shrink-0"
                           size={14}
                         />
-                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line truncate break-all">
+                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
                           {selectedSpecialRequirements}
                         </p>
                       </div>

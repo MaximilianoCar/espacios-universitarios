@@ -19,6 +19,106 @@ const normalizeFilePath = filePath => {
   return p;
 };
 
+// Enviar calificación de evento (por solicitante)
+exports.submitRating = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    const eventId = req.params.eventId;
+    const {
+      spaceConditionRating,
+      staffTreatmentRating,
+      reservationProcessRating,
+      suggestion,
+    } = req.body;
+
+    const event = await Event.findByPk(eventId);
+    if (!event) {
+      return res.status(404).json({ message: 'Evento no encontrado.' });
+    }
+
+    // Solo el creador o admin puede calificar este evento
+    if (userRole !== 'admin' && event.userId !== userId) {
+      return res
+        .status(403)
+        .json({ message: 'No autorizado para calificar este evento.' });
+    }
+
+    // Debe ser evento aprobado y ya ocurrido
+    if (event.status !== Event.STATUS.APPROVED) {
+      return res
+        .status(400)
+        .json({ message: 'Solo se pueden calificar eventos aprobados.' });
+    }
+
+    const now = new Date();
+    if (new Date(event.eventTo) > now) {
+      return res.status(400).json({ message: 'El evento aún no ha ocurrido.' });
+    }
+
+    // Validar rangos
+    const min = Event.RATING.MIN;
+    const max = Event.RATING.MAX;
+
+    const toValidate = {
+      spaceConditionRating,
+      staffTreatmentRating,
+      reservationProcessRating,
+    };
+
+    for (const [key, val] of Object.entries(toValidate)) {
+      if (val != null) {
+        const num = parseInt(val, 10);
+        if (Number.isNaN(num) || num < min || num > max) {
+          return res
+            .status(400)
+            .json({ message: `Valor inválido para ${key}` });
+        }
+      }
+    }
+
+    // Actualizar campos
+    event.spaceConditionRating = spaceConditionRating;
+    event.staffTreatmentRating = staffTreatmentRating;
+    event.reservationProcessRating = reservationProcessRating;
+    if (suggestion) {
+      event.comments = event.comments
+        ? `${event.comments}\n\nSugerencia de calificación: ${suggestion}`
+        : `Sugerencia de calificación: ${suggestion}`;
+    }
+
+    await event.save();
+
+    // Notificar a coordinadores del espacio
+    try {
+      const coordinators = await getCoordinatorsByRoom(event.roomId);
+      const roomName = await getRoomName(event.roomId);
+      const user = await User.findByPk(userId);
+
+      if (coordinators && coordinators.length > 0) {
+        const coordEmails = coordinators.map(c => c.email).filter(Boolean);
+        await emailService.notifyEventRating(
+          coordEmails,
+          user ? user.name : 'Usuario',
+          event.name,
+          roomName,
+          spaceConditionRating,
+          staffTreatmentRating,
+          reservationProcessRating,
+          suggestion
+        );
+      }
+    } catch (emailErr) {
+      console.error('Error enviando email de calificación:', emailErr);
+    }
+
+    return res.status(200).json({ message: 'Calificación guardada', event });
+  } catch (error) {
+    console.error('Error en submitRating:', error);
+    return res.status(500).json({ message: 'Error interno del servidor' });
+  }
+};
+
 // Eliminar un archivo seguro
 const safeUnlink = async (relativePath, allowedSubPath) => {
   if (!relativePath) return;
@@ -386,7 +486,7 @@ exports.getAllEvents = async (req, res) => {
       {
         model: User,
         as: 'user',
-        attributes: ['name', 'email'],
+        attributes: ['name', 'email', 'companyName', 'companyRif'],
       },
     ];
 
