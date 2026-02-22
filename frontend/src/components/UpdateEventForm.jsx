@@ -3,55 +3,84 @@ import axiosInstance from '../axiosConfig';
 
 const UpdateEventForm = ({ event, onEventUpdated }) => {
   const [formData, setFormData] = useState({
-    name: event.name,
-    description: event.description,
-    capacity: event.capacity,
-    cost: event.cost,
-    contact: event.contact,
-    eventFrom: event.eventFrom,
-    eventTo: event.eventTo,
-    roomId: event.roomId,
-    status: event.status,
+    name: event.name || '',
+    description: event.description || '',
+    capacity: event.capacity || '',
+    cost: event.cost || '',
+    contact: event.contact || '',
+    eventFrom: event.eventFrom || '',
+    eventTo: event.eventTo || '',
+    roomId: event.roomId || '',
+    status: event.status || 'pending',
   });
+
+  const [schedules, setSchedules] = useState(
+    Array.isArray(event.schedules) ? event.schedules : []
+  );
+  const [isPeriodic, setIsPeriodic] = useState(
+    Array.isArray(event.schedules) && event.schedules.length > 0
+  );
   const [error, setError] = useState('');
   const [rooms, setRooms] = useState([]);
 
-  // Fetch rooms to populate the dropdown
   useEffect(() => {
+    let mounted = true;
     axiosInstance
       .get('/rooms')
       .then(response => {
-        setRooms(response.data);
+        if (mounted) setRooms(response.data);
       })
-      .catch(error => {
-        console.error('Error fetching rooms:', error);
+      .catch(err => {
+        console.error('Error fetching rooms:', err);
       });
+    return () => (mounted = false);
   }, []);
+
+  const addSchedule = () => {
+    setSchedules(prev => [
+      ...prev,
+      { eventFrom: '', eventTo: '', reservationFrom: '', reservationTo: '' },
+    ]);
+    setIsPeriodic(true);
+  };
+
+  const updateSchedule = (idx, field, value) => {
+    setSchedules(prev => {
+      const copy = [...prev];
+      copy[idx] = { ...copy[idx], [field]: value };
+      return copy;
+    });
+  };
+
+  const removeSchedule = idx => {
+    setSchedules(prev => prev.filter((_, i) => i !== idx));
+  };
 
   const handleChange = e => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = e => {
     e.preventDefault();
 
     const data = new FormData();
-    // Agregar los campos del formulario al FormData
     Object.keys(formData).forEach(key => {
       data.append(key, formData[key]);
     });
+    if (isPeriodic && schedules && schedules.length > 0) {
+      data.append('schedules', JSON.stringify(schedules));
+    }
 
     axiosInstance
-      .put(`/events/${event.id}`, formData)
+      .put(`/events/${event.id}`, data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
       .then(response => {
-        // Handle success
-        console.log('Event updated:', response.data);
         onEventUpdated(response.data);
       })
-      .catch(error => {
-        // Handle error
-        console.error('Error updating event:', error);
+      .catch(err => {
+        console.error('Error updating event:', err);
         setError(
           'Error al actualizar el evento. Por favor, intente nuevamente.'
         );
@@ -59,7 +88,7 @@ const UpdateEventForm = ({ event, onEventUpdated }) => {
   };
 
   return (
-    <div className="my-4">
+    <div className="max-w-2xl mx-auto my-4 bg-white rounded-lg shadow p-6">
       <h2 className="text-2xl font-bold mb-4">Actualizar Evento</h2>
       {error && <p className="text-red-500 mb-4">{error}</p>}
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -144,6 +173,83 @@ const UpdateEventForm = ({ event, onEventUpdated }) => {
             onChange={handleChange}
             required
           />
+        </div>
+        {/* Periodicidad / Schedules (editable) */}
+        <div>
+          <label className="block">Evento con múltiples horarios</label>
+          <div className="flex items-center gap-3 mb-3">
+            <input
+              type="checkbox"
+              checked={isPeriodic}
+              onChange={() => setIsPeriodic(prev => !prev)}
+            />
+            <span className="text-sm text-gray-700">
+              Habilitar múltiples horarios
+            </span>
+          </div>
+
+          {isPeriodic && (
+            <div className="space-y-2">
+              {schedules.map((s, idx) => (
+                <div key={idx} className="p-2 border rounded">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <input
+                      type="datetime-local"
+                      value={s.eventFrom || ''}
+                      onChange={e =>
+                        updateSchedule(idx, 'eventFrom', e.target.value)
+                      }
+                      className="w-full border p-1"
+                    />
+                    <input
+                      type="datetime-local"
+                      value={s.eventTo || ''}
+                      onChange={e =>
+                        updateSchedule(idx, 'eventTo', e.target.value)
+                      }
+                      className="w-full border p-1"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                    <input
+                      type="datetime-local"
+                      value={s.reservationFrom || ''}
+                      onChange={e =>
+                        updateSchedule(idx, 'reservationFrom', e.target.value)
+                      }
+                      className="w-full border p-1"
+                    />
+                    <input
+                      type="datetime-local"
+                      value={s.reservationTo || ''}
+                      onChange={e =>
+                        updateSchedule(idx, 'reservationTo', e.target.value)
+                      }
+                      className="w-full border p-1"
+                    />
+                  </div>
+                  <div className="flex justify-end mt-2">
+                    <button
+                      type="button"
+                      onClick={() => removeSchedule(idx)}
+                      className="text-red-600 text-sm"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <div>
+                <button
+                  type="button"
+                  onClick={addSchedule}
+                  className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
+                >
+                  Agregar horario
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         {/* Room ID */}
         <div>

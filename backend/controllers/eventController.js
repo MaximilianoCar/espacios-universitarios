@@ -1,14 +1,17 @@
 const {
   Event,
+  EventSchedule,
   User,
   CoordinatorDependencies,
   Room,
   Dependency,
+  sequelize,
 } = require('../models');
 const { Op } = require('sequelize');
 const upload = require('../middlewares/eventFileUploadMiddleware');
 const path = require('path');
 const emailService = require('../services/emailService');
+const googleCalendarService = require('../services/googleCalendarService');
 
 // Normalizar rutas para usar slashes y eliminar prefijos como './' (compatibilidad Windows)
 const normalizeFilePath = filePath => {
@@ -229,12 +232,201 @@ exports.createEvent = async (req, res) => {
       userId: userId,
     };
 
+    // Normalizar campos que deben ser strings (evitar que multer/cliente envíe arrays u objetos)
+    if (Array.isArray(eventData.paymentMethod)) {
+      eventData.paymentMethod = eventData.paymentMethod[0];
+    } else if (
+      eventData.paymentMethod &&
+      typeof eventData.paymentMethod === 'object'
+    ) {
+      try {
+        eventData.paymentMethod = JSON.stringify(eventData.paymentMethod);
+      } catch (e) {
+        eventData.paymentMethod = String(eventData.paymentMethod);
+      }
+    }
+
+    // Sanitizar fechas: convertir cadenas inválidas a null
+    const parseDateOrNull = val => {
+      if (!val && val !== 0) return null;
+      const d = new Date(val);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+
+    // Intentar parsear schedules enviados en el body (puede venir como JSON string)
+    let schedulesInput = req.body.schedules;
+    if (typeof schedulesInput === 'string') {
+      try {
+        schedulesInput = JSON.parse(schedulesInput);
+      } catch (parseErr) {
+        schedulesInput = null;
+      }
+    }
+
+    // Convertir fechas principales a Date o null
+    eventData.eventFrom = parseDateOrNull(req.body.eventFrom);
+    eventData.eventTo = parseDateOrNull(req.body.eventTo);
+    eventData.reservationFrom = parseDateOrNull(req.body.reservationFrom);
+    eventData.reservationTo = parseDateOrNull(req.body.reservationTo);
+
+    // Si vienen schedules, intentar rellenar event/reservation bounds para cumplir restricciones NOT NULL en BD
+    if (
+      schedulesInput &&
+      Array.isArray(schedulesInput) &&
+      schedulesInput.length > 0
+    ) {
+      const parsed = schedulesInput.map(s => ({
+        eventFrom: parseDateOrNull(s.eventFrom),
+        eventTo: parseDateOrNull(s.eventTo),
+        reservationFrom: parseDateOrNull(s.reservationFrom),
+        reservationTo: parseDateOrNull(s.reservationTo),
+      }));
+
+      // Obtén mínimos y máximos ignorando nulls
+      const eventFromDates = parsed.map(p => p.eventFrom).filter(d => d);
+      const eventToDates = parsed.map(p => p.eventTo).filter(d => d);
+      const reservationFromDates = parsed
+        .map(p => p.reservationFrom)
+        .filter(d => d);
+      const reservationToDates = parsed
+        .map(p => p.reservationTo)
+        .filter(d => d);
+
+      if (!eventData.eventFrom && eventFromDates.length > 0) {
+        eventData.eventFrom = new Date(
+          Math.min(...eventFromDates.map(d => d.getTime()))
+        );
+      }
+      if (!eventData.eventTo && eventToDates.length > 0) {
+        eventData.eventTo = new Date(
+          Math.max(...eventToDates.map(d => d.getTime()))
+        );
+      }
+      if (!eventData.reservationFrom && reservationFromDates.length > 0) {
+        eventData.reservationFrom = new Date(
+          Math.min(...reservationFromDates.map(d => d.getTime()))
+        );
+      }
+      if (!eventData.reservationTo && reservationToDates.length > 0) {
+        eventData.reservationTo = new Date(
+          Math.max(...reservationToDates.map(d => d.getTime()))
+        );
+      }
+    }
+
+    // Si no vienen schedules y reservationFrom/To son null, usar eventFrom/eventTo como fallback
+    if (!eventData.reservationFrom && eventData.eventFrom) {
+      eventData.reservationFrom = eventData.eventFrom;
+    }
+    if (!eventData.reservationTo && eventData.eventTo) {
+      eventData.reservationTo = eventData.eventTo;
+    }
+
     if (req.file) {
       // Si se subió una imagen, agregar la ruta a los datos (normalizada)
       eventData.imagePath = normalizeFilePath(req.file.path);
     }
 
-    const newEvent = await Event.create(eventData);
+    // Usar transacción para crear evento y sus schedules si vienen
+    const t = await sequelize.transaction();
+    let newEvent;
+    try {
+      newEvent = await Event.create(eventData, { transaction: t });
+
+      // Si el frontend envía un array `schedules` ya parseado anteriormente, crearlos asociados
+      if (schedulesInput && Array.isArray(schedulesInput)) {
+        const schedulesToCreate = schedulesInput.map(s => {
+          const evFrom = parseDateOrNull(s.eventFrom);
+          const evTo = parseDateOrNull(s.eventTo);
+          const resFrom = parseDateOrNull(s.reservationFrom);
+          const resTo = parseDateOrNull(s.reservationTo);
+
+          // Derivar dateOnly, startTime, endTime y dayOfWeek a partir de eventFrom/eventTo si no vienen
+          let dateOnly = null;
+          let startTime = null;
+          let endTime = null;
+          let dayOfWeek = null;
+
+          if (s.dateOnly) {
+            dateOnly = s.dateOnly;
+          } else if (evFrom) {
+            dateOnly = evFrom.toISOString().split('T')[0];
+          }
+
+          if (s.startTime) {
+            startTime = s.startTime;
+          } else if (evFrom) {
+            startTime = evFrom.toISOString().split('T')[1].slice(0, 8);
+          }
+
+          if (s.endTime) {
+            endTime = s.endTime;
+          } else if (evTo) {
+            endTime = evTo.toISOString().split('T')[1].slice(0, 8);
+          }
+
+          if (typeof s.dayOfWeek !== 'undefined' && s.dayOfWeek !== null) {
+            dayOfWeek = s.dayOfWeek;
+          } else if (evFrom) {
+            dayOfWeek = evFrom.getUTCDay();
+          }
+
+          return {
+            eventId: newEvent.id,
+            eventFrom: evFrom,
+            eventTo: evTo,
+            reservationFrom: resFrom,
+            reservationTo: resTo,
+            dateOnly,
+            startTime,
+            endTime,
+            dayOfWeek,
+          };
+        });
+
+        // Validar schedules antes de insertar (evitar NULLs en columnas NOT NULL)
+        for (const sch of schedulesToCreate) {
+          if (
+            !sch.eventFrom ||
+            !sch.eventTo ||
+            !sch.reservationFrom ||
+            !sch.reservationTo ||
+            !sch.dateOnly ||
+            !sch.startTime ||
+            !sch.endTime ||
+            typeof sch.dayOfWeek === 'undefined' ||
+            sch.dayOfWeek === null
+          ) {
+            await t.rollback();
+            return res.status(400).json({
+              error:
+                'Cada schedule debe incluir eventFrom, eventTo, reservationFrom, reservationTo, dateOnly, startTime, endTime y dayOfWeek válidos.',
+            });
+          }
+        }
+
+        // Crear los schedules en la misma transacción
+        console.log(
+          `Creating ${schedulesToCreate.length} schedules for Event ${newEvent.id}`
+        );
+        // log detalles limitados para no saturar
+        schedulesToCreate.slice(0, 10).forEach((s, i) =>
+          console.log(`schedule[${i}]:`, {
+            eventFrom: s.eventFrom,
+            eventTo: s.eventTo,
+            dateOnly: s.dateOnly,
+            startTime: s.startTime,
+            dayOfWeek: s.dayOfWeek,
+          })
+        );
+        await EventSchedule.bulkCreate(schedulesToCreate, { transaction: t });
+      }
+
+      await t.commit();
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
 
     // Si el evento fue creado por un requester (estado PENDING), notificar a los coordinadores
     if (eventStatus === Event.STATUS.PENDING) {
@@ -331,6 +523,79 @@ exports.createEvent = async (req, res) => {
     }
 
     res.status(201).json(newEvent); // Responder con el nuevo evento creado
+
+    // Crear eventos en Google Calendar en segundo plano (uno por schedule si existen)
+    (async () => {
+      try {
+        // Solo crear en Google Calendar si el evento quedó aprobado
+        if (newEvent.status !== Event.STATUS.APPROVED) {
+          console.log(
+            `Skipping Google Calendar creation for Event ${newEvent.id} because status is ${newEvent.status}`
+          );
+          return;
+        }
+
+        const roomName = await getRoomName(newEvent.roomId);
+        const descriptionWithRoom = `${newEvent.description || ''}\n\nEspacio: ${roomName}`;
+
+        // Si el frontend envió schedules, crear un evento en Google Calendar por cada schedule
+        if (
+          schedulesInput &&
+          Array.isArray(schedulesInput) &&
+          schedulesInput.length > 0
+        ) {
+          // obtener schedules creados
+          const createdSchedules = await EventSchedule.findAll({
+            where: { eventId: newEvent.id },
+          });
+
+          for (const sch of createdSchedules) {
+            try {
+              console.log(
+                `Creating Google Calendar event for schedule ${sch.id} (Event ${newEvent.id}) from ${sch.eventFrom} to ${sch.eventTo}`
+              );
+              const gId = await googleCalendarService.createEvent({
+                name: newEvent.name,
+                description: descriptionWithRoom,
+                eventFrom: sch.eventFrom,
+                eventTo: sch.eventTo,
+              });
+              if (gId) {
+                await sch.update({ googleEventId: gId });
+                console.log(
+                  `Google Calendar event created for schedule ${sch.id}: ${gId}`
+                );
+              } else {
+                console.warn(
+                  `Google Calendar returned no id for schedule ${sch.id}`
+                );
+              }
+            } catch (err) {
+              console.error('Error creating google event for schedule:', err);
+            }
+          }
+        } else {
+          // No schedules, crear evento único vinculado al Event
+          const gId = await googleCalendarService.createEvent({
+            name: newEvent.name,
+            description: descriptionWithRoom,
+            eventFrom: newEvent.eventFrom,
+            eventTo: newEvent.eventTo,
+          });
+          if (gId) {
+            await Event.update(
+              { googleEventId: gId },
+              { where: { id: newEvent.id } }
+            );
+            console.log(
+              `Google Calendar event created for Event ${newEvent.id}: ${gId}`
+            );
+          }
+        }
+      } catch (err) {
+        console.error('Background Google Calendar create failed:', err);
+      }
+    })();
   } catch (error) {
     console.error(error);
 
@@ -488,6 +753,10 @@ exports.getAllEvents = async (req, res) => {
         as: 'user',
         attributes: ['name', 'email', 'companyName', 'companyRif'],
       },
+      {
+        model: EventSchedule,
+        as: 'schedules',
+      },
     ];
 
     // Aplicar filtro de búsqueda si existe
@@ -598,6 +867,10 @@ exports.getApprovedEvents = async (req, res) => {
           as: 'room',
           attributes: ['id', 'name'],
         },
+        {
+          model: EventSchedule,
+          as: 'schedules',
+        },
       ],
       order: [['eventFrom', 'ASC']],
     });
@@ -618,6 +891,10 @@ exports.getEventById = async (req, res) => {
           model: Room,
           as: 'room',
           attributes: ['id', 'name'],
+        },
+        {
+          model: EventSchedule,
+          as: 'schedules',
         },
       ],
     });
@@ -702,7 +979,214 @@ exports.updateEvent = async (req, res) => {
       req.body.imagePath = normalizeFilePath(req.file.path);
     }
 
+    // Sanitizar fechas en actualización
+    const parseDateOrNullUpdate = val => {
+      if (!val && val !== 0) return null;
+      const d = new Date(val);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+    if (req.body) {
+      if ('eventFrom' in req.body) {
+        const parsed = parseDateOrNullUpdate(req.body.eventFrom);
+        if (parsed === null) delete req.body.eventFrom;
+        else req.body.eventFrom = parsed;
+      }
+      if ('eventTo' in req.body) {
+        const parsed = parseDateOrNullUpdate(req.body.eventTo);
+        if (parsed === null) delete req.body.eventTo;
+        else req.body.eventTo = parsed;
+      }
+      if ('reservationFrom' in req.body) {
+        const parsed = parseDateOrNullUpdate(req.body.reservationFrom);
+        if (parsed === null) delete req.body.reservationFrom;
+        else req.body.reservationFrom = parsed;
+      }
+      if ('reservationTo' in req.body) {
+        const parsed = parseDateOrNullUpdate(req.body.reservationTo);
+        if (parsed === null) delete req.body.reservationTo;
+        else req.body.reservationTo = parsed;
+      }
+    }
+
     await event.update(req.body);
+
+    // Si frontend envía un array `schedules`, reemplazar los horarios del evento
+    let schedulesInput = req.body.schedules;
+    if (typeof schedulesInput === 'string') {
+      try {
+        schedulesInput = JSON.parse(schedulesInput);
+      } catch (parseErr) {
+        schedulesInput = null;
+      }
+    }
+
+    if (schedulesInput && Array.isArray(schedulesInput)) {
+      try {
+        // Primero intentar eliminar eventos de Google Calendar asociados a schedules antiguos
+        try {
+          const oldSchedules = await EventSchedule.findAll({
+            where: { eventId: event.id },
+          });
+          for (const os of oldSchedules) {
+            if (os.googleEventId) {
+              try {
+                console.log(
+                  `Deleting Google Calendar event for old schedule ${os.id}: ${os.googleEventId}`
+                );
+                await googleCalendarService.deleteEvent(os.googleEventId);
+                console.log(
+                  `Deleted google event for schedule ${os.id}: ${os.googleEventId}`
+                );
+              } catch (err) {
+                console.error('Error deleting google event for schedule:', err);
+              }
+            }
+          }
+        } catch (errOld) {
+          console.error(
+            'Error fetching old schedules for google deletion:',
+            errOld
+          );
+        }
+
+        // Usar transacción para eliminar y crear schedules de forma atómica
+        const tSchedules = await sequelize.transaction();
+        try {
+          await EventSchedule.destroy({
+            where: { eventId: event.id },
+            transaction: tSchedules,
+          });
+
+          const schedulesToCreate = schedulesInput.map(s => {
+            const evFrom = parseDateOrNullUpdate(s.eventFrom);
+            const evTo = parseDateOrNullUpdate(s.eventTo);
+            const resFrom = parseDateOrNullUpdate(s.reservationFrom);
+            const resTo = parseDateOrNullUpdate(s.reservationTo);
+
+            // Derivar dateOnly, startTime, endTime y dayOfWeek a partir de eventFrom/eventTo si no vienen
+            let dateOnly = s.dateOnly || null;
+            let startTime = s.startTime || null;
+            let endTime = s.endTime || null;
+            let dayOfWeek =
+              typeof s.dayOfWeek !== 'undefined' ? s.dayOfWeek : null;
+
+            if (!dateOnly && evFrom) {
+              dateOnly = evFrom.toISOString().split('T')[0];
+            }
+            if (!startTime && evFrom) {
+              startTime = evFrom.toISOString().split('T')[1].slice(0, 8);
+            }
+            if (!endTime && evTo) {
+              endTime = evTo.toISOString().split('T')[1].slice(0, 8);
+            }
+            if (
+              (dayOfWeek === null || typeof dayOfWeek === 'undefined') &&
+              evFrom
+            ) {
+              dayOfWeek = evFrom.getUTCDay();
+            }
+
+            return {
+              eventId: event.id,
+              eventFrom: evFrom,
+              eventTo: evTo,
+              reservationFrom: resFrom,
+              reservationTo: resTo,
+              dateOnly,
+              startTime,
+              endTime,
+              dayOfWeek,
+            };
+          });
+
+          // Validar que los schedules resultantes tengan los campos requeridos
+          for (const sch of schedulesToCreate) {
+            if (
+              !sch.eventFrom ||
+              !sch.eventTo ||
+              !sch.reservationFrom ||
+              !sch.reservationTo ||
+              !sch.dateOnly ||
+              !sch.startTime ||
+              !sch.endTime ||
+              typeof sch.dayOfWeek === 'undefined' ||
+              sch.dayOfWeek === null
+            ) {
+              await tSchedules.rollback();
+              return res.status(400).json({
+                error:
+                  'Cada schedule debe incluir eventFrom, eventTo, reservationFrom, reservationTo, dateOnly, startTime, endTime y dayOfWeek válidos.',
+              });
+            }
+          }
+
+          if (schedulesToCreate.length > 0) {
+            console.log(
+              `Replacing schedules for Event ${event.id} with ${schedulesToCreate.length} items`
+            );
+            await EventSchedule.bulkCreate(schedulesToCreate, {
+              transaction: tSchedules,
+            });
+          }
+
+          await tSchedules.commit();
+
+          // Crear google events para cada nuevo schedule (fuera de la transacción)
+          const createdSchedules = await EventSchedule.findAll({
+            where: { eventId: event.id },
+          });
+          for (const sch of createdSchedules) {
+            try {
+              console.log(
+                `Creating Google Calendar event for new schedule ${sch.id} (Event ${event.id}) from ${sch.eventFrom} to ${sch.eventTo}`
+              );
+              const gId = await googleCalendarService.createEvent({
+                name: event.name,
+                description: event.description,
+                eventFrom: sch.eventFrom,
+                eventTo: sch.eventTo,
+              });
+              if (gId) {
+                await sch.update({ googleEventId: gId });
+                console.log(
+                  `Google Calendar event created for schedule ${sch.id}: ${gId}`
+                );
+              } else {
+                console.warn(
+                  `Google Calendar returned no id for created schedule ${sch.id}`
+                );
+              }
+            } catch (err) {
+              console.error(
+                'Error creating google event for new schedule:',
+                err
+              );
+            }
+          }
+        } catch (errSchedules) {
+          try {
+            await tSchedules.rollback();
+          } catch (rbErr) {
+            console.error('Error rolling back schedules transaction:', rbErr);
+          }
+          console.error(
+            'Error actualizando schedules del evento:',
+            errSchedules
+          );
+          return res
+            .status(500)
+            .json({ error: 'Error al actualizar los horarios del evento.' });
+        }
+      } catch (schErr) {
+        console.error(
+          'Error actualizando schedules del evento (outer):',
+          schErr
+        );
+        return res
+          .status(500)
+          .json({ error: 'Error al actualizar los horarios del evento.' });
+      }
+    }
 
     if (req.body.status) {
       if (
@@ -785,6 +1269,183 @@ exports.updateEvent = async (req, res) => {
     }
 
     res.status(200).json(event);
+
+    // Actualizar/crear/eliminar evento en Google Calendar en segundo plano
+    (async () => {
+      try {
+        const roomName = await getRoomName(event.roomId);
+        const descriptionWithRoom = `${event.description || ''}\n\nEspacio: ${roomName}`;
+
+        // Caso 1: pasó de no-aprobado -> aprobado => crear en Google (tener en cuenta schedules)
+        if (
+          previousStatus !== Event.STATUS.APPROVED &&
+          event.status === Event.STATUS.APPROVED
+        ) {
+          // crear por schedules si existen
+          const schs = await EventSchedule.findAll({
+            where: { eventId: event.id },
+          });
+          if (schs && schs.length > 0) {
+            for (const sch of schs) {
+              try {
+                const gId = await googleCalendarService.createEvent({
+                  name: event.name,
+                  description: descriptionWithRoom,
+                  eventFrom: sch.eventFrom,
+                  eventTo: sch.eventTo,
+                });
+                if (gId) await sch.update({ googleEventId: gId });
+              } catch (err) {
+                console.error(
+                  'Error creating google event for schedule on approve:',
+                  err
+                );
+              }
+            }
+          } else {
+            try {
+              const createdId = await googleCalendarService.createEvent({
+                name: event.name,
+                description: descriptionWithRoom,
+                eventFrom: event.eventFrom,
+                eventTo: event.eventTo,
+              });
+              if (createdId)
+                await Event.update(
+                  { googleEventId: createdId },
+                  { where: { id: event.id } }
+                );
+            } catch (err) {
+              console.error('Error creating google event on approve:', err);
+            }
+          }
+
+          return;
+        }
+
+        // Caso 2: pasó de aprobado -> no-aprobado => borrar del calendario
+        if (
+          previousStatus === Event.STATUS.APPROVED &&
+          event.status !== Event.STATUS.APPROVED
+        ) {
+          // borrar google events asociados a schedules
+          try {
+            const schs = await EventSchedule.findAll({
+              where: { eventId: event.id },
+            });
+            for (const sch of schs) {
+              if (sch.googleEventId) {
+                try {
+                  await googleCalendarService.deleteEvent(sch.googleEventId);
+                  await sch.update({ googleEventId: null });
+                } catch (err) {
+                  console.error(
+                    'Error deleting google schedule event on status change:',
+                    err
+                  );
+                }
+              }
+            }
+          } catch (errSchDel) {
+            console.error(
+              'Error fetching schedules for google deletion on status change:',
+              errSchDel
+            );
+          }
+
+          // borrar google event asociado al Event (sin schedules)
+          if (event.googleEventId) {
+            try {
+              await googleCalendarService.deleteEvent(event.googleEventId);
+              await Event.update(
+                { googleEventId: null },
+                { where: { id: event.id } }
+              );
+            } catch (err) {
+              console.error(
+                'Error deleting google event on status change:',
+                err
+              );
+            }
+          }
+
+          return;
+        }
+
+        // Caso 3: sigue aprobado => actualizar/crear según corresponda
+        if (event.status === Event.STATUS.APPROVED) {
+          // si tiene schedules, actualizar cada schedule google event; crear si falta
+          const schs = await EventSchedule.findAll({
+            where: { eventId: event.id },
+          });
+          if (schs && schs.length > 0) {
+            for (const sch of schs) {
+              try {
+                if (sch.googleEventId) {
+                  await googleCalendarService.updateEvent(sch.googleEventId, {
+                    name: event.name,
+                    description: descriptionWithRoom,
+                    eventFrom: sch.eventFrom,
+                    eventTo: sch.eventTo,
+                  });
+                } else {
+                  const gId = await googleCalendarService.createEvent({
+                    name: event.name,
+                    description: descriptionWithRoom,
+                    eventFrom: sch.eventFrom,
+                    eventTo: sch.eventTo,
+                  });
+                  if (gId) await sch.update({ googleEventId: gId });
+                }
+              } catch (err) {
+                console.error(
+                  'Error updating/creating google schedule event:',
+                  err
+                );
+              }
+            }
+          } else {
+            // sin schedules: actualizar o crear el google event asociado al Event
+            if (event.googleEventId) {
+              try {
+                await googleCalendarService.updateEvent(event.googleEventId, {
+                  name: event.name,
+                  description: descriptionWithRoom,
+                  eventFrom: event.eventFrom,
+                  eventTo: event.eventTo,
+                });
+              } catch (err) {
+                console.error('Error updating google event for Event:', err);
+              }
+            } else {
+              try {
+                const createdId = await googleCalendarService.createEvent({
+                  name: event.name,
+                  description: descriptionWithRoom,
+                  eventFrom: event.eventFrom,
+                  eventTo: event.eventTo,
+                });
+                if (createdId)
+                  await Event.update(
+                    { googleEventId: createdId },
+                    { where: { id: event.id } }
+                  );
+              } catch (err) {
+                console.error(
+                  'Error creating google event for Event (approved):',
+                  err
+                );
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error(
+          'Background Google Calendar update/create/delete failed:',
+          err
+        );
+      }
+    })();
   } catch (error) {
     console.error('Error updating event:', error);
     const { UniqueConstraintError, ValidationError } = require('sequelize');
@@ -815,8 +1476,45 @@ exports.deleteEvent = async (req, res) => {
       return res.status(404).json({ error: 'Evento no encontrado.' });
     }
 
-    await event.destroy(); // Eliminar el evento
+    // Antes de eliminar el evento, recolectar google IDs de schedules para borrado en GCal
+    const scheduleGoogleIds = [];
+    try {
+      const schs = await EventSchedule.findAll({
+        where: { eventId: event.id },
+      });
+      for (const s of schs) {
+        if (s.googleEventId) scheduleGoogleIds.push(s.googleEventId);
+      }
+    } catch (err) {
+      console.error('Error fetching schedules before event delete:', err);
+    }
+
+    const googleIdToDelete = event.googleEventId;
+    await event.destroy(); // Eliminar el evento (cascade elimina schedules)
     res.status(204).json(); // Responder sin contenido
+
+    // Eliminar de Google Calendar en segundo plano si existía
+    (async () => {
+      try {
+        // borrar google id principal si existe
+        if (googleIdToDelete) {
+          await googleCalendarService.deleteEvent(googleIdToDelete);
+          console.log(`Google Calendar event deleted: ${googleIdToDelete}`);
+        }
+
+        // borrar google events asociados a schedules
+        for (const gid of scheduleGoogleIds) {
+          try {
+            await googleCalendarService.deleteEvent(gid);
+            console.log(`Google Calendar schedule event deleted: ${gid}`);
+          } catch (err) {
+            console.error('Error deleting google schedule event:', err);
+          }
+        }
+      } catch (err) {
+        console.error('Background Google Calendar delete failed:', err);
+      }
+    })();
   } catch (error) {
     console.error('Error deleting event:', error);
     const {

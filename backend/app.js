@@ -10,7 +10,6 @@ const eventRoutes = require('./routes/eventRoutes');
 const dependencyRoutes = require('./routes/dependencyRoutes');
 const path = require('path');
 
-// SOLUCIÓN: usar cors() con lista dinámica (desde env o valores por defecto)
 app.set('trust proxy', true);
 
 const allowedOriginsEnv =
