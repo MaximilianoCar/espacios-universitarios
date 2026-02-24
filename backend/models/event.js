@@ -9,6 +9,12 @@ module.exports = (sequelize, DataTypes) => {
         DENIED: 'denied',
       };
     }
+    static get RATING() {
+      return {
+        MIN: 1,
+        MAX: 5,
+      };
+    }
     static associate(models) {
       // Relación "muchos a uno" con User
       Event.belongsTo(models.User, {
