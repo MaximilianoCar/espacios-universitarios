@@ -56,6 +56,15 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
   });
 
   const [schedules, setSchedules] = useState([]);
+  // Determina si el evento es recurrente (puede venir del backend o por múltiples schedules)
+  const isRecurrent = Boolean(
+    (event &&
+      (event.periodicity ||
+        event.isRecurring ||
+        event.isRecurrent ||
+        event.recurrence)) ||
+    schedules.length > 1
+  );
   const [errors, setErrors] = useState({});
   const [imagePreview, setImagePreview] = useState(null);
   const [activeSection, setActiveSection] = useState('basic');
@@ -98,23 +107,53 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
       setImagePreview(event.imagePath ? getMediaUrl(event.imagePath) : null);
 
       // Inicializar schedules con el evento actual
-      setSchedules([
-        {
-          eventFrom: formatDateForInput(event.eventFrom),
-          eventTo: formatDateForInput(event.eventTo),
-          reservationFrom: formatDateForInput(event.reservationFrom),
-          reservationTo: formatDateForInput(event.reservationTo),
-          dateOnly: formatDateForInput(event.eventFrom)
-            ? formatDateForInput(event.eventFrom).split('T')[0]
-            : '',
-          startTime: formatDateForInput(event.eventFrom)
-            ? formatDateForInput(event.eventFrom).slice(11, 16)
-            : '',
-          endTime: formatDateForInput(event.eventTo)
-            ? formatDateForInput(event.eventTo).slice(11, 16)
-            : '',
-        },
-      ]);
+      if (
+        event.schedules &&
+        Array.isArray(event.schedules) &&
+        event.schedules.length > 0
+      ) {
+        setSchedules(
+          event.schedules.map(s => ({
+            id: s.id,
+            eventFrom: formatDateForInput(s.eventFrom),
+            eventTo: formatDateForInput(s.eventTo),
+            reservationFrom: formatDateForInput(s.reservationFrom),
+            reservationTo: formatDateForInput(s.reservationTo),
+            dateOnly:
+              s.dateOnly ||
+              (s.eventFrom
+                ? formatDateForInput(s.eventFrom).split('T')[0]
+                : ''),
+            startTime:
+              s.startTime ||
+              (s.eventFrom
+                ? formatDateForInput(s.eventFrom).slice(11, 16)
+                : ''),
+            endTime:
+              s.endTime ||
+              (s.eventTo ? formatDateForInput(s.eventTo).slice(11, 16) : ''),
+            dayOfWeek: typeof s.dayOfWeek !== 'undefined' ? s.dayOfWeek : null,
+          }))
+        );
+      } else {
+        setSchedules([
+          {
+            eventFrom: formatDateForInput(event.eventFrom),
+            eventTo: formatDateForInput(event.eventTo),
+            reservationFrom: formatDateForInput(event.reservationFrom),
+            reservationTo: formatDateForInput(event.reservationTo),
+            dateOnly: formatDateForInput(event.eventFrom)
+              ? formatDateForInput(event.eventFrom).split('T')[0]
+              : '',
+            startTime: formatDateForInput(event.eventFrom)
+              ? formatDateForInput(event.eventFrom).slice(11, 16)
+              : '',
+            endTime: formatDateForInput(event.eventTo)
+              ? formatDateForInput(event.eventTo).slice(11, 16)
+              : '',
+          },
+        ]);
+      }
 
       fetchRooms();
     }
@@ -637,7 +676,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
   const handleSectionClick = targetSection => {
     if (targetSection === activeSection) return;
 
-    const order = ['basic', 'dates', 'recurrence', 'review'];
+    const order = ['basic', 'dates', 'review'];
     const currentIndex = order.indexOf(activeSection);
     const targetIndex = order.indexOf(targetSection);
 
@@ -695,7 +734,8 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
 
         if (basic.includes(field)) return 'basic';
         if (dates.includes(field)) return 'dates';
-        if (recurrence.includes(field)) return 'recurrence';
+        // Los campos de recurrencia ahora se consideran parte de 'dates' en este modal
+        if (recurrence.includes(field)) return 'dates';
         return 'basic';
       };
 
@@ -718,6 +758,30 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
         icon: 'error',
       });
       return;
+    }
+
+    // Si el evento es recurrente, no permitir cambiar las fechas principales
+    if (isRecurrent) {
+      const origEventFrom = formatDateForInput(event.eventFrom) || '';
+      const origEventTo = formatDateForInput(event.eventTo) || '';
+      const origResFrom =
+        formatDateForInput(event.reservationFrom) || origEventFrom;
+      const origResTo = formatDateForInput(event.reservationTo) || origEventTo;
+
+      if (
+        formData.eventFrom !== origEventFrom ||
+        formData.eventTo !== origEventTo ||
+        formData.reservationFrom !== origResFrom ||
+        formData.reservationTo !== origResTo
+      ) {
+        await Swal.fire({
+          title: 'No permitido',
+          text: 'Este evento es recurrente; las fechas y horarios no pueden modificarse aquí.',
+          icon: 'warning',
+          confirmButtonColor: '#3085d6',
+        });
+        return;
+      }
     }
 
     // Confirmación antes de actualizar
@@ -768,7 +832,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
       data.append('imageFile', formData.imageFile);
     }
 
-    // Adjuntar schedules (reemplazar horarios en la actualización)
+    // Adjuntar schedules solo si no es un evento creado como recurrente
     const schedulesToSend = schedules.map(s => ({
       eventFrom: s.eventFrom,
       eventTo: s.eventTo,
@@ -779,8 +843,15 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
       endTime: s.endTime,
       dayOfWeek: s.dayOfWeek,
     }));
-    if (schedulesToSend.length > 0) {
-      data.append('schedules', JSON.stringify(schedulesToSend));
+    if (!isRecurrent) {
+      if (schedulesToSend.length > 0) {
+        data.append('schedules', JSON.stringify(schedulesToSend));
+      }
+    } else {
+      // Evento recurrente: no enviar schedules para evitar reemplazar/borrar ocurrencias
+      console.log(
+        'Evento recurrente detectado: no se envían schedules en la actualización'
+      );
     }
 
     try {
@@ -874,7 +945,6 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
   const sectionTabs = [
     { id: 'basic', label: 'Información Básica', icon: FaInfoCircle },
     { id: 'dates', label: 'Fechas', icon: FaCalendarAlt },
-    { id: 'recurrence', label: 'Recurrencia', icon: FaSyncAlt },
     { id: 'review', label: 'Revisión', icon: FaClipboardCheck },
   ];
 
@@ -1271,9 +1341,42 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                     Fechas del Evento Principal
                   </h3>
                   <p className="text-sm text-blue-600">
-                    Actualiza las fechas y horas del evento.
+                    {isRecurrent
+                      ? 'Los eventos recurrentes no permiten modificar sus fechas.'
+                      : 'Actualiza las fechas y horas del evento.'}
                   </p>
                 </div>
+
+                {isRecurrent && (
+                  <div className="mb-4 p-4 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 rounded">
+                    <div className="flex items-start">
+                      <FaInfoCircle
+                        className="mr-3 mt-1 flex-shrink-0"
+                        size={20}
+                      />
+                      <div>
+                        <p className="font-medium">Evento Recurrente</p>
+                        <p className="text-sm mt-1">
+                          Este evento forma parte de una serie recurrente. Para
+                          modificar las fechas:
+                        </p>
+                        <ul className="list-disc list-inside text-sm mt-2 space-y-1">
+                          <li>
+                            Las fechas individuales no pueden modificarse aquí
+                          </li>
+                          <li>
+                            Si necesitas cambiar las fechas, deberás eliminar el
+                            evento recurrente y crear uno nuevo
+                          </li>
+                          <li>
+                            Puedes modificar otros datos como descripción,
+                            contacto, capacidad, etc.
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="bg-gray-50 p-4 rounded-lg space-y-4">
                   <div>
@@ -1292,11 +1395,17 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                           name="eventFrom"
                           value={formData.eventFrom}
                           onChange={handleChange}
+                          disabled={isRecurrent}
                           className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
                             errors.eventFrom
                               ? 'border-red-500'
                               : 'border-gray-300'
-                          }`}
+                          } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                          title={
+                            isRecurrent
+                              ? 'Los eventos recurrentes no permiten modificar sus fechas'
+                              : undefined
+                          }
                         />
                         {errors.eventFrom && (
                           <p className="mt-1 text-sm text-red-600">
@@ -1313,11 +1422,17 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                           name="eventTo"
                           value={formData.eventTo}
                           onChange={handleChange}
+                          disabled={isRecurrent}
                           className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
                             errors.eventTo
                               ? 'border-red-500'
                               : 'border-gray-300'
-                          }`}
+                          } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                          title={
+                            isRecurrent
+                              ? 'Los eventos recurrentes no permiten modificar sus fechas'
+                              : undefined
+                          }
                         />
                         {errors.eventTo && (
                           <p className="mt-1 text-sm text-red-600">
@@ -1336,7 +1451,9 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                     Fechas de Reserva
                   </h3>
                   <p className="text-sm text-blue-600">
-                    Actualiza el período de reserva del espacio.
+                    {isRecurrent
+                      ? 'No disponible para eventos recurrentes'
+                      : 'Actualiza el período de reserva del espacio.'}
                   </p>
                 </div>
 
@@ -1350,7 +1467,9 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                       </span>
                     </label>
                     <p className="text-xs text-gray-500 mb-2">
-                      Si no se especifican, se usarán las fechas del evento.
+                      {isRecurrent
+                        ? 'No aplica para eventos recurrentes'
+                        : 'Si no se especifican, se usarán las fechas del evento.'}
                     </p>
                     <div className="space-y-4">
                       <div>
@@ -1362,11 +1481,17 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                           name="reservationFrom"
                           value={formData.reservationFrom}
                           onChange={handleChange}
+                          disabled={isRecurrent}
                           className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
                             errors.reservationFrom
                               ? 'border-red-500'
                               : 'border-gray-300'
-                          }`}
+                          } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                          title={
+                            isRecurrent
+                              ? 'Los eventos recurrentes no permiten modificar fechas'
+                              : undefined
+                          }
                         />
                       </div>
                       <div>
@@ -1378,246 +1503,27 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                           name="reservationTo"
                           value={formData.reservationTo}
                           onChange={handleChange}
+                          disabled={isRecurrent}
                           className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
                             errors.reservationTo
                               ? 'border-red-500'
                               : 'border-gray-300'
-                          }`}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Sección: Recurrencia */}
-          {activeSection === 'recurrence' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="space-y-6">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h3 className="text-lg font-semibold text-blue-800 mb-2">
-                    Configuración de Recurrencia
-                  </h3>
-                  <p className="text-sm text-blue-600">
-                    Configura la recurrencia del evento si es necesario.
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg space-y-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <label className="block text-sm font-medium text-gray-700">
-                      <FaSyncAlt className="inline mr-2 text-purple-500" />
-                      Configuración de Recurrencia
-                    </label>
-                    <div className="flex items-center">
-                      <span className="text-sm text-gray-600 mr-2">
-                        Activar recurrencia
-                      </span>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={recurrenceConfig.active}
-                          onChange={e =>
-                            handleRecurrenceChange('active', e.target.checked)
+                          } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                          title={
+                            isRecurrent
+                              ? 'Los eventos recurrentes no permiten modificar fechas'
+                              : undefined
                           }
-                          className="sr-only peer"
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
+                      </div>
                     </div>
                   </div>
-
-                  {recurrenceConfig.active && (
-                    <div className="space-y-4 mt-4 p-4 bg-white rounded-lg border">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Días de la semana
-                        </label>
-                        <div className="flex flex-wrap gap-2">
-                          {weekDays.map(day => (
-                            <button
-                              key={day.id}
-                              type="button"
-                              onClick={() =>
-                                !recurrenceConfig.active &&
-                                toggleDaySelection(day.id)
-                              }
-                              disabled={recurrenceConfig.active}
-                              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                recurrenceConfig.daysOfWeek.includes(day.id)
-                                  ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              }`}
-                              title={day.name}
-                            >
-                              {day.label}
-                            </button>
-                          ))}
-                        </div>
-                        {errors.recurrenceDays && (
-                          <p className="mt-1 text-sm text-red-600">
-                            {errors.recurrenceDays}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Frecuencia
-                          </label>
-                          <div className="w-full px-3 py-2 border rounded-lg bg-gray-50">
-                            Semanal
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Repetir hasta
-                          </label>
-                          <input
-                            type="date"
-                            value={recurrenceConfig.repeatUntil}
-                            onChange={e =>
-                              handleRecurrenceChange(
-                                'repeatUntil',
-                                e.target.value
-                              )
-                            }
-                            min={
-                              formData.eventFrom
-                                ? formData.eventFrom.split('T')[0]
-                                : undefined
-                            }
-                            className={`w-full px-3 py-2 border rounded-lg ${
-                              errors.recurrenceUntil ? 'border-red-500' : ''
-                            }`}
-                          />
-                          {errors.recurrenceUntil && (
-                            <p className="mt-1 text-sm text-red-600">
-                              {errors.recurrenceUntil}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="mt-2 text-sm text-gray-600">
-                        {recurrenceConfig.frequency === 'weekly' &&
-                          'El evento se repetirá semanalmente en los días seleccionados.'}
-                        {recurrenceConfig.frequency === 'biweekly' &&
-                          'El evento se repetirá cada dos semanas en los días seleccionados.'}
-                        {recurrenceConfig.frequency === 'monthly' &&
-                          'El evento se repetirá mensualmente el mismo día de la semana seleccionado.'}
-                      </div>
-                    </div>
-                  )}
-
-                  {!recurrenceConfig.active && (
-                    <div className="text-center py-4 text-gray-500">
-                      <FaCalendar className="text-3xl mx-auto mb-2 text-gray-400" />
-                      <p>Sin recurrencia - Se actualizará un solo evento</p>
-                      <p className="text-sm mt-1">
-                        Activa la recurrencia para crear múltiples eventos
-                        automáticamente
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h3 className="text-lg font-semibold text-blue-800 mb-2">
-                    Horarios Generados
-                  </h3>
-                  <p className="text-sm text-blue-600">
-                    Visualiza los horarios creados automáticamente.
-                  </p>
-                </div>
-
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="flex justify-between items-center mb-3">
-                    <label className="block text-sm font-medium text-gray-700">
-                      Horarios Programados
-                    </label>
-                    <span
-                      className={`px-2 py-1 rounded text-xs font-medium ${
-                        schedules.length > 0
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}
-                    >
-                      {schedules.length} horario(s)
-                    </span>
-                  </div>
-
-                  {errors.schedules && (
-                    <p className="mb-2 text-sm text-red-600">
-                      {errors.schedules}
-                    </p>
-                  )}
-
-                  {schedules.length > 0 ? (
-                    <div className="max-h-96 overflow-y-auto space-y-2">
-                      {schedules.map((schedule, index) => (
-                        <div
-                          key={index}
-                          className="bg-white p-3 border rounded-lg"
-                        >
-                          <div className="flex justify-between items-start mb-2">
-                            <span className="font-medium text-sm text-gray-700">
-                              Horario {index + 1}
-                            </span>
-                            {schedules.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => removeSchedule(index)}
-                                className="text-red-500 hover:text-red-700 text-sm"
-                              >
-                                <FaTimes />
-                              </button>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                            <div>
-                              <span className="font-medium">Evento:</span>
-                              <div className="text-gray-600">
-                                {new Date(schedule.eventFrom).toLocaleString()}{' '}
-                                - {new Date(schedule.eventTo).toLocaleString()}
-                              </div>
-                            </div>
-                            <div>
-                              <span className="font-medium">Reserva:</span>
-                              <div className="text-gray-600">
-                                {new Date(
-                                  schedule.reservationFrom
-                                ).toLocaleString()}{' '}
-                                -{' '}
-                                {new Date(
-                                  schedule.reservationTo
-                                ).toLocaleString()}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-6 text-gray-500 bg-white rounded border">
-                      <FaCalendarAlt className="text-3xl mx-auto mb-2 text-gray-400" />
-                      <p>No hay horarios programados.</p>
-                      <p className="text-sm mt-1">
-                        Configura las fechas del evento para generar horarios
-                        automáticamente.
-                      </p>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
           )}
+
+          {/* Recurrencia removida: la gestión de recurrencia no está disponible en este modal */}
 
           {/* Sección: Revisión */}
           {activeSection === 'review' && (
@@ -1776,12 +1682,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                   <button
                     type="button"
                     onClick={() => {
-                      const sections = [
-                        'basic',
-                        'dates',
-                        'recurrence',
-                        'review',
-                      ];
+                      const sections = ['basic', 'dates', 'review'];
                       const currentIndex = sections.indexOf(activeSection);
                       if (currentIndex > 0) {
                         setActiveSection(sections[currentIndex - 1]);
@@ -1797,12 +1698,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                   <button
                     type="button"
                     onClick={() => {
-                      const sections = [
-                        'basic',
-                        'dates',
-                        'recurrence',
-                        'review',
-                      ];
+                      const sections = ['basic', 'dates', 'review'];
                       const currentIndex = sections.indexOf(activeSection);
                       if (currentIndex < sections.length - 1) {
                         setActiveSection(sections[currentIndex + 1]);

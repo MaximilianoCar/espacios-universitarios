@@ -53,6 +53,8 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
   const previousSchedulesHashRef = useRef('');
   const isFirstGenerationRef = useRef(true);
   const lastChangeWasManualRef = useRef(false);
+  // Fechas eliminadas manualmente (dateOnly string) para no regenerarlas
+  const manuallyDeletedDatesRef = useRef(new Set());
 
   // Días de la semana para selección
   const weekDays = [
@@ -103,6 +105,7 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
     previousSchedulesHashRef.current = '';
     isFirstGenerationRef.current = true;
     lastChangeWasManualRef.current = false;
+    manuallyDeletedDatesRef.current.clear();
   };
 
   const fetchRooms = async () => {
@@ -258,8 +261,13 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
       }
     });
 
+    // Filtrar horarios manualmente eliminados por el usuario
+    const filtered = generatedSchedules.filter(
+      gs => !manuallyDeletedDatesRef.current.has(gs.dateOnly)
+    );
+
     // Ordenar por fecha (usar orden natural de strings locales)
-    return generatedSchedules.sort(
+    return filtered.sort(
       (a, b) => new Date(a.eventFrom) - new Date(b.eventFrom)
     );
   };
@@ -426,7 +434,17 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
 
   const removeSchedule = index => {
     lastChangeWasManualRef.current = true;
-    setSchedules(prev => prev.filter((_, i) => i !== index));
+    setSchedules(prev => {
+      const toRemove = prev[index];
+      if (toRemove && toRemove.dateOnly) {
+        try {
+          manuallyDeletedDatesRef.current.add(toRemove.dateOnly);
+        } catch (e) {
+          // ignore
+        }
+      }
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   const validateForm = () => {
@@ -1354,6 +1372,7 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
           )}
 
           {/* Sección: Recurrencia */}
+          {/* Sección: Recurrencia */}
           {activeSection === 'recurrence' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-6">
@@ -1367,6 +1386,42 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
                 </div>
 
                 <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+                  {/* Validación de duración del evento */}
+                  {formData.eventFrom && formData.eventTo && (
+                    <div className="mb-4">
+                      {(() => {
+                        const eventFrom = new Date(formData.eventFrom);
+                        const eventTo = new Date(formData.eventTo);
+                        const isSameDay =
+                          eventFrom.getFullYear() === eventTo.getFullYear() &&
+                          eventFrom.getMonth() === eventTo.getMonth() &&
+                          eventFrom.getDate() === eventTo.getDate();
+
+                        if (!isSameDay) {
+                          return (
+                            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                              <div className="flex">
+                                <div className="flex-shrink-0">
+                                  <FaInfoCircle className="h-5 w-5 text-yellow-400" />
+                                </div>
+                                <div className="ml-3">
+                                  <p className="text-sm text-yellow-700">
+                                    <strong className="font-medium">
+                                      Recurrencia no disponible:
+                                    </strong>{' '}
+                                    El evento debe comenzar y terminar el mismo
+                                    día para poder activar la recurrencia.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between mb-4">
                     <label className="block text-sm font-medium text-gray-700">
                       <FaSyncAlt className="inline mr-2 text-purple-500" />
@@ -1380,12 +1435,63 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
                         <input
                           type="checkbox"
                           checked={recurrenceConfig.active}
-                          onChange={e =>
-                            handleRecurrenceChange('active', e.target.checked)
-                          }
+                          onChange={e => {
+                            // Validar que el evento sea el mismo día antes de activar
+                            if (e.target.checked) {
+                              const eventFrom = new Date(formData.eventFrom);
+                              const eventTo = new Date(formData.eventTo);
+                              const isSameDay =
+                                eventFrom.getFullYear() ===
+                                  eventTo.getFullYear() &&
+                                eventFrom.getMonth() === eventTo.getMonth() &&
+                                eventFrom.getDate() === eventTo.getDate();
+
+                              if (!isSameDay) {
+                                Swal.fire({
+                                  title: 'No se puede activar recurrencia',
+                                  text: 'El evento debe comenzar y terminar el mismo día para poder activar la recurrencia.',
+                                  icon: 'warning',
+                                  confirmButtonColor: '#3085d6',
+                                });
+                                return;
+                              }
+                            }
+                            handleRecurrenceChange('active', e.target.checked);
+                          }}
                           className="sr-only peer"
+                          disabled={
+                            formData.eventFrom &&
+                            formData.eventTo &&
+                            (() => {
+                              const eventFrom = new Date(formData.eventFrom);
+                              const eventTo = new Date(formData.eventTo);
+                              return (
+                                eventFrom.getFullYear() !==
+                                  eventTo.getFullYear() ||
+                                eventFrom.getMonth() !== eventTo.getMonth() ||
+                                eventFrom.getDate() !== eventTo.getDate()
+                              );
+                            })()
+                          }
                         />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        <div
+                          className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 ${
+                            formData.eventFrom &&
+                            formData.eventTo &&
+                            (() => {
+                              const eventFrom = new Date(formData.eventFrom);
+                              const eventTo = new Date(formData.eventTo);
+                              return (
+                                eventFrom.getFullYear() !==
+                                  eventTo.getFullYear() ||
+                                eventFrom.getMonth() !== eventTo.getMonth() ||
+                                eventFrom.getDate() !== eventTo.getDate()
+                              );
+                            })()
+                              ? 'opacity-50 cursor-not-allowed'
+                              : ''
+                          }`}
+                        ></div>
                       </label>
                     </div>
                   </div>
@@ -1394,34 +1500,34 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
                     <div className="space-y-4 mt-4 p-4 bg-white rounded-lg border">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Días de la semana
+                          Día de repetición
                         </label>
                         <div className="flex flex-wrap gap-2">
                           {weekDays.map(day => (
                             <button
                               key={day.id}
                               type="button"
-                              onClick={() =>
-                                !recurrenceConfig.active &&
-                                toggleDaySelection(day.id)
-                              }
-                              disabled={recurrenceConfig.active}
+                              disabled
                               className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                                 recurrenceConfig.daysOfWeek.includes(day.id)
                                   ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              } ${recurrenceConfig.active ? 'opacity-60 cursor-not-allowed' : ''}`}
+                                  : 'bg-gray-100 text-gray-400'
+                              } cursor-not-allowed opacity-60`}
                               title={day.name}
                             >
                               {day.label}
                             </button>
                           ))}
                         </div>
-                        {errors.recurrenceDays && (
-                          <p className="mt-1 text-sm text-red-600">
-                            {errors.recurrenceDays}
-                          </p>
-                        )}
+                        <p className="mt-2 text-sm text-blue-600">
+                          <FaInfoCircle className="inline mr-1" />
+                          Día fijado según la fecha del evento:{' '}
+                          {
+                            weekDays.find(
+                              d => d.id === recurrenceConfig.daysOfWeek[0]
+                            )?.name
+                          }
+                        </p>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1464,12 +1570,11 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
                       </div>
 
                       <div className="mt-2 text-sm text-gray-600">
-                        {recurrenceConfig.frequency === 'weekly' &&
-                          'El evento se repetirá semanalmente en los días seleccionados.'}
-                        {recurrenceConfig.frequency === 'biweekly' &&
-                          'El evento se repetirá cada dos semanas en los días seleccionados.'}
-                        {recurrenceConfig.frequency === 'monthly' &&
-                          'El evento se repetirá mensualmente el mismo día de la semana seleccionado.'}
+                        El evento se repetirá semanalmente los{' '}
+                        {weekDays
+                          .find(d => d.id === recurrenceConfig.daysOfWeek[0])
+                          ?.name.toLowerCase()}
+                        s.
                       </div>
                     </div>
                   )}
@@ -1479,8 +1584,21 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
                       <FaCalendar className="text-3xl mx-auto mb-2 text-gray-400" />
                       <p>Sin recurrencia - Se creará un solo evento</p>
                       <p className="text-sm mt-1">
-                        Activa la recurrencia para crear múltiples eventos
-                        automáticamente
+                        {formData.eventFrom && formData.eventTo
+                          ? (() => {
+                              const eventFrom = new Date(formData.eventFrom);
+                              const eventTo = new Date(formData.eventTo);
+                              const isSameDay =
+                                eventFrom.getFullYear() ===
+                                  eventTo.getFullYear() &&
+                                eventFrom.getMonth() === eventTo.getMonth() &&
+                                eventFrom.getDate() === eventTo.getDate();
+
+                              return isSameDay
+                                ? 'Activa la recurrencia para crear múltiples eventos automáticamente'
+                                : 'El evento debe comenzar y terminar el mismo día para activar recurrencia';
+                            })()
+                          : 'Configura las fechas del evento para activar recurrencia'}
                       </p>
                     </div>
                   )}
@@ -1534,6 +1652,7 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
                               type="button"
                               onClick={() => removeSchedule(index)}
                               className="text-red-500 hover:text-red-700 text-sm"
+                              title="Eliminar este horario"
                             >
                               <FaTimes />
                             </button>

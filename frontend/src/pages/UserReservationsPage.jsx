@@ -1135,13 +1135,27 @@ const UserReservationsPage = () => {
                   <div className="flex flex-col items-center space-y-4">
                     <div className="max-w-2xl mx-auto mb-2 bg-yellow-50 border-l-4 border-yellow-400 p-3 rounded-r">
                       <p className="text-sm text-gray-700">
+                        <span className="font-semibold text-yellow-700 py-2">
+                          Nota:
+                        </span>{' '}
+                        Previsualizar el evento para editar imagenes y
+                        descipción (Cambios mayores conllevan eliminar el evento
+                        y hacer una nueva solicitud)
+                      </p>
+                      <p className="text-sm text-gray-700 py-2">
                         <span className="font-semibold text-yellow-700">
                           Nota:
                         </span>{' '}
-                        Las reservas no se pueden editar complementamente, para
-                        editar descripción e imagen previsualizar el evento
-                        (Cambios mayores conllevan eliminar el evento y hacer
-                        una nueva solicitud)
+                        Recuerde subir una programación actualizada para su
+                        evento, esto ayuda a los administradores a entender
+                        mejor su solicitud y agilizar el proceso de aprobación.
+                      </p>
+                      <p className="text-sm text-gray-700 py-2">
+                        <span className="font-semibold text-yellow-700">
+                          Nota:
+                        </span>{' '}
+                        Una vez revisada su solicitud, se le contactará para
+                        gestionar el pago en caso de aplicar.
                       </p>
                     </div>
                     <div className="flex justify-center items-center">

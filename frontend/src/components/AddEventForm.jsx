@@ -24,6 +24,7 @@ import {
   FaSyncAlt,
   FaTimes,
   FaClipboardCheck,
+  FaCalendar,
 } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -159,6 +160,8 @@ const AddEventForm = ({ onEventCreated }) => {
   const previousSchedulesHashRef = useRef('');
   const isFirstGenerationRef = useRef(true);
   const lastChangeWasManualRef = useRef(false);
+  // Fechas eliminadas manualmente (dateOnly string) para no regenerarlas
+  const manuallyDeletedDatesRef = useRef(new Set());
 
   // Referencias para inputs
   const inputRefs = useRef({});
@@ -392,8 +395,13 @@ const AddEventForm = ({ onEventCreated }) => {
       }
     });
 
+    // Filtrar horarios manualmente eliminados por el usuario
+    const filtered = generatedSchedules.filter(
+      gs => !manuallyDeletedDatesRef.current.has(gs.dateOnly)
+    );
+
     // Ordenar por fecha (usar orden natural de strings locales)
-    return generatedSchedules.sort(
+    return filtered.sort(
       (a, b) => new Date(a.eventFrom) - new Date(b.eventFrom)
     );
   }, [
@@ -555,7 +563,17 @@ const AddEventForm = ({ onEventCreated }) => {
 
   const removeSchedule = index => {
     lastChangeWasManualRef.current = true;
-    setSchedules(prev => prev.filter((_, i) => i !== index));
+    setSchedules(prev => {
+      const toRemove = prev[index];
+      if (toRemove && toRemove.dateOnly) {
+        try {
+          manuallyDeletedDatesRef.current.add(toRemove.dateOnly);
+        } catch (e) {
+          // ignore
+        }
+      }
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   // Función para mostrar modal de protocolo CUC
@@ -1129,6 +1147,7 @@ const AddEventForm = ({ onEventCreated }) => {
       previousSchedulesHashRef.current = '';
       isFirstGenerationRef.current = true;
       lastChangeWasManualRef.current = false;
+      manuallyDeletedDatesRef.current.clear();
 
       if (onEventCreated) {
         onEventCreated(response.data);
@@ -1822,6 +1841,7 @@ const AddEventForm = ({ onEventCreated }) => {
         )}
 
         {/* Sección 4: Recurrencia - MEJORADO para móvil */}
+        {/* Sección 4: Recurrencia - MEJORADO para móvil con estilos del modal */}
         {activeSection === 3 && (
           <div className="space-y-4 sm:space-y-6">
             <h3 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800 flex items-center gap-1 sm:gap-2">
@@ -1830,78 +1850,173 @@ const AddEventForm = ({ onEventCreated }) => {
             </h3>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+              {/* Columna izquierda - Configuración */}
               <div className="space-y-4 sm:space-y-6">
-                <div className="bg-gray-50 p-3 sm:p-4 rounded-lg space-y-3 sm:space-y-4">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs sm:text-sm font-medium text-gray-700">
-                      <FaSyncAlt className="inline mr-1 sm:mr-2 text-purple-500 text-xs sm:text-sm" />
-                      Activar recurrencia
-                    </label>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={recurrenceConfig.active}
-                        onChange={e =>
-                          handleRecurrenceChange('active', e.target.checked)
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-blue-800 mb-2">
+                    Configuración de Recurrencia
+                  </h3>
+                  <p className="text-sm text-blue-600">
+                    Configura la recurrencia del evento si es necesario.
+                  </p>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+                  {/* Validación de duración del evento */}
+                  {formData.eventFrom && formData.eventTo && (
+                    <div className="mb-4">
+                      {(() => {
+                        const eventFrom = new Date(formData.eventFrom);
+                        const eventTo = new Date(formData.eventTo);
+                        const isSameDay =
+                          eventFrom.getFullYear() === eventTo.getFullYear() &&
+                          eventFrom.getMonth() === eventTo.getMonth() &&
+                          eventFrom.getDate() === eventTo.getDate();
+
+                        if (!isSameDay) {
+                          return (
+                            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                              <div className="flex">
+                                <div className="flex-shrink-0">
+                                  <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400" />
+                                </div>
+                                <div className="ml-3">
+                                  <p className="text-sm text-yellow-700">
+                                    <strong className="font-medium">
+                                      Recurrencia no disponible:
+                                    </strong>{' '}
+                                    El evento debe comenzar y terminar el mismo
+                                    día para poder activar la recurrencia.
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          );
                         }
-                        className="sr-only peer"
-                      />
-                      <div className="w-9 h-5 sm:w-11 sm:h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 sm:after:h-5 sm:after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        return null;
+                      })()}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between mb-4">
+                    <label className="block text-sm font-medium text-gray-700">
+                      <FaSyncAlt className="inline mr-2 text-purple-500" />
+                      Configuración de Recurrencia
                     </label>
+                    <div className="flex items-center">
+                      <span className="text-sm text-gray-600 mr-2">
+                        Activar recurrencia
+                      </span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={recurrenceConfig.active}
+                          onChange={e => {
+                            // Validar que el evento sea el mismo día antes de activar
+                            if (e.target.checked) {
+                              const eventFrom = new Date(formData.eventFrom);
+                              const eventTo = new Date(formData.eventTo);
+                              const isSameDay =
+                                eventFrom.getFullYear() ===
+                                  eventTo.getFullYear() &&
+                                eventFrom.getMonth() === eventTo.getMonth() &&
+                                eventFrom.getDate() === eventTo.getDate();
+
+                              if (!isSameDay) {
+                                Swal.fire({
+                                  title: 'No se puede activar recurrencia',
+                                  text: 'El evento debe comenzar y terminar el mismo día para poder activar la recurrencia.',
+                                  icon: 'warning',
+                                  confirmButtonColor: '#3085d6',
+                                });
+                                return;
+                              }
+                            }
+                            handleRecurrenceChange('active', e.target.checked);
+                          }}
+                          className="sr-only peer"
+                          disabled={
+                            formData.eventFrom &&
+                            formData.eventTo &&
+                            (() => {
+                              const eventFrom = new Date(formData.eventFrom);
+                              const eventTo = new Date(formData.eventTo);
+                              return (
+                                eventFrom.getFullYear() !==
+                                  eventTo.getFullYear() ||
+                                eventFrom.getMonth() !== eventTo.getMonth() ||
+                                eventFrom.getDate() !== eventTo.getDate()
+                              );
+                            })()
+                          }
+                        />
+                        <div
+                          className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 ${
+                            formData.eventFrom &&
+                            formData.eventTo &&
+                            (() => {
+                              const eventFrom = new Date(formData.eventFrom);
+                              const eventTo = new Date(formData.eventTo);
+                              return (
+                                eventFrom.getFullYear() !==
+                                  eventTo.getFullYear() ||
+                                eventFrom.getMonth() !== eventTo.getMonth() ||
+                                eventFrom.getDate() !== eventTo.getDate()
+                              );
+                            })()
+                              ? 'opacity-50 cursor-not-allowed'
+                              : ''
+                          }`}
+                        ></div>
+                      </label>
+                    </div>
                   </div>
 
                   {recurrenceConfig.active && (
-                    <div className="space-y-3 sm:space-y-4 mt-3 sm:mt-4 p-3 sm:p-4 bg-white rounded-lg border">
+                    <div className="space-y-4 mt-4 p-4 bg-white rounded-lg border">
                       <div>
-                        <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
-                          Días de la semana
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Día de repetición
                         </label>
-                        <div className="flex flex-wrap gap-1 sm:gap-2">
+                        <div className="flex flex-wrap gap-2">
                           {weekDays.map(day => (
                             <button
                               key={day.id}
                               type="button"
-                              onClick={() => toggleDaySelection(day.id)}
-                              className={`px-2 sm:px-3 py-1 sm:py-2 rounded-lg text-[10px] sm:text-xs font-medium transition-colors ${
+                              disabled
+                              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                                 recurrenceConfig.daysOfWeek.includes(day.id)
                                   ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                              }`}
+                                  : 'bg-gray-100 text-gray-400'
+                              } cursor-not-allowed opacity-60`}
                               title={day.name}
                             >
                               {day.label}
                             </button>
                           ))}
                         </div>
-                        {errors.recurrenceDays && (
-                          <p className="mt-1 text-xs text-red-600">
-                            {errors.recurrenceDays}
-                          </p>
-                        )}
+                        <p className="mt-2 text-sm text-blue-600">
+                          <InformationCircleIcon className="inline mr-1 h-4 w-4" />
+                          Día fijado según la fecha del evento:{' '}
+                          {
+                            weekDays.find(
+                              d => d.id === recurrenceConfig.daysOfWeek[0]
+                            )?.name
+                          }
+                        </p>
                       </div>
 
-                      <div className="grid grid-cols-1 gap-3 sm:gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
                             Frecuencia
                           </label>
-                          <select
-                            value={recurrenceConfig.frequency}
-                            onChange={e =>
-                              handleRecurrenceChange(
-                                'frequency',
-                                e.target.value
-                              )
-                            }
-                            className="w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          >
-                            <option value="weekly">Semanal</option>
-                            <option value="biweekly">Quincenal</option>
-                            <option value="monthly">Mensual</option>
-                          </select>
+                          <div className="w-full px-3 py-2 border rounded-lg bg-gray-50">
+                            Semanal
+                          </div>
                         </div>
                         <div>
-                          <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
                             Repetir hasta
                           </label>
                           <input
@@ -1918,32 +2033,72 @@ const AddEventForm = ({ onEventCreated }) => {
                                 ? formData.eventFrom.split('T')[0]
                                 : undefined
                             }
-                            className={`w-full px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                              errors.recurrenceUntil
-                                ? 'border-red-500'
-                                : 'border-gray-300'
+                            className={`w-full px-3 py-2 border rounded-lg ${
+                              errors.recurrenceUntil ? 'border-red-500' : ''
                             }`}
                           />
                           {errors.recurrenceUntil && (
-                            <p className="mt-1 text-xs text-red-600">
+                            <p className="mt-1 text-sm text-red-600">
                               {errors.recurrenceUntil}
                             </p>
                           )}
                         </div>
                       </div>
+
+                      <div className="mt-2 text-sm text-gray-600">
+                        El evento se repetirá semanalmente los{' '}
+                        {weekDays
+                          .find(d => d.id === recurrenceConfig.daysOfWeek[0])
+                          ?.name.toLowerCase()}
+                        s.
+                      </div>
+                    </div>
+                  )}
+
+                  {!recurrenceConfig.active && (
+                    <div className="text-center py-4 text-gray-500">
+                      <FaCalendar className="text-3xl mx-auto mb-2 text-gray-400" />
+                      <p>Sin recurrencia - Se creará un solo evento</p>
+                      <p className="text-sm mt-1">
+                        {formData.eventFrom && formData.eventTo
+                          ? (() => {
+                              const eventFrom = new Date(formData.eventFrom);
+                              const eventTo = new Date(formData.eventTo);
+                              const isSameDay =
+                                eventFrom.getFullYear() ===
+                                  eventTo.getFullYear() &&
+                                eventFrom.getMonth() === eventTo.getMonth() &&
+                                eventFrom.getDate() === eventTo.getDate();
+
+                              return isSameDay
+                                ? 'Activa la recurrencia para crear múltiples eventos automáticamente'
+                                : 'El evento debe comenzar y terminar el mismo día para activar recurrencia';
+                            })()
+                          : 'Configura las fechas del evento para activar recurrencia'}
+                      </p>
                     </div>
                   )}
                 </div>
               </div>
 
+              {/* Columna derecha - Horarios generados */}
               <div className="space-y-4 sm:space-y-6">
-                <div className="bg-gray-50 p-3 sm:p-4 rounded-lg">
-                  <div className="flex justify-between items-center mb-2 sm:mb-3">
-                    <label className="block text-xs sm:text-sm font-medium text-gray-700">
-                      Horarios Generados
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-blue-800 mb-2">
+                    Horarios Generados
+                  </h3>
+                  <p className="text-sm text-blue-600">
+                    Visualiza los horarios creados automáticamente.
+                  </p>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex justify-between items-center mb-3">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Horarios Programados
                     </label>
                     <span
-                      className={`px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium ${
+                      className={`px-2 py-1 rounded text-xs font-medium ${
                         schedules.length > 0
                           ? 'bg-green-100 text-green-800'
                           : 'bg-yellow-100 text-yellow-800'
@@ -1954,57 +2109,63 @@ const AddEventForm = ({ onEventCreated }) => {
                   </div>
 
                   {errors.schedules && (
-                    <p className="mb-2 text-xs text-red-600">
+                    <p className="mb-2 text-sm text-red-600">
                       {errors.schedules}
                     </p>
                   )}
 
                   {schedules.length > 0 ? (
-                    <div className="max-h-60 sm:max-h-96 overflow-y-auto space-y-1 sm:space-y-2">
+                    <div className="max-h-96 overflow-y-auto space-y-2">
                       {schedules.map((schedule, index) => (
                         <div
                           key={index}
-                          className="bg-white p-2 sm:p-3 border rounded-lg"
+                          className="bg-white p-3 border rounded-lg"
                         >
-                          <div className="flex justify-between items-start mb-1 sm:mb-2">
-                            <span className="font-medium text-[10px] sm:text-xs text-gray-700">
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="font-medium text-sm text-gray-700">
                               Horario {index + 1}
                             </span>
                             <button
                               type="button"
                               onClick={() => removeSchedule(index)}
-                              className="text-red-500 hover:text-red-700 text-[10px] sm:text-xs"
+                              className="text-red-500 hover:text-red-700 text-sm"
+                              title="Eliminar este horario"
                             >
                               <FaTimes />
                             </button>
                           </div>
 
-                          <div className="grid grid-cols-1 gap-1 sm:gap-2 text-[10px] sm:text-xs">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
                             <div>
                               <span className="font-medium">Evento:</span>
-                              <span className="text-gray-600 ml-1">
-                                {new Date(schedule.eventFrom)
-                                  .toLocaleString()
-                                  .slice(0, -3)}
-                              </span>
+                              <div className="text-gray-600">
+                                {new Date(schedule.eventFrom).toLocaleString()}{' '}
+                                - {new Date(schedule.eventTo).toLocaleString()}
+                              </div>
                             </div>
                             <div>
                               <span className="font-medium">Reserva:</span>
-                              <span className="text-gray-600 ml-1">
-                                {new Date(schedule.reservationFrom)
-                                  .toLocaleString()
-                                  .slice(0, -3)}
-                              </span>
+                              <div className="text-gray-600">
+                                {new Date(
+                                  schedule.reservationFrom
+                                ).toLocaleString()}{' '}
+                                -{' '}
+                                {new Date(
+                                  schedule.reservationTo
+                                ).toLocaleString()}
+                              </div>
                             </div>
                           </div>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-4 sm:py-6 text-gray-500 bg-white rounded border">
-                      <FaCalendarAlt className="text-xl sm:text-3xl mx-auto mb-1 sm:mb-2 text-gray-400" />
-                      <p className="text-[10px] sm:text-xs">
-                        No hay horarios programados.
+                    <div className="text-center py-6 text-gray-500 bg-white rounded border">
+                      <FaCalendarAlt className="text-3xl mx-auto mb-2 text-gray-400" />
+                      <p>No hay horarios programados.</p>
+                      <p className="text-sm mt-1">
+                        Configura las fechas del evento para generar horarios
+                        automáticamente.
                       </p>
                     </div>
                   )}
