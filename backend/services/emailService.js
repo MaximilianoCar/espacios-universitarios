@@ -148,6 +148,106 @@ const emailTemplates = {
     `,
   }),
 
+  // Plantilla para invitación a evento
+  invitation: (
+    recipientName = '',
+    eventName,
+    spaceName,
+    description,
+    eventFrom,
+    eventTo,
+    googleLink = ''
+  ) => {
+    const startDate = eventFrom ? new Date(eventFrom) : null;
+    const dateString = startDate
+      ? startDate.toLocaleDateString('es-ES', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+        })
+      : 'Fecha pendiente';
+    const timeString = startDate
+      ? `${startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(eventTo).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      : '';
+
+    return {
+      subject: `Invitación: ${eventName} — ${spaceName}`,
+      html: `
+      <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; background-color: #f4f7f9; padding: 40px 10px;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1); border-top: 6px solid #004a99;">
+          
+          <div style="padding: 30px 40px 20px 40px; text-align: center;">
+            <h1 style="color: #1a1a1a; font-size: 24px; margin: 0; font-weight: 700;">Confirmación de Evento</h1>
+            <p style="color: #666; font-size: 16px; margin-top: 10px;">Espacios Universitarios UCV</p>
+          </div>
+
+          <div style="height: 1px; background-color: #eeeeee; margin: 0 40px;"></div>
+
+          <div style="padding: 30px 40px;">
+            <p style="font-size: 16px; color: #444; line-height: 1.6;">
+              Hola <strong>${recipientName || ''}</strong>,
+            </p>
+            <p style="font-size: 16px; color: #444; line-height: 1.6;">
+              Se ha registrado tu participación en el siguiente evento:
+            </p>
+
+            <div style="background-color: #f8fbff; border: 1px solid #e1e8f0; border-radius: 12px; padding: 25px; margin: 25px 0;">
+              <h3 style="color: #004a99; margin: 0 0 15px 0; font-size: 20px;">${eventName}</h3>
+              
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 5px 0; color: #666; width: 100px;"><strong>Lugar:</strong></td>
+                  <td style="padding: 5px 0; color: #333;">${spaceName}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px 0; color: #666;"><strong>Fecha:</strong></td>
+                  <td style="padding: 5px 0; color: #333; text-transform: capitalize;">${dateString}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px 0; color: #666;"><strong>Horario:</strong></td>
+                  <td style="padding: 5px 0; color: #333;">${timeString}</td>
+                </tr>
+              </table>
+
+              ${
+                description
+                  ? `
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #cbd5e0; color: #555; font-style: italic; font-size: 14px;">
+                  ${description}
+                </div>
+              `
+                  : ''
+              }
+            </div>
+
+            ${
+              googleLink
+                ? `
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${googleLink}" target="_blank" style="background-color: #004a99; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; font-size: 16px;">
+                  Añadir a mi Google Calendar
+                </a>
+                <p style="margin-top: 15px; color: #7f8c8d; font-size: 13px; line-height: 1.4;">
+                  💡 <strong>Nota:</strong> El botón abre el calendario, <br/> busca y selecciona el evento para <strong>"Copiar en mi calendario"</strong> y asi seguirlo.
+                </p>
+              </div>
+            `
+                : ''
+            }
+          </div>
+
+          <div style="background-color: #f1f3f5; padding: 20px 40px; text-align: center;">
+            <p style="margin: 0; color: #888; font-size: 12px; line-height: 1.5;">
+              Este es un mensaje automático enviado por el sistema de Gestión de Espacios UCV.<br/>
+              © ${new Date().getFullYear()} Universidad Central de Venezuela.
+            </p>
+          </div>
+        </div>
+      </div>
+    `,
+    };
+  },
+
   // Notificación a coordinadores - Nueva reserva
   reservationRequest: (
     solicitanteName,

@@ -162,6 +162,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
   const fetchRooms = async () => {
     setLoadingRooms(true);
     try {
+      // cargar lista de salas
       const response = await axiosInstance.get('/rooms');
       setRooms(response.data || []);
     } catch (error) {
@@ -852,6 +853,71 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
       console.log(
         'Evento recurrente detectado: no se envían schedules en la actualización'
       );
+    }
+
+    // Comprobar conflictos si cambió la sala o los horarios (solo cuando no es recurrente)
+    try {
+      const originalRoomId = event.roomId;
+      const originalSchedules = (event.schedules || []).map(s => ({
+        eventFrom: s.eventFrom,
+        eventTo: s.eventTo,
+      }));
+
+      const newHash = generateSchedulesHash(schedulesToSend);
+      const origHash = generateSchedulesHash(originalSchedules);
+
+      const roomChanged = String(formData.roomId) !== String(originalRoomId);
+      const schedulesChanged = newHash !== origHash;
+
+      if (!isRecurrent && (roomChanged || schedulesChanged)) {
+        const payload = {
+          roomId: formData.roomId,
+          schedules: schedulesToSend,
+          eventId: event.id,
+        };
+
+        const resp = await axiosInstance.post(
+          '/events/check-conflicts',
+          payload
+        );
+        const conflicts = resp.data || [];
+        //console.log('Conflictos encontrados:', conflicts);
+        if (
+          Array.isArray(conflicts.conflicts) &&
+          conflicts.conflicts.length > 0
+        ) {
+          const list = conflicts.conflicts
+            .map(
+              c =>
+                `• ${c.eventName} — ${new Date(c.eventFrom).toLocaleString()} → ${new Date(c.eventTo).toLocaleString()} (${c.organizer || 'Sin organizador'})`
+            )
+            .join('\n');
+
+          const r = await Swal.fire({
+            title: `Se detectaron ${conflicts.conflicts.length} colisión(es)`,
+            html: `<div style="text-align:left; max-height:220px; overflow:auto;"><ul>${conflicts.conflicts
+              .map(
+                c =>
+                  `<li>${c.eventName} (id:${c.eventId}) — ${new Date(c.overlapFrom).toLocaleString()} a ${new Date(c.overlapTo).toLocaleString()}</li>`
+              )
+              .join(
+                ''
+              )}</ul></div><p class="mt-2">¿Deseas continuar y crear igualmente?</p>`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, crear',
+            cancelButtonText: 'Cancelar',
+          });
+
+          if (!r.isConfirmed) {
+            setSubmitting(false);
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      // Si la comprobación falla, loguear y permitir continuar (no bloquear al usuario por fallo en la comprobación)
+      console.error('Error al comprobar conflictos antes de actualizar:', err);
     }
 
     try {

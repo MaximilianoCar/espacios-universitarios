@@ -288,12 +288,35 @@ const AdminReservationsPage = () => {
   // Función para actualizar el estado del evento
   const handleUpdateStatus = async (eventId, eventName, newStatus) => {
     setOpenMenuId(null);
-
     if (newStatus === 'approved') {
+      // primero pedir al backend que compruebe colisiones
+      let conflicts = [];
+      try {
+        const r = await axiosInstance.get(`/events/${eventId}/conflicts`);
+        conflicts = r.data.conflicts || [];
+      } catch (err) {
+        console.warn('No se pudo comprobar colisiones:', err);
+      }
+
+      const hasConflicts = conflicts.length > 0;
+
+      const text = hasConflicts
+        ? `Se detectaron ${conflicts.length} colisión(es) con eventos ya aprobados. ¿Deseas continuar y aprobar igualmente?`
+        : `¿Deseas APROBAR la reserva "${eventName}"?`;
+
       const result = await Swal.fire({
-        title: '¿Estás seguro?',
-        text: `¿Deseas APROBAR la reserva "${eventName}"?`,
-        icon: 'question',
+        title: hasConflicts ? 'Colisión detectada' : '¿Estás seguro?',
+        html: hasConflicts
+          ? `<p>Se encontraron las siguientes colisiones:</p><ul style="text-align:left; max-height:200px; overflow:auto;">${conflicts
+              .map(
+                c =>
+                  `<li>${c.eventName} (id: ${c.eventId}) — ${new Date(c.overlapFrom).toLocaleString()} a ${new Date(c.overlapTo).toLocaleString()}</li>`
+              )
+              .join(
+                ''
+              )}</ul><p class="mt-2">¿Deseas continuar y aprobar igualmente?</p>`
+          : `<p>¿Deseas APROBAR la reserva "${eventName}"?</p>`,
+        icon: hasConflicts ? 'warning' : 'question',
         showCancelButton: true,
         confirmButtonColor: '#3085d6',
         cancelButtonColor: '#d33',
@@ -544,6 +567,126 @@ const AdminReservationsPage = () => {
   // Función para determinar si un usuario es externo
   const isExternalUser = user => {
     return user?.companyName !== null && user?.companyName !== undefined;
+  };
+
+  // --- Invitaciones: obtener y mostrar modal ---
+  const fetchInvitations = async eventId => {
+    try {
+      const res = await axiosInstance.get(`/events/${eventId}/invitations`);
+      return res.data.invitations || [];
+    } catch (err) {
+      console.error('fetchInvitations error', err);
+      return [];
+    }
+  };
+
+  const openInvitationsModal = async event => {
+    setOpenMenuId(null);
+    const invitations = await fetchInvitations(event.id);
+
+    // Generar HTML de la lista de invitados con mejor estilo
+    const existingHtml =
+      invitations.length > 0
+        ? invitations
+            .map(
+              i => `
+        <div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs">
+              ${i.email.charAt(0).toUpperCase()}
+            </div>
+            <div class="flex flex-col">
+              <span class="text-sm font-medium text-gray-700">${i.email}</span>
+              <span class="text-[10px] text-gray-400 uppercase tracking-wider">
+                ${i.lastSentAt ? `Enviado: ${new Date(i.lastSentAt).toLocaleDateString()}` : 'Pendiente'}
+              </span>
+            </div>
+          </div>
+          ${i.lastSentAt ? '<span class="text-green-500 text-xs">●</span>' : '<span class="text-gray-300 text-xs">○</span>'}
+        </div>
+      `
+            )
+            .join('')
+        : `<div class="text-center py-4 text-gray-400 text-sm italic">No hay invitados registrados</div>`;
+
+    const { value: formValues } = await Swal.fire({
+      title: `<span class="text-xl font-bold text-gray-800">Gestionar Invitaciones</span>`,
+      html: `
+      <div class="text-left mt-4">
+        <label class="block text-xs font-semibold text-gray-500 uppercase mb-2">Invitados actuales</label>
+        <div class="max-h-48 overflow-y-auto mb-6 pr-2 custom-scrollbar">
+          ${existingHtml}
+        </div>
+
+        <label for="swal-emails" class="block text-xs font-semibold text-gray-500 uppercase mb-2">
+          Invitar a nuevos participantes
+        </label>
+        <div class="relative">
+          <textarea 
+            id="swal-emails" 
+            class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm outline-none transition-all"
+            placeholder="ejemplo1@correo.com, ejemplo2@correo.com"
+            rows="3"></textarea>
+          <p class="text-[11px] text-gray-400 mt-1">Separa los correos electrónicos mediante comas.</p>
+        </div>
+      </div>
+    `,
+      showCancelButton: true,
+      confirmButtonText: 'Enviar Invitaciones',
+      cancelButtonText: 'Cerrar',
+      confirmButtonColor: '#4f46e5', // Indigo-600
+      reverseButtons: true,
+      width: '500px',
+      preConfirm: () => {
+        const val = document.getElementById('swal-emails').value;
+        return val;
+      },
+    });
+
+    if (formValues) {
+      const raw = formValues
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      if (raw.length === 0) {
+        Swal.fire({
+          icon: 'warning',
+          title: 'Campo vacío',
+          text: 'Por favor, ingresa al menos un correo.',
+          confirmButtonColor: '#4f46e5',
+        });
+        return;
+      }
+
+      Swal.fire({
+        title: 'Procesando...',
+        html: 'Enviando correos vía Google Calendar',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading(),
+      });
+
+      try {
+        await axiosInstance.post(`/events/${event.id}/invitations`, {
+          emails: raw,
+        });
+        Swal.fire({
+          icon: 'success',
+          title: '¡Éxito!',
+          text: 'Las invitaciones se han enviado correctamente.',
+          confirmButtonColor: '#4f46e5',
+        });
+        await refreshEvents();
+      } catch (err) {
+        console.error(err);
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'No se pudo completar la operación.',
+          confirmButtonColor: '#4f46e5',
+        });
+      }
+    }
   };
 
   const ActionMenu = ({ event, index }) => {
@@ -865,6 +1008,14 @@ const AdminReservationsPage = () => {
                     className="flex items-center w-full px-3 py-2 text-xs text-purple-600 hover:bg-gray-100"
                   >
                     <FaUpload className="mr-2" size={14} /> Subir Contrato
+                  </button>
+                )}
+                {event.status === 'approved' && (
+                  <button
+                    onClick={() => openInvitationsModal(event)}
+                    className="flex items-center w-full px-3 py-2 text-xs text-indigo-600 hover:bg-gray-100 font-semibold"
+                  >
+                    <FaRegEnvelope className="mr-2" size={14} /> Invitaciones
                   </button>
                 )}
               </div>

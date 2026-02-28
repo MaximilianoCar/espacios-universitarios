@@ -95,6 +95,37 @@ router.post(
   eventController.submitRating
 );
 
+// Obtener invitaciones y enviar invitaciones (admin/coordinator/requester owner)
+router.get(
+  '/events/:eventId/invitations',
+  protect,
+  restrictTo('admin', 'coordinator', 'requester'),
+  eventController.getInvitations
+);
+
+router.post(
+  '/events/:eventId/invitations',
+  protect,
+  restrictTo('admin', 'coordinator', 'requester'),
+  eventController.inviteEmails
+);
+
+// Comprobar colisiones antes de aprobar
+router.get(
+  '/events/:eventId/conflicts',
+  protect,
+  restrictTo('admin', 'coordinator'),
+  eventController.checkConflicts
+);
+
+// Comprobar colisiones mediante payload (para crear/editar antes de persistir)
+router.post(
+  '/events/check-conflicts',
+  protect,
+  restrictTo('admin', 'coordinator', 'requester'),
+  eventController.checkConflictsPayload
+);
+
 // Subir banner opcional para el evento (carpeta uploads/events/banners)
 router.post(
   '/events/:eventId/upload-banner',

@@ -794,6 +794,34 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
     }
 
     try {
+      // Antes de crear, comprobar colisiones con payload
+      const conflictResp = await axiosInstance.post('/events/check-conflicts', {
+        roomId: formData.roomId,
+        schedules: schedulesToSend,
+      });
+      const conflicts = conflictResp.data.conflicts || [];
+      if (conflicts.length > 0) {
+        const r = await Swal.fire({
+          title: `Se detectaron ${conflicts.length} colisión(es)`,
+          html: `<div style="text-align:left; max-height:220px; overflow:auto;"><ul>${conflicts
+            .map(
+              c =>
+                `<li>${c.eventName} (id:${c.eventId}) — ${new Date(c.overlapFrom).toLocaleString()} a ${new Date(c.overlapTo).toLocaleString()}</li>`
+            )
+            .join(
+              ''
+            )}</ul></div><p class="mt-2">¿Deseas continuar y crear igualmente?</p>`,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Sí, crear',
+          cancelButtonText: 'Cancelar',
+        });
+        if (!r.isConfirmed) {
+          setSubmitting(false);
+          return;
+        }
+      }
+
       await axiosInstance.post('/events', data, {
         headers: {
           'Content-Type': 'multipart/form-data',

@@ -122,6 +122,178 @@ exports.submitRating = async (req, res) => {
   }
 };
 
+// Obtener invitaciones de un evento
+exports.getInvitations = async (req, res) => {
+  try {
+    const { Invitation } = require('../models');
+    const eventId = req.params.eventId;
+    const invitations = await Invitation.findAll({ where: { eventId } });
+    return res.status(200).json({ invitations });
+  } catch (err) {
+    console.error('Error getInvitations:', err);
+    return res.status(500).json({ message: 'Error interno' });
+  }
+};
+
+// Invitar por correos: añade/actualiza invitados en Google Calendar y guarda en tabla
+exports.inviteEmails = async (req, res) => {
+  try {
+    const { Invitation, Event } = require('../models');
+    const { eventId } = req.params;
+    const { emails } = req.body; // array de correos
+
+    if (!Array.isArray(emails) || emails.length === 0) {
+      return res.status(400).json({ message: 'No hay correos para invitar.' });
+    }
+
+    const event = await Event.findByPk(eventId);
+    if (!event)
+      return res.status(404).json({ message: 'Evento no encontrado.' });
+
+    googleLink = `https://calendar.google.com/calendar/embed?src=espaciosuniversitariosucv%40gmail.com&ctz=America%2FCaracas`;
+    const now = new Date();
+
+    // Enviar emails usando emailService (uno por receptor). Usamos plantilla 'invitation'
+    const emailService = require('../services/emailService');
+
+    // Recorrer y enviar (fire-and-forget por design del emailService)
+    for (const rawEmail of emails) {
+      const e = rawEmail.trim().toLowerCase();
+      // enviar email con: nombre, nombre evento, espacio, desc, fechas y link
+      await emailService.sendEmail(e, 'invitation', [
+        '', // recipientName opcional
+        event.name || '',
+        await getRoomName(event.roomId),
+        event.description || '',
+        event.eventFrom || null,
+        event.eventTo || null,
+        googleLink,
+      ]);
+
+      // upsert invitation record
+      await Invitation.upsert({ eventId: event.id, email: e, lastSentAt: now });
+    }
+
+    return res
+      .status(200)
+      .json({ message: 'Invitaciones enviadas (por correo).' });
+  } catch (err) {
+    console.error('Error inviteEmails:', err);
+    return res.status(500).json({ message: 'Error interno' });
+  }
+};
+
+// Comprobar colisiones de horarios para un evento (considera schedules)
+exports.checkConflicts = async (req, res) => {
+  try {
+    const eventId = req.params.eventId;
+    const { Event, EventSchedule } = require('../models');
+
+    const event = await Event.findByPk(eventId, {
+      include: [{ model: EventSchedule, as: 'schedules' }],
+    });
+    if (!event)
+      return res.status(404).json({ message: 'Evento no encontrado.' });
+
+    // Obtener schedules de eventos aprobados en la misma sala (excepto el actual)
+    const schedules = await EventSchedule.findAll({
+      where: {},
+      include: [
+        {
+          model: Event,
+          as: 'event',
+          where: {
+            roomId: event.roomId,
+            status: Event.STATUS.APPROVED,
+            id: { [require('sequelize').Op.ne]: event.id },
+          },
+          attributes: ['id', 'name', 'eventFrom', 'eventTo'],
+        },
+      ],
+    });
+
+    const conflicts = [];
+    // For each schedule in the current event, check overlap with schedules
+    for (const s of event.schedules) {
+      const sFrom = new Date(s.eventFrom).getTime();
+      const sTo = new Date(s.eventTo).getTime();
+      for (const other of schedules) {
+        const oFrom = new Date(other.eventFrom).getTime();
+        const oTo = new Date(other.eventTo).getTime();
+        // overlap if start < other.end && other.start < end
+        if (sFrom < oTo && oFrom < sTo) {
+          conflicts.push({
+            eventId: other.event.id,
+            eventName: other.event.name,
+            scheduleId: other.id,
+            overlapFrom: Math.max(sFrom, oFrom),
+            overlapTo: Math.min(sTo, oTo),
+          });
+        }
+      }
+    }
+
+    return res.status(200).json({ conflicts });
+  } catch (err) {
+    console.error('Error checking conflicts:', err);
+    return res.status(500).json({ message: 'Error interno' });
+  }
+};
+
+// Comprobar colisiones a partir de payload (útil para creación/edición antes de persistir)
+exports.checkConflictsPayload = async (req, res) => {
+  try {
+    const { roomId, schedules = [], eventId = null } = req.body;
+    const { EventSchedule, Event } = require('../models');
+
+    if (!roomId) return res.status(400).json({ message: 'roomId requerido' });
+
+    // Obtener schedules de eventos aprobados en la misma sala (excepto eventId si viene)
+    const whereEvent = { roomId, status: Event.STATUS.APPROVED };
+    if (eventId) whereEvent.id = { [require('sequelize').Op.ne]: eventId };
+
+    const approvedSchedules = await EventSchedule.findAll({
+      include: [
+        {
+          model: Event,
+          as: 'event',
+          where: whereEvent,
+          attributes: ['id', 'name'],
+        },
+      ],
+    });
+
+    const conflicts = [];
+
+    // schedules payload expected items with eventFrom/eventTo timestamps
+    for (const s of schedules) {
+      const sFrom = new Date(s.eventFrom).getTime();
+      const sTo = new Date(s.eventTo).getTime();
+      for (const other of approvedSchedules) {
+        const oFrom = new Date(
+          other.eventFrom || other.event.eventFrom || other.event.eventFrom
+        ).getTime();
+        const oTo = new Date(
+          other.eventTo || other.event.eventTo || other.event.eventTo
+        ).getTime();
+        if (sFrom < oTo && oFrom < sTo) {
+          conflicts.push({
+            eventId: other.event.id,
+            eventName: other.event.name,
+            overlapFrom: Math.max(sFrom, oFrom),
+            overlapTo: Math.min(sTo, oTo),
+          });
+        }
+      }
+    }
+
+    return res.status(200).json({ conflicts });
+  } catch (err) {
+    console.error('Error checking conflicts payload:', err);
+    return res.status(500).json({ message: 'Error interno' });
+  }
+};
+
 // Eliminar un archivo seguro
 const safeUnlink = async (relativePath, allowedSubPath) => {
   if (!relativePath) return;
@@ -565,6 +737,17 @@ exports.createEvent = async (req, res) => {
                 console.log(
                   `Google Calendar event created for schedule ${sch.id}: ${gId}`
                 );
+
+                // Si es el ÚNICO schedule, también guardar el ID en el Evento principal
+                if (createdSchedules.length === 1) {
+                  await Event.update(
+                    { googleEventId: gId },
+                    { where: { id: newEvent.id } }
+                  );
+                  console.log(
+                    `Also saved googleEventId ${gId} to main Event ${newEvent.id} (single schedule case)`
+                  );
+                }
               } else {
                 console.warn(
                   `Google Calendar returned no id for schedule ${sch.id}`
@@ -921,9 +1104,6 @@ exports.getEventById = async (req, res) => {
 };
 
 // Actualizar un evento por ID (Update)
-// controllers/eventController.js - Función updateEvent completa
-
-// Actualizar un evento por ID (Update)
 exports.updateEvent = async (req, res) => {
   try {
     const userRole = req.user.role;
@@ -1043,7 +1223,6 @@ exports.updateEvent = async (req, res) => {
     // IMPORTANTE: Para eventos recurrentes, NO modificar los schedules
     if (schedulesInput && !isRecurrent) {
       try {
-        // New protocol: accept object { keep: [...], removeIds: [...] }
         if (
           typeof schedulesInput === 'object' &&
           !Array.isArray(schedulesInput) &&
