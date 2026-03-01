@@ -1,6 +1,12 @@
-// src/pages/AdminRoomsPage.jsx
 import React, { useEffect, useState, useRef } from 'react';
 import axiosInstance from '../axiosConfig';
+import {
+  fetchRooms,
+  deleteRoom as deleteRoomThunk,
+  selectRooms,
+  selectRoomsLoading,
+  selectRoomsLastFetched,
+} from '../features/rooms/roomsSlice';
 import {
   FaEdit,
   FaTrash,
@@ -32,17 +38,19 @@ import CreateRoomModal from '../components/CreateRoomModal';
 import UpdateRoomModal from '../components/UpdateRoomModal';
 import ManageDependenciesModal from '../components/ManageDependenciesModal';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import Swal from '../utils/swal';
 import getMediaUrl from '../utils/media';
 
 const AdminRoomsPage = () => {
-  const [rooms, setRooms] = useState([]);
+  const dispatch = useDispatch();
+  const rooms = useSelector(selectRooms);
+  const loading = useSelector(selectRoomsLoading);
+  const lastFetched = useSelector(selectRoomsLastFetched);
+
   const [filteredRooms, setFilteredRooms] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [currentSearch, setCurrentSearch] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
   // para modales
   const [showDataModal, setShowDataModal] = useState(false);
@@ -82,10 +90,11 @@ const AdminRoomsPage = () => {
     }
   };
 
-  // Obtener las salas desde la API
+  // Obtener las salas desde Redux
   useEffect(() => {
-    fetchRooms();
-
+    if (!lastFetched) {
+      dispatch(fetchRooms());
+    }
     // Detectar tamaño de pantalla
     const checkScreenSize = () => {
       setIsMobile(window.innerWidth < 1024);
@@ -95,7 +104,11 @@ const AdminRoomsPage = () => {
     window.addEventListener('resize', checkScreenSize);
 
     return () => window.removeEventListener('resize', checkScreenSize);
-  }, []);
+  }, [dispatch, lastFetched]);
+
+  useEffect(() => {
+    setFilteredRooms(rooms);
+  }, [rooms]);
 
   // Manejar clicks fuera del menú de acciones
   useEffect(() => {
@@ -107,21 +120,6 @@ const AdminRoomsPage = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openMenuId]);
-
-  const fetchRooms = () => {
-    axiosInstance
-      .get('/rooms')
-      .then(response => {
-        setRooms(response.data);
-        setFilteredRooms(response.data);
-        setLoading(false);
-      })
-      .catch(error => {
-        console.error('Error al obtener las salas:', error);
-        setError('Error al obtener las salas.');
-        setLoading(false);
-      });
-  };
 
   // Manejar el cambio en el término de búsqueda
   const handleSearch = term => {
@@ -161,7 +159,6 @@ const AdminRoomsPage = () => {
       return;
     }
 
-    // Mostrar loader
     Swal.fire({
       title: 'Eliminando sala...',
       text: `Por favor espere mientras se elimina la sala "${roomName}"`,
@@ -174,13 +171,7 @@ const AdminRoomsPage = () => {
     });
 
     try {
-      await axiosInstance.delete(`/rooms/${roomId}`);
-
-      // Actualizar la lista de salas
-      setRooms(prevRooms => prevRooms.filter(room => room.id !== roomId));
-      setFilteredRooms(prevRooms =>
-        prevRooms.filter(room => room.id !== roomId)
-      );
+      await dispatch(deleteRoomThunk(roomId)).unwrap();
 
       Swal.fire(
         '¡Eliminada!',
@@ -191,7 +182,8 @@ const AdminRoomsPage = () => {
       console.error('Error al eliminar la sala:', error);
       Swal.fire(
         'Error',
-        'Error al eliminar la sala. Por favor, intente nuevamente.',
+        error.message ||
+          'Error al eliminar la sala. Por favor, intente nuevamente.',
         'error'
       );
     }
@@ -225,7 +217,7 @@ const AdminRoomsPage = () => {
     setOpenMenuId(null); // Cerrar menú de acciones si está abierto
   };
 
-  // Función para renderizar características
+  // ... (resto de funciones de renderizado no cambian)
   const renderFeatures = room => {
     const features = [];
 
@@ -275,7 +267,6 @@ const AdminRoomsPage = () => {
     return features;
   };
 
-  // Función para renderizar métodos de pago
   const renderPaymentMethods = room => {
     const methods = [];
 
@@ -297,7 +288,6 @@ const AdminRoomsPage = () => {
     return methods;
   };
 
-  // Componente del menú de acciones
   const ActionMenu = ({ room, index }) => {
     const isMenuOpen = openMenuId === room.id;
     const menuRef = useRef(null);
@@ -348,7 +338,6 @@ const AdminRoomsPage = () => {
     );
   };
 
-  // Obtener nombre de dependencia
   const getDependencyName = room => {
     if (!room.dependencies || room.dependencies.length === 0) {
       return 'Sin dependencia';
@@ -356,13 +345,12 @@ const AdminRoomsPage = () => {
     return room.dependencies[0].name;
   };
 
-  // Función para formatear el costo
   const formatCost = cost => {
     if (!cost || cost === '0') return 'Gratuito';
     return `$${cost}`;
   };
 
-  if (loading) {
+  if (loading && !lastFetched) {
     return (
       <div>
         <Header />
@@ -381,6 +369,7 @@ const AdminRoomsPage = () => {
     <div className="min-h-screen grid grid-rows-[auto_1fr_auto]">
       <Header />
       <div className="container mx-auto my-8 px-4">
+        {/* ... (el resto del JSX no cambia, pero ahora onRoomCreated/Updated solo cierra el modal) ... */}
         <div className="flex items-center mb-6">
           <button
             onClick={handleBack}
@@ -394,7 +383,6 @@ const AdminRoomsPage = () => {
           </h2>
         </div>
 
-        {/* SearchBar y botón de añadir */}
         <div className="flex flex-col lg:flex-row justify-between items-center mb-4 gap-4">
           <div className="w-full lg:w-auto">
             <SearchBar
@@ -422,7 +410,6 @@ const AdminRoomsPage = () => {
           </div>
         </div>
 
-        {/* Indicador de búsqueda activa */}
         {currentSearch && (
           <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex justify-between items-center">
@@ -445,7 +432,6 @@ const AdminRoomsPage = () => {
           </div>
         )}
 
-        {/* Mensaje cuando no hay resultados */}
         {currentSearch && filteredRooms.length === 0 && !loading && (
           <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-center">
             <p className="text-yellow-700">
@@ -461,9 +447,6 @@ const AdminRoomsPage = () => {
           </div>
         )}
 
-        {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
-
-        {/* Vista Desktop - Tabla */}
         <div className="hidden lg:block overflow-x-auto shadow-xl rounded-lg">
           <table className="min-w-full bg-white">
             <thead>
@@ -489,7 +472,6 @@ const AdminRoomsPage = () => {
                       {room.name}
                     </td>
 
-                    {/* Imagen */}
                     <td className="py-3 px-4 border-b text-center">
                       {room.imagePath ? (
                         <img
@@ -505,7 +487,6 @@ const AdminRoomsPage = () => {
                       )}
                     </td>
 
-                    {/* Botón de datos */}
                     <td className="py-3 px-4 border-b text-center">
                       <button
                         onClick={() => handleShowData(room)}
@@ -520,7 +501,6 @@ const AdminRoomsPage = () => {
                       {room.capacity}
                     </td>
 
-                    {/* Costo */}
                     <td className="py-3 px-4 border-b text-center">
                       <div className="flex items-center justify-center">
                         <FaDollarSign
@@ -533,7 +513,6 @@ const AdminRoomsPage = () => {
                       </div>
                     </td>
 
-                    {/* Dependencia */}
                     <td className="py-3 px-4 border-b text-center">
                       <div className="flex items-center justify-center">
                         <span className="text-sm text-gray-700">
@@ -546,7 +525,6 @@ const AdminRoomsPage = () => {
                       {room.staffowner}
                     </td>
 
-                    {/* Opciones (menú desplegable) */}
                     <td className="py-3 px-4 border-b text-center">
                       <ActionMenu room={room} index={index} />
                     </td>
@@ -575,7 +553,6 @@ const AdminRoomsPage = () => {
           </table>
         </div>
 
-        {/* Vista Mobile - Cards */}
         <div className="lg:hidden space-y-4">
           {filteredRooms.length > 0 ? (
             filteredRooms.map((room, index) => (
@@ -583,7 +560,6 @@ const AdminRoomsPage = () => {
                 key={room.id}
                 className="bg-white rounded-lg shadow-md border border-gray-200 p-4 relative"
               >
-                {/* Header */}
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex-1 pr-2">
                     <h3 className="font-bold text-lg text-gray-800 mb-1">
@@ -605,12 +581,10 @@ const AdminRoomsPage = () => {
                       <span>{formatCost(room.cost)}</span>
                     </div>
 
-                    {/* Menú de opciones */}
                     <ActionMenu room={room} index={index} />
                   </div>
                 </div>
 
-                {/* Imagen */}
                 {room.imagePath && (
                   <div className="mb-3">
                     <img
@@ -622,7 +596,6 @@ const AdminRoomsPage = () => {
                   </div>
                 )}
 
-                {/* Información básica */}
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <div className="flex items-center text-sm text-gray-600">
                     <FaUsers className="mr-2 text-green-500" size={14} />
@@ -634,7 +607,6 @@ const AdminRoomsPage = () => {
                   </div>
                 </div>
 
-                {/* Botón de datos */}
                 <div className="mb-3">
                   <button
                     onClick={() => handleShowData(room)}
@@ -645,7 +617,6 @@ const AdminRoomsPage = () => {
                   </button>
                 </div>
 
-                {/* Botones de acción principales */}
                 <div className="flex space-x-2">
                   <button
                     onClick={() => handleOpenUpdateModal(room)}
@@ -675,7 +646,6 @@ const AdminRoomsPage = () => {
       </div>
       <Footer />
 
-      {/* MODAL DE DATOS */}
       {showDataModal && selectedRoomData && (
         <RenderModal onClose={handleCloseDataModal}>
           <div className="p-5 border-b border-gray-200">
@@ -685,7 +655,6 @@ const AdminRoomsPage = () => {
           </div>
           <div className="flex-1 p-5 overflow-y-auto max-h-[70vh]">
             <div className="space-y-4">
-              {/* Descripción */}
               <div>
                 <h3 className="font-medium text-gray-700 mb-2">Descripción:</h3>
                 <div className="bg-gray-50 rounded-lg p-4">
@@ -696,7 +665,6 @@ const AdminRoomsPage = () => {
                 </div>
               </div>
 
-              {/* Ubicación y CUC */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <h3 className="font-medium text-gray-700 mb-2">Ubicación:</h3>
@@ -722,7 +690,6 @@ const AdminRoomsPage = () => {
                 </div>
               </div>
 
-              {/* Costo */}
               <div>
                 <h3 className="font-medium text-gray-700 mb-2">Costo:</h3>
                 <div className="bg-green-50 rounded-lg p-3">
@@ -735,7 +702,6 @@ const AdminRoomsPage = () => {
                 </div>
               </div>
 
-              {/* Características del espacio */}
               <div>
                 <h3 className="font-medium text-gray-700 mb-2">
                   Características:
@@ -753,7 +719,6 @@ const AdminRoomsPage = () => {
                 </div>
               </div>
 
-              {/* Métodos de pago */}
               <div>
                 <h3 className="font-medium text-gray-700 mb-2">
                   Métodos de Pago Aceptados:
@@ -771,7 +736,6 @@ const AdminRoomsPage = () => {
                 </div>
               </div>
 
-              {/* Información adicional */}
               <div>
                 <h3 className="font-medium text-gray-700 mb-2">
                   Información Adicional:
@@ -812,7 +776,6 @@ const AdminRoomsPage = () => {
         </RenderModal>
       )}
 
-      {/* MODAL DE IMAGEN */}
       {showImageModal && (
         <RenderModal onClose={handleCloseImageModal}>
           <div className="p-5 border-b border-gray-200">
@@ -838,13 +801,11 @@ const AdminRoomsPage = () => {
         </RenderModal>
       )}
 
-      {/* MODALES DE DEPENDENCIAS, CREACIÓN Y ACTUALIZACIÓN */}
       {showManageDepsModal && (
         <ManageDependenciesModal
           isOpen={showManageDepsModal}
           onClose={() => {
             setShowManageDepsModal(false);
-            fetchRooms();
           }}
         />
       )}
@@ -855,7 +816,6 @@ const AdminRoomsPage = () => {
           onClose={() => setShowCreateRoomModal(false)}
           onRoomCreated={() => {
             setShowCreateRoomModal(false);
-            fetchRooms();
           }}
         />
       )}
@@ -871,7 +831,6 @@ const AdminRoomsPage = () => {
           onRoomUpdated={() => {
             setShowUpdateRoomModal(false);
             setSelectedRoom(null);
-            fetchRooms();
           }}
         />
       )}

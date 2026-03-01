@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import axiosInstance from '../axiosConfig';
 
-export const usePendingReservations = () => {
+export const usePendingReservations = ({ enabled = true } = {}) => {
   const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -10,7 +10,8 @@ export const usePendingReservations = () => {
 
   useEffect(() => {
     const fetchPendingCount = async () => {
-      if (!['admin', 'coordinator'].includes(role)) {
+      // Verificar si debe ejecutarse según el prop enabled y el rol
+      if (!enabled || !['admin', 'coordinator'].includes(role)) {
         return;
       }
 
@@ -31,7 +32,7 @@ export const usePendingReservations = () => {
 
     const timer = setTimeout(fetchPendingCount, 300);
     return () => clearTimeout(timer);
-  }, [role]);
+  }, [role, enabled]); // Añadir enabled a las dependencias
 
   return { pendingCount, loading, error };
 };

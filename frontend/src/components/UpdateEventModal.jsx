@@ -1,6 +1,12 @@
-// components/UpdateEventModal.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axiosInstance from '../axiosConfig';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  fetchRooms,
+  selectRooms,
+  selectRoomsLoading,
+  selectRoomsLastFetched,
+} from '../features/rooms/roomsSlice';
 import Swal from 'sweetalert2';
 import {
   FaCalendarAlt,
@@ -11,9 +17,6 @@ import {
   FaUser,
   FaFileImage,
   FaClipboardCheck,
-  FaSyncAlt,
-  FaTimes,
-  FaCalendar,
   FaInfoCircle,
 } from 'react-icons/fa';
 import getMediaUrl from '../utils/media';
@@ -27,8 +30,11 @@ const formatDateForInput = dateString => {
 };
 
 const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
-  const [rooms, setRooms] = useState([]);
-  const [loadingRooms, setLoadingRooms] = useState(false);
+  const dispatch = useDispatch();
+  const rooms = useSelector(selectRooms);
+  const loadingRooms = useSelector(selectRoomsLoading);
+  const roomsLastFetched = useSelector(selectRoomsLastFetched);
+
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -46,8 +52,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
     imageFile: null,
     paymentMethod: '',
   });
-
-  // Configuración de recurrencia para actualización
+  // ... (el resto del estado local se mantiene igual)
   const [recurrenceConfig, setRecurrenceConfig] = useState({
     active: false,
     frequency: 'weekly',
@@ -56,7 +61,6 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
   });
 
   const [schedules, setSchedules] = useState([]);
-  // Determina si el evento es recurrente (puede venir del backend o por múltiples schedules)
   const isRecurrent = Boolean(
     (event &&
       (event.periodicity ||
@@ -69,12 +73,10 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
   const [imagePreview, setImagePreview] = useState(null);
   const [activeSection, setActiveSection] = useState('basic');
 
-  // Referencias para controlar la generación de horarios
   const previousSchedulesHashRef = useRef('');
   const isFirstGenerationRef = useRef(true);
   const lastChangeWasManualRef = useRef(false);
 
-  // Días de la semana para selección
   const weekDays = [
     { id: 0, label: 'Dom', name: 'Domingo' },
     { id: 1, label: 'Lun', name: 'Lunes' },
@@ -85,9 +87,9 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
     { id: 6, label: 'Sáb', name: 'Sábado' },
   ];
 
-  // Inicializar el formulario cuando se abre el modal
   useEffect(() => {
     if (event && isOpen) {
+      // ... (inicialización de formData y schedules)
       setFormData({
         name: event.name || '',
         description: event.description || '',
@@ -106,7 +108,6 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
       });
       setImagePreview(event.imagePath ? getMediaUrl(event.imagePath) : null);
 
-      // Inicializar schedules con el evento actual
       if (
         event.schedules &&
         Array.isArray(event.schedules) &&
@@ -155,28 +156,11 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
         ]);
       }
 
-      fetchRooms();
+      if (!roomsLastFetched) {
+        dispatch(fetchRooms());
+      }
     }
-  }, [event, isOpen]);
-
-  const fetchRooms = async () => {
-    setLoadingRooms(true);
-    try {
-      // cargar lista de salas
-      const response = await axiosInstance.get('/rooms');
-      setRooms(response.data || []);
-    } catch (error) {
-      console.error('Error al cargar las salas:', error);
-      Swal.fire({
-        title: 'Error',
-        text: 'No se pudieron cargar las salas disponibles',
-        icon: 'error',
-        confirmButtonColor: '#3085d6',
-      });
-    } finally {
-      setLoadingRooms(false);
-    }
-  };
+  }, [event, isOpen, dispatch, roomsLastFetched]);
 
   // Función para generar un hash simple de los horarios para comparación
   const generateSchedulesHash = schedulesArray => {

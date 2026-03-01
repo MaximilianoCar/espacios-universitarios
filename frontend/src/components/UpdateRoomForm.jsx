@@ -1,15 +1,28 @@
+// src/components/UpdateRoomForm.jsx (versión mejorada con imagen)
 import React, { useState } from 'react';
 import axiosInstance from '../axiosConfig';
 import Swal from 'sweetalert2';
+import { useDispatch } from 'react-redux';
+import { updateRoom as updateRoomThunk } from '../features/rooms/roomsSlice';
 
 const UpdateRoomForm = ({ room, onRoomSaved, onClose }) => {
   const [formData, setFormData] = useState({ ...room });
+  const [imageFile, setImageFile] = useState(null);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const dispatch = useDispatch();
 
   const handleChange = e => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    const { name, value, type, checked } = e.target;
+    if (type === 'checkbox') {
+      setFormData({ ...formData, [name]: checked });
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
+  };
+
+  const handleImageChange = e => {
+    setImageFile(e.target.files[0]);
   };
 
   const handleSubmit = async e => {
@@ -59,7 +72,33 @@ const UpdateRoomForm = ({ room, onRoomSaved, onClose }) => {
     });
 
     try {
-      const response = await axiosInstance.put(`/rooms/${room.id}`, formData);
+      // Crear FormData si hay imagen, sino usar objeto normal
+      let payload;
+      let isFormData = false;
+
+      if (imageFile) {
+        isFormData = true;
+        payload = new FormData();
+
+        // Agregar todos los campos al FormData
+        Object.keys(formData).forEach(key => {
+          const value = formData[key];
+          if (typeof value === 'boolean') {
+            payload.append(key, value ? 'true' : 'false');
+          } else {
+            payload.append(key, value);
+          }
+        });
+
+        // Agregar la imagen
+        payload.append('image', imageFile);
+      } else {
+        payload = formData;
+      }
+
+      const response = await dispatch(
+        updateRoomThunk({ id: room.id, data: payload })
+      ).unwrap();
 
       // Cerrar modal de carga
       Swal.close();
@@ -73,7 +112,7 @@ const UpdateRoomForm = ({ room, onRoomSaved, onClose }) => {
       });
 
       // Llamar a la función del padre para actualizar la lista y cerrar el modal
-      onRoomSaved(response.data);
+      onRoomSaved(response);
     } catch (error) {
       console.error('Error updating room:', error);
 
@@ -201,6 +240,84 @@ const UpdateRoomForm = ({ room, onRoomSaved, onClose }) => {
           />
         </div>
 
+        {/* Checkboxes para características */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              name="isAccessible"
+              id="isAccessible"
+              checked={formData.isAccessible}
+              onChange={handleChange}
+              className="h-4 w-4"
+              disabled={isSubmitting}
+            />
+            <label htmlFor="isAccessible" className="ml-2 text-sm">
+              Accesible
+            </label>
+          </div>
+
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              name="hasInternet"
+              id="hasInternet"
+              checked={formData.hasInternet}
+              onChange={handleChange}
+              className="h-4 w-4"
+              disabled={isSubmitting}
+            />
+            <label htmlFor="hasInternet" className="ml-2 text-sm">
+              Tiene Internet
+            </label>
+          </div>
+
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              name="hasBathrooms"
+              id="hasBathrooms"
+              checked={formData.hasBathrooms}
+              onChange={handleChange}
+              className="h-4 w-4"
+              disabled={isSubmitting}
+            />
+            <label htmlFor="hasBathrooms" className="ml-2 text-sm">
+              Tiene Baños
+            </label>
+          </div>
+
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              name="hasAudioEquipment"
+              id="hasAudioEquipment"
+              checked={formData.hasAudioEquipment}
+              onChange={handleChange}
+              className="h-4 w-4"
+              disabled={isSubmitting}
+            />
+            <label htmlFor="hasAudioEquipment" className="ml-2 text-sm">
+              Equipo de Audio
+            </label>
+          </div>
+
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              name="hasVideoEquipment"
+              id="hasVideoEquipment"
+              checked={formData.hasVideoEquipment}
+              onChange={handleChange}
+              className="h-4 w-4"
+              disabled={isSubmitting}
+            />
+            <label htmlFor="hasVideoEquipment" className="ml-2 text-sm">
+              Equipo de Video
+            </label>
+          </div>
+        </div>
+
         <div>
           <label className="block font-semibold text-gray-700 mb-2">
             ¿Ubicado en la Ciudad Universitaria de Caracas? *
@@ -231,6 +348,25 @@ const UpdateRoomForm = ({ room, onRoomSaved, onClose }) => {
             required
             disabled={isSubmitting}
           />
+        </div>
+
+        {/* Campo para subir imagen */}
+        <div>
+          <label className="block font-semibold text-gray-700 mb-2">
+            Imagen del Espacio
+          </label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleImageChange}
+            className="w-full disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isSubmitting}
+          />
+          {room.imagePath && (
+            <p className="text-sm text-gray-500 mt-1">
+              Imagen actual: {room.imagePath.split('/').pop()}
+            </p>
+          )}
         </div>
 
         {/* Botones de acción */}

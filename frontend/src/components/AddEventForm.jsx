@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import axiosInstance from '../axiosConfig';
 import Swal from '../utils/swal';
 import {
@@ -17,13 +17,8 @@ import {
 import {
   FaArrowLeft,
   FaCalendarAlt,
-  FaUsers,
-  FaDollarSign,
-  FaFileAlt,
-  FaFileImage,
   FaSyncAlt,
   FaTimes,
-  FaClipboardCheck,
   FaCalendar,
 } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -412,6 +407,17 @@ const AddEventForm = ({ onEventCreated }) => {
     recurrenceConfig,
   ]);
 
+  // Si cambia la fecha de inicio y la recurrencia está activa, ajustar el día
+  useEffect(() => {
+    if (recurrenceConfig.active && formData.eventFrom) {
+      const day = new Date(formData.eventFrom).getDay();
+      setRecurrenceConfig(prev => ({
+        ...prev,
+        daysOfWeek: [day],
+      }));
+    }
+  }, [formData.eventFrom, recurrenceConfig.active]);
+
   // Efecto para generar horarios cuando cambian las fechas o recurrencia
   useEffect(() => {
     if (formData.eventFrom && formData.eventTo) {
@@ -478,6 +484,7 @@ const AddEventForm = ({ onEventCreated }) => {
     formData.eventTo,
     generateRecurringSchedules,
     schedules.length,
+    recurrenceConfig,
   ]);
 
   const handleBack = () => {
@@ -488,7 +495,6 @@ const AddEventForm = ({ onEventCreated }) => {
     }
   };
 
-  // CORREGIDO: Función handleChange optimizada para evitar pérdida de foco
   const handleChange = useCallback(
     e => {
       const { name, value, type, files } = e.target;
@@ -526,7 +532,6 @@ const AddEventForm = ({ onEventCreated }) => {
     [errors]
   ); // Solo depende de errors
 
-  // CORREGIDO: Efecto separado para manejar cambios en roomId
   useEffect(() => {
     if (formData.roomId) {
       const selectedRoom = rooms.find(room => room.id == formData.roomId);
@@ -544,11 +549,37 @@ const AddEventForm = ({ onEventCreated }) => {
   }, [formData.roomId, rooms]);
 
   const handleRecurrenceChange = (field, value) => {
-    // Para cambios en recurrencia, no marcar como manual
-    setRecurrenceConfig(prev => ({
-      ...prev,
-      [field]: value,
-    }));
+    if (field === 'active') {
+      if (value) {
+        // Al activar, si hay fecha de inicio, fijar el día correspondiente
+        if (!formData.eventFrom) {
+          Swal.fire({
+            title: 'Fechas requeridas',
+            text: 'Primero selecciona la fecha de inicio del evento para activar la recurrencia.',
+            icon: 'warning',
+          });
+          return;
+        }
+        const day = new Date(formData.eventFrom).getDay();
+        setRecurrenceConfig({
+          active: true,
+          frequency: 'weekly',
+          daysOfWeek: [day],
+          repeatUntil: recurrenceConfig.repeatUntil, // mantener el valor actual si existe
+        });
+      } else {
+        setRecurrenceConfig({
+          active: false,
+          frequency: 'weekly',
+          daysOfWeek: [],
+          repeatUntil: '',
+        });
+      }
+      return;
+    }
+
+    // Para otros campos (repeatUntil)
+    setRecurrenceConfig(prev => ({ ...prev, [field]: value }));
   };
 
   const toggleDaySelection = dayId => {
@@ -1053,7 +1084,7 @@ const AddEventForm = ({ onEventCreated }) => {
       data.append('schedules', JSON.stringify(schedulesToSend));
     }
 
-    // Agregar status por defecto
+    // Agregar status por defecto (pending para usuarios)
     data.append('status', 'pending');
     // Agregar método de pago si fue seleccionado
     if (formData.paymentMethod) {
@@ -1222,15 +1253,6 @@ const AddEventForm = ({ onEventCreated }) => {
           newErrors.eventTo = 'La fecha de fin es requerida.';
           currentSectionValid = false;
         }
-        //if (!formData.reservationFrom) {
-        //  newErrors.reservationFrom =
-        //    'La fecha de inicio de reserva es requerida.';
-        //  currentSectionValid = false;
-        //}
-        //if (!formData.reservationTo) {
-        //  newErrors.reservationTo = 'La fecha de fin de reserva es requerida.';
-        //  currentSectionValid = false;
-        //}
         break;
       case 3: // Recurrencia
         // La validación de recurrencia se hace en validate()
@@ -1840,7 +1862,6 @@ const AddEventForm = ({ onEventCreated }) => {
           </div>
         )}
 
-        {/* Sección 4: Recurrencia - MEJORADO para móvil */}
         {/* Sección 4: Recurrencia - MEJORADO para móvil con estilos del modal */}
         {activeSection === 3 && (
           <div className="space-y-4 sm:space-y-6">
@@ -1936,8 +1957,8 @@ const AddEventForm = ({ onEventCreated }) => {
                           }}
                           className="sr-only peer"
                           disabled={
-                            formData.eventFrom &&
-                            formData.eventTo &&
+                            !formData.eventFrom ||
+                            !formData.eventTo ||
                             (() => {
                               const eventFrom = new Date(formData.eventFrom);
                               const eventTo = new Date(formData.eventTo);
@@ -1952,8 +1973,8 @@ const AddEventForm = ({ onEventCreated }) => {
                         />
                         <div
                           className={`w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 ${
-                            formData.eventFrom &&
-                            formData.eventTo &&
+                            !formData.eventFrom ||
+                            !formData.eventTo ||
                             (() => {
                               const eventFrom = new Date(formData.eventFrom);
                               const eventTo = new Date(formData.eventTo);

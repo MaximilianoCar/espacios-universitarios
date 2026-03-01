@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import axiosInstance from '../axiosConfig';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  deleteRoom as deleteRoomThunk,
+  updateRoom as updateRoomThunk,
+} from '../features/rooms/roomsSlice';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import HeroSection from '../components/HeroSection';
@@ -31,6 +35,7 @@ const RoomDetailsPage = () => {
   const { role, user } = useSelector(state => state.auth);
   const navigate = useNavigate();
   const location = useLocation();
+  const dispatch = useDispatch();
 
   // Verificar permisos de coordinador
   const canEdit =
@@ -83,7 +88,7 @@ const RoomDetailsPage = () => {
       cancelButtonColor: '#3085d6',
       confirmButtonText: 'Sí, eliminar',
       cancelButtonText: 'Cancelar',
-    }).then(result => {
+    }).then(async result => {
       if (result.isConfirmed) {
         Swal.fire({
           title: 'Eliminando sala...',
@@ -91,27 +96,27 @@ const RoomDetailsPage = () => {
           didOpen: () => Swal.showLoading(),
         });
 
-        axiosInstance
-          .delete(`/rooms/${room.id}`)
-          .then(() => {
-            Swal.fire({
-              title: '¡Eliminada!',
-              text: `La sala "${room.name}" ha sido eliminada exitosamente.`,
-              icon: 'success',
-              confirmButtonColor: '#3085d6',
-            }).then(() => {
-              navigate('/rooms');
-            });
-          })
-          .catch(error => {
-            console.error('Error deleting room:', error);
-            Swal.fire({
-              title: 'Error',
-              text: 'Error al eliminar la sala. Por favor, intente nuevamente.',
-              icon: 'error',
-              confirmButtonColor: '#d33',
-            });
+        try {
+          await dispatch(deleteRoomThunk(room.id)).unwrap();
+          Swal.fire({
+            title: '¡Eliminada!',
+            text: `La sala "${room.name}" ha sido eliminada exitosamente.`,
+            icon: 'success',
+            confirmButtonColor: '#3085d6',
+          }).then(() => {
+            navigate('/rooms');
           });
+        } catch (error) {
+          console.error('Error deleting room:', error);
+          Swal.fire({
+            title: 'Error',
+            text:
+              error.message ||
+              'Error al eliminar la sala. Por favor, intente nuevamente.',
+            icon: 'error',
+            confirmButtonColor: '#d33',
+          });
+        }
       }
     });
   };
@@ -124,7 +129,6 @@ const RoomDetailsPage = () => {
       const file = e.target.files[0];
       if (!file) return;
 
-      // Validar tamaño del archivo (máximo 5MB)
       if (file.size > 5 * 1024 * 1024) {
         Swal.fire({
           title: 'Error',
@@ -137,23 +141,21 @@ const RoomDetailsPage = () => {
 
       const formData = new FormData();
       formData.append('image', file);
-
-      // Agregar los demás campos del room para no perderlos
-      formData.append('name', room.name);
-      formData.append('description', room.description);
-      formData.append('capacity', room.capacity);
-      formData.append('location', room.location);
-      formData.append('staffowner', room.staffowner);
-      formData.append('isInCUC', room.isInCUC);
-      formData.append('cost', room.cost || '0');
-      formData.append('isAccessible', room.isAccessible || false);
-      formData.append('canExonerate', room.canExonerate || false);
-      formData.append('hasBathrooms', room.hasBathrooms || false);
-      formData.append('hasInternet', room.hasInternet || false);
-      formData.append('hasAudioEquipment', room.hasAudioEquipment || false);
-      formData.append('hasVideoEquipment', room.hasVideoEquipment || false);
-      formData.append('acceptsTransfer', room.acceptsTransfer || false);
-      formData.append('acceptsMaterials', room.acceptsMaterials || false);
+      Object.keys(room).forEach(key => {
+        if (
+          key !== 'imagePath' &&
+          room[key] !== null &&
+          room[key] !== undefined
+        ) {
+          if (typeof room[key] === 'boolean') {
+            formData.append(key, room[key].toString());
+          } else if (typeof room[key] === 'object' && room[key] !== null) {
+            // No adjuntar objetos complejos como dependencias, etc.
+          } else {
+            formData.append(key, room[key]);
+          }
+        }
+      });
 
       Swal.fire({
         title: 'Subiendo imagen...',
@@ -162,13 +164,9 @@ const RoomDetailsPage = () => {
       });
 
       try {
-        const response = await axiosInstance.put(
-          `/rooms/${room.id}`,
-          formData,
-          {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          }
-        );
+        const response = await dispatch(
+          updateRoomThunk({ id: room.id, data: formData })
+        ).unwrap();
 
         Swal.close();
         Swal.fire({
@@ -177,13 +175,13 @@ const RoomDetailsPage = () => {
           icon: 'success',
           confirmButtonColor: '#3085d6',
         });
-        setRoom(response.data);
+        setRoom(response);
       } catch (err) {
         Swal.close();
         console.error(err);
         Swal.fire({
           title: 'Error',
-          text: 'No se pudo actualizar la imagen.',
+          text: err.message || 'No se pudo actualizar la imagen.',
           icon: 'error',
           confirmButtonColor: '#d33',
         });
@@ -297,7 +295,6 @@ const RoomDetailsPage = () => {
         title: 'Actualizar Sala',
         html: `
           <div class="text-left space-y-4 max-h-[80vh] overflow-y-auto pr-2">
-            <!-- Sección de información básica -->
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Nombre de la Sala</label>
@@ -450,85 +447,7 @@ const RoomDetailsPage = () => {
         cancelButtonColor: '#d33',
         width: '800px',
         focusConfirm: false,
-        didOpen: () => {
-          const addBtn = document.getElementById('swal-add-dep');
-          if (addBtn) {
-            addBtn.addEventListener('click', async () => {
-              const { value: depName } = await Swal.fire({
-                title: 'Nueva Dependencia',
-                input: 'text',
-                inputLabel: 'Nombre',
-                inputValidator: value =>
-                  !value ? 'El nombre es requerido' : null,
-                showCancelButton: true,
-              });
-
-              if (depName) {
-                const { value: depDesc } = await Swal.fire({
-                  title: 'Descripción (opcional)',
-                  input: 'textarea',
-                  showCancelButton: true,
-                });
-
-                try {
-                  const res = await axiosInstance.post('/dependencies', {
-                    name: depName,
-                    description: depDesc,
-                  });
-                  // agregar opción al select
-                  const sel = document.getElementById('swal-dependency');
-                  if (sel) {
-                    const opt = document.createElement('option');
-                    opt.value = res.data.id;
-                    opt.text = res.data.name;
-                    sel.appendChild(opt);
-                    sel.value = res.data.id;
-                  }
-                  Swal.fire({
-                    title: '¡Creada!',
-                    text: 'Dependencia creada.',
-                    icon: 'success',
-                  });
-                } catch (err) {
-                  console.error('Error creating dependency', err);
-                  Swal.fire({
-                    title: 'Error',
-                    text:
-                      err.response?.data?.error ||
-                      'No se pudo crear la dependencia',
-                    icon: 'error',
-                  });
-                }
-              }
-            });
-          }
-
-          // Validación en tiempo real de métodos de pago
-          const transferCheckbox = document.getElementById(
-            'swal-acceptsTransfer'
-          );
-          const materialsCheckbox = document.getElementById(
-            'swal-acceptsMaterials'
-          );
-          const validationMessage =
-            document.getElementById('payment-validation');
-
-          const validatePaymentMethods = () => {
-            const hasTransfer = transferCheckbox.checked;
-            const hasMaterials = materialsCheckbox.checked;
-
-            if (!hasTransfer && !hasMaterials) {
-              validationMessage.classList.remove('hidden');
-              return false;
-            } else {
-              validationMessage.classList.add('hidden');
-              return true;
-            }
-          };
-
-          transferCheckbox.addEventListener('change', validatePaymentMethods);
-          materialsCheckbox.addEventListener('change', validatePaymentMethods);
-        },
+        didOpen: () => {},
         preConfirm: () => {
           const name = document.getElementById('swal-name').value;
           const description = document.getElementById('swal-description').value;
@@ -581,7 +500,6 @@ const RoomDetailsPage = () => {
             return false;
           }
 
-          // Validar que al menos un método de pago esté seleccionado
           if (!acceptsTransfer && !acceptsMaterials) {
             Swal.showValidationMessage(
               'Debe seleccionar al menos un método de pago'
@@ -589,7 +507,6 @@ const RoomDetailsPage = () => {
             return false;
           }
 
-          // Validar costo (opcional, pero si se ingresa debe ser numérico)
           if (cost && isNaN(parseFloat(cost))) {
             Swal.showValidationMessage('El costo debe ser un número válido');
             return false;
@@ -623,18 +540,20 @@ const RoomDetailsPage = () => {
           didOpen: () => Swal.showLoading(),
         });
         try {
-          const resp = await axiosInstance.put(`/rooms/${room.id}`, formValues);
+          const resp = await dispatch(
+            updateRoomThunk({ id: room.id, data: formValues })
+          ).unwrap();
           Swal.fire({
             title: '¡Actualizada!',
             text: 'La sala ha sido actualizada exitosamente.',
             icon: 'success',
             confirmButtonColor: '#3085d6',
           });
-          setRoom(resp.data);
+          setRoom(resp);
         } catch (error) {
           console.error('Error updating room:', error);
           const msg =
-            error.response?.data?.error ||
+            error.message ||
             'Error al actualizar la sala. Por favor, intente nuevamente.';
           Swal.fire({
             title: 'Error',

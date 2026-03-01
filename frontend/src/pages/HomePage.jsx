@@ -49,14 +49,26 @@ const HomePage = () => {
   // Estado para detectar si es móvil
   const [isMobile, setIsMobile] = useState(false);
 
-  // hook para obtener las reservas pendientes
-  const { pendingCount, loading: pendingLoading } = usePendingReservations();
+  // Determinar qué hooks deben ejecutarse según el rol
+  const shouldFetchPendingReservations =
+    role === 'admin' || role === 'coordinator';
+  const shouldFetchPendingUsers = role === 'admin';
+  const shouldFetchEventsCount = role === 'requester';
 
-  // hook para obtener usuarios pendientes
-  const { pendingUsersCount, loading: pendingUsersLoading } = usePendingUsers();
+  // hook para obtener las reservas pendientes (solo para admin y coordinator)
+  const { pendingCount, loading: pendingLoading } = usePendingReservations({
+    enabled: shouldFetchPendingReservations,
+  });
 
-  // hook para obtener conteo de eventos del usuario
-  const { eventsCount, loading: eventsLoading } = useUserEventsCount();
+  // hook para obtener usuarios pendientes (solo para admin)
+  const { pendingUsersCount, loading: pendingUsersLoading } = usePendingUsers({
+    enabled: shouldFetchPendingUsers,
+  });
+
+  // hook para obtener conteo de eventos del usuario (solo para requester)
+  const { eventsCount, loading: eventsLoading } = useUserEventsCount({
+    enabled: shouldFetchEventsCount,
+  });
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -67,7 +79,7 @@ const HomePage = () => {
   // Detectar si es móvil al cargar y al cambiar tamaño
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768); // 768px es el breakpoint 'md' de Tailwind
+      setIsMobile(window.innerWidth < 768);
     };
 
     // Verificar al cargar
@@ -91,7 +103,6 @@ const HomePage = () => {
   const handleUpgradeSuccess = () => {
     // Actualizar el estado de Redux inmediatamente
     dispatch(updateUserRole({ role: 'pending' }));
-    //console.log(role);
     setShowRequestUpgradeModal(false);
 
     Swal.fire({
@@ -111,9 +122,6 @@ const HomePage = () => {
       text: 'Tu información como usuario externo ha sido actualizada correctamente.',
       icon: 'success',
       timer: 3000,
-    }).then(() => {
-      // Después de completar la información, mostrar el modal de solicitud para ser requester
-      //setShowRequestUpgradeModal(true);
     });
   };
 
@@ -188,9 +196,9 @@ const HomePage = () => {
         link="/my-reservations"
         icon={<MagnifyingGlassIcon className="w-12 h-12 text-blue-500" />}
         showMultipleBadges={true}
-        approvedCount={eventsCount.approved}
-        deniedCount={eventsCount.denied}
-        pendingCount={eventsCount.pending}
+        approvedCount={eventsCount?.approved || 0}
+        deniedCount={eventsCount?.denied || 0}
+        pendingCount={eventsCount?.pending || 0}
       />
     </>
   );

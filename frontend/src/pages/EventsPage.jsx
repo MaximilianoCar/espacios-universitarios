@@ -1,6 +1,13 @@
 // src/pages/EventsPage.jsx
 import React, { useEffect, useState, useMemo } from 'react';
 import axiosInstance from '../axiosConfig';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  fetchEvents,
+  selectEvents,
+  selectEventsLoading,
+  selectEventsLastFetched,
+} from '../features/events/eventsSlice';
 import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -23,9 +30,22 @@ import ModalCalendar from '../components/ModalCalendar.jsx';
 import ModalMobile from '../components/ModalMobile';
 
 const EventsPage = () => {
-  const [events, setEvents] = useState([]);
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Redux state
+  const reduxEvents = useSelector(selectEvents);
+  const reduxLoading = useSelector(selectEventsLoading);
+  const eventsLastFetched = useSelector(selectEventsLastFetched);
+  const { role } = useSelector(state => state.auth);
+
+  // Local state for admin/coordinator
+  const [localEvents, setLocalEvents] = useState([]);
+  const [localLoading, setLocalLoading] = useState(false);
+
+  // Unified state
   const [filteredEvents, setFilteredEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [calendarDate, setCalendarDate] = useState(() => {
     const d = new Date();
@@ -33,8 +53,8 @@ const EventsPage = () => {
   });
   const [selectedDay, setSelectedDay] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
+
+  const isAdminOrCoordinator = role === 'admin' || role === 'coordinator';
 
   const handleBack = () => {
     if (location.key !== 'default') {
@@ -44,22 +64,34 @@ const EventsPage = () => {
     }
   };
 
-  // Obtener eventos de la API y filtrar solo los eventos aprobados
   useEffect(() => {
-    axiosInstance
-      .get('/events')
-      .then(response => {
-        const approvedEvents = response.data;
-        console.log('Approved Events:', approvedEvents);
-        setEvents(approvedEvents);
-        setFilteredEvents(approvedEvents);
-        setLoading(false);
-      })
-      .catch(error => {
-        console.error('Error fetching events:', error);
-        setLoading(false);
-      });
-  }, []);
+    if (isAdminOrCoordinator) {
+      setLocalLoading(true);
+      axiosInstance
+        .get('/events')
+        .then(response => {
+          setLocalEvents(response.data || []);
+        })
+        .catch(error => {
+          console.error('Error fetching events for admin:', error);
+        })
+        .finally(() => {
+          setLocalLoading(false);
+        });
+    } else {
+      const TEN_MINUTES = 10 * 60 * 1000;
+      if (!eventsLastFetched || Date.now() - eventsLastFetched > TEN_MINUTES) {
+        dispatch(fetchEvents());
+      }
+    }
+  }, [dispatch, eventsLastFetched, isAdminOrCoordinator]);
+
+  const events = isAdminOrCoordinator ? localEvents : reduxEvents;
+  const loading = isAdminOrCoordinator ? localLoading : reduxLoading;
+
+  useEffect(() => {
+    setFilteredEvents(events || []);
+  }, [events]);
 
   // Detectar tamaño de pantalla para elegir modal (Mobile vs Desktop)
   useEffect(() => {

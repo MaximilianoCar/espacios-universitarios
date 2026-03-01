@@ -1,6 +1,8 @@
 // src/components/AddRoomForm.jsx
 import React, { useState, useEffect } from 'react';
 import axiosInstance from '../axiosConfig';
+import { useDispatch } from 'react-redux';
+import { createRoom as createRoomThunk } from '../features/rooms/roomsSlice';
 import Swal from '../utils/swal';
 import {
   FaUsers,
@@ -42,6 +44,7 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
     name: '',
     description: '',
   });
+  const dispatch = useDispatch();
 
   const handleChange = e => {
     const { name, value, type, checked } = e.target;
@@ -139,32 +142,29 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
 
     try {
       const data = new FormData();
-      // Agregar los campos del formulario al FormData
+
+      // Los booleanos deben enviarse como strings 'true'/'false'
       Object.keys(formData).forEach(key => {
-        if (
-          key === 'isInCUC' ||
-          key.startsWith('is') ||
-          key.startsWith('has') ||
-          key.startsWith('can') ||
-          key.startsWith('accepts')
-        ) {
-          data.append(key, formData[key] ? 'true' : 'false');
+        const value = formData[key];
+        // Los checkboxes son booleanos, convertirlos a string
+        if (typeof value === 'boolean') {
+          data.append(key, value ? 'true' : 'false');
         } else {
-          data.append(key, formData[key]);
+          data.append(key, value);
         }
       });
+
       // agregar dependencyId
       data.append('dependencyId', selectedDependencyId);
+
       // Agregar el archivo de imagen
       if (imageFile) {
         data.append('image', imageFile);
+        console.log('Imagen agregada:', imageFile.name);
       }
 
-      const response = await axiosInstance.post('/rooms', data, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      // Dispatch thunk para que Redux cache update
+      const result = await dispatch(createRoomThunk(data)).unwrap();
 
       // Cerrar modal de carga
       Swal.close();
@@ -178,7 +178,7 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
       });
 
       // Llamar a la función del padre para actualizar la lista
-      onRoomCreated(response.data);
+      onRoomCreated(result);
     } catch (error) {
       console.error('Error al crear el espacio:', error);
 
