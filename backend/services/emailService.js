@@ -185,7 +185,7 @@ const emailTemplates = {
 
           <div style="padding: 30px 40px;">
             <p style="font-size: 16px; color: #444; line-height: 1.6;">
-              Hola <strong>${recipientName || ''}</strong>,
+              Hola,
             </p>
             <p style="font-size: 16px; color: #444; line-height: 1.6;">
               Se ha registrado tu participación en el siguiente evento:

@@ -77,6 +77,7 @@ const AdminReservationsPage = () => {
   const [selectedDescription, setSelectedDescription] = useState('');
   const [selectedSpecialRequirements, setSelectedSpecialRequirements] =
     useState('');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
   const [selectedCapacity, setSelectedCapacity] = useState(null);
   // para el modal de imagen
   const [selectedImage, setSelectedImage] = useState(null);
@@ -536,11 +537,13 @@ const AdminReservationsPage = () => {
   const handleShowDescription = (
     description,
     specialRequirements,
-    capacity
+    capacity,
+    paymentMethod
   ) => {
     setSelectedDescription(description);
     setSelectedSpecialRequirements(specialRequirements);
     setSelectedCapacity(capacity);
+    setSelectedPaymentMethod(paymentMethod);
     setShowDescriptionModal(true);
   };
 
@@ -548,6 +551,7 @@ const AdminReservationsPage = () => {
     setShowDescriptionModal(false);
     setSelectedDescription('');
     setSelectedSpecialRequirements('');
+    setSelectedPaymentMethod('');
     setSelectedCapacity(null);
   };
 
@@ -1214,7 +1218,8 @@ const AdminReservationsPage = () => {
                             handleShowDescription(
                               event.description,
                               event.specialRequirements,
-                              event.capacity
+                              event.capacity,
+                              event.paymentMethod
                             )
                           }
                           className="text-blue-600 hover:text-blue-800 transition-colors"
@@ -1433,7 +1438,8 @@ const AdminReservationsPage = () => {
                         handleShowDescription(
                           event.description,
                           event.specialRequirements,
-                          event.capacity
+                          event.capacity,
+                          event.paymentMethod
                         )
                       }
                       className="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
@@ -1746,7 +1752,23 @@ const AdminReservationsPage = () => {
                   )}
                 </div>
               </div>
-
+              {/* Método de Pago */}
+              <div className="bg-white rounded-md p-3 border border-blue-100">
+                <h3 className="text-sm font-semibold text-blue-800 mb-2 flex items-center">
+                  <FaDollarSign className="mr-2 text-green-500" size={14} />
+                  Método de Pago
+                </h3>
+                <div className="text-center py-1">
+                  <span className="text-xl text-green-600">
+                    {selectedPaymentMethod === 'transfer' && 'Transferencia'}
+                    {selectedPaymentMethod === 'materials' &&
+                      'Materiales de apoyo'}
+                    {selectedPaymentMethod === 'cash' && 'Efectivo'}
+                    {selectedPaymentMethod === 'exoneration' && 'Exoneración'}
+                    {!selectedPaymentMethod && 'No especificado'}
+                  </span>
+                </div>
+              </div>
               {/* Sección de Requerimientos Especiales */}
               <div className="border-t border-blue-200 pt-4">
                 <h3 className="text-sm font-semibold text-blue-800 mb-2">

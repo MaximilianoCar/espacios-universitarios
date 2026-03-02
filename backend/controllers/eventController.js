@@ -1005,6 +1005,7 @@ exports.getAllEvents = async (req, res) => {
         limit: pageSize,
         offset: offset,
         order: [['createdAt', 'DESC']],
+        subQuery: false,
       });
       events = result.rows;
       count = result.count;
@@ -1027,6 +1028,7 @@ exports.getAllEvents = async (req, res) => {
           limit: pageSize,
           offset: offset,
           order: [['createdAt', 'DESC']],
+          subQuery: false,
         });
         events = result.rows;
         count = result.count;

@@ -35,7 +35,7 @@ axiosInstance.interceptors.request.use(
   config => {
     const token = localStorage.getItem('token');
 
-    console.log('Token en interceptor:', token ? 'Presente' : 'Ausente');
+    //console.log('Token en interceptor:', token ? 'Presente' : 'Ausente');
 
     if (token) {
       // Verificar que el token tenga formato válido
