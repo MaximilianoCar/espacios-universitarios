@@ -1,105 +1,374 @@
-import React from 'react';
-import { useSelector } from 'react-redux';
+// src/pages/HomePage.jsx
+//import React from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+//import axiosInstance from '../axiosConfig';
 import { useNavigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import HeroSection from '../components/HeroSection';
+import Modal from '../components/Modal';
+import ModalMobile from '../components/ModalMobile';
+import RequestUpgradeForm from '../components/RequestUpgradeForm';
+import CompleteExternalUserForm from '../components/CompleteExternalUserForm';
+import MenuCard from '../components/MenuCard';
+import { usePendingReservations } from '../hooks/usePendingReservations';
+import { usePendingUsers } from '../hooks/usePendingUsers';
+import { useUserEventsCount } from '../hooks/useUserEventsCount';
+import { updateUserRole } from '../features/auth/authSlice';
+import Swal from '../utils/swal';
+
+//iconos
+import {
+  BuildingOfficeIcon,
+  DocumentTextIcon,
+  UsersIcon,
+  ClipboardDocumentListIcon,
+  CheckCircleIcon,
+  PencilIcon,
+  MagnifyingGlassIcon,
+  CalendarIcon,
+  KeyIcon,
+  ClockIcon,
+  UserCircleIcon,
+} from '@heroicons/react/24/outline';
 
 import backgroundImage from '../assets/ucvfondo.jpg';
 
 const HomePage = () => {
-  const { user, role, isAuthenticated } = useSelector(state => state.auth); // Obtener el usuario y su rol del estado global
-
+  const { user, role, isAuthenticated } = useSelector(state => state.auth);
   const navigate = useNavigate();
+  const dispatch = useDispatch();
+
+  // Estado para controlar el modal de solicitud de ascenso
+  const [showRequestUpgradeModal, setShowRequestUpgradeModal] = useState(false);
+  // Estado para controlar el modal de completar información de usuario externo
+  const [showCompleteExternalModal, setShowCompleteExternalModal] =
+    useState(false);
+
+  // Estado para detectar si es móvil
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Determinar qué hooks deben ejecutarse según el rol
+  const shouldFetchPendingReservations =
+    role === 'admin' || role === 'coordinator';
+  const shouldFetchPendingUsers = role === 'admin';
+  const shouldFetchEventsCount = role === 'requester';
+
+  // hook para obtener las reservas pendientes (solo para admin y coordinator)
+  const { pendingCount, loading: pendingLoading } = usePendingReservations({
+    enabled: shouldFetchPendingReservations,
+  });
+
+  // hook para obtener usuarios pendientes (solo para admin)
+  const { pendingUsersCount, loading: pendingUsersLoading } = usePendingUsers({
+    enabled: shouldFetchPendingUsers,
+  });
+
+  // hook para obtener conteo de eventos del usuario (solo para requester)
+  const { eventsCount, loading: eventsLoading } = useUserEventsCount({
+    enabled: shouldFetchEventsCount,
+  });
 
   useEffect(() => {
     if (!isAuthenticated) {
-      navigate('/login'); // Si no está autenticado, redirigir al login
+      navigate('/login');
     }
   }, [isAuthenticated, navigate]);
 
-  if (!role) {
-    // Mientras no se cargue el rol, muestra un indicador de carga o nada
-    return <div>Cargando...</div>;
+  // Detectar si es móvil al cargar y al cambiar tamaño
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    // Verificar al cargar
+    checkMobile();
+
+    // Agregar listener para cambios de tamaño
+    window.addEventListener('resize', checkMobile);
+
+    // Limpiar listener
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  if (!role || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      </div>
+    );
   }
 
+  const handleUpgradeSuccess = () => {
+    // Actualizar el estado de Redux inmediatamente
+    dispatch(updateUserRole({ role: 'pending' }));
+    setShowRequestUpgradeModal(false);
+
+    Swal.fire({
+      title: '¡Solicitud enviada!',
+      text: 'Tu solicitud ha sido enviada y está en revisión.',
+      icon: 'success',
+      timer: 3000,
+    });
+  };
+
+  const handleCompleteExternalSuccess = () => {
+    // Actualizar los datos del usuario
+    setShowCompleteExternalModal(false);
+    dispatch(updateUserRole({ role: 'pending' }));
+    Swal.fire({
+      title: '¡Información completada!',
+      text: 'Tu información como usuario externo ha sido actualizada correctamente.',
+      icon: 'success',
+      timer: 3000,
+    });
+  };
+
+  // --- Definición de Tarjetas por Rol ---
+
+  // ADMINISTRATOR
+  const AdminCards = (
+    <>
+      <MenuCard
+        title="Gestionar Espacios"
+        description="Configura y administra los espacios disponibles."
+        link="/admin/rooms"
+        icon={<BuildingOfficeIcon className="w-12 h-12 text-blue-500" />}
+      />
+      <MenuCard
+        title="Gestionar Reservas"
+        description="Revisa y gestiona las reservas de todos los usuarios."
+        link="/reservations"
+        icon={<DocumentTextIcon className="w-12 h-12 text-blue-500" />}
+        badgeCount={pendingCount}
+        badgeLoading={pendingLoading}
+      />
+      <MenuCard
+        title="Gestionar Usuarios"
+        description="Revisa y gestiona la lista de usuarios registrados."
+        link="/users"
+        icon={<UsersIcon className="w-12 h-12 text-blue-500" />}
+      />
+      <MenuCard
+        title="Gestionar Solicitudes de Usuarios"
+        description="Revisa las solicitudes pendientes y aprueba/rechaza."
+        link="/pending"
+        icon={<ClipboardDocumentListIcon className="w-12 h-12 text-blue-500" />}
+        badgeCount={pendingUsersCount}
+        badgeLoading={pendingUsersLoading}
+      />
+    </>
+  );
+
+  // COORDINATOR
+  const CoordinatorCards = (
+    <>
+      <MenuCard
+        title="Gestionar Espacios"
+        description="Configura y administra los espacios disponibles."
+        link="/admin/rooms"
+        icon={<BuildingOfficeIcon className="w-12 h-12 text-blue-500" />}
+      />
+      <MenuCard
+        title="Gestionar Reservas"
+        description="Revisa y gestiona las reservas de los usuarios en tu área."
+        link="/reservations"
+        icon={<CheckCircleIcon className="w-12 h-12 text-blue-500" />}
+        badgeCount={pendingCount}
+        badgeLoading={pendingLoading}
+      />
+    </>
+  );
+
+  // REQUESTER
+  const RequesterCards = (
+    <>
+      <MenuCard
+        title="Solicitar Reserva"
+        description="Solicita una reserva para tu evento."
+        link="/create-reservation"
+        icon={<PencilIcon className="w-12 h-12 text-blue-500" />}
+      />
+      <MenuCard
+        title="Consultar Mis Reservas"
+        description="Revisa las reservas que has realizado y su estado."
+        link="/my-reservations"
+        icon={<MagnifyingGlassIcon className="w-12 h-12 text-blue-500" />}
+        showMultipleBadges={true}
+        approvedCount={eventsCount?.approved || 0}
+        deniedCount={eventsCount?.denied || 0}
+        pendingCount={eventsCount?.pending || 0}
+      />
+    </>
+  );
+
+  // VISITOR - EXTERNO A LA UNIVERSIDAD (rol: externalvisitor)
+  const VisitorExternalCards = (
+    <>
+      <MenuCard
+        title="Eventos Próximos"
+        description="Explora los eventos y actividades programadas."
+        link="/events"
+        icon={<CalendarIcon className="w-12 h-12 text-blue-500" />}
+      />
+      <MenuCard
+        title="Completar Información"
+        description="Como usuario externo, necesitamos algunos datos adicionales para proceder."
+        onClick={() => setShowCompleteExternalModal(true)}
+        icon={<UserCircleIcon className="w-12 h-12 text-blue-500" />}
+        isButton={true}
+        disabled={false}
+      />
+    </>
+  );
+
+  // VISITOR - INTERNO A LA UNIVERSIDAD (rol: visitor)
+  const VisitorInternalCards = (
+    <>
+      <MenuCard
+        title="Eventos Próximos"
+        description="Explora los eventos y actividades programadas."
+        link="/events"
+        icon={<CalendarIcon className="w-12 h-12 text-blue-500" />}
+      />
+      <MenuCard
+        title="¡Quiero Reservar!"
+        description="Haz click para empezar a reservar espacios."
+        onClick={() => setShowRequestUpgradeModal(true)}
+        icon={<KeyIcon className="w-12 h-12 text-blue-500" />}
+        isButton={true}
+        disabled={false}
+      />
+    </>
+  );
+
+  // PENDING
+  const PendingCards = (
+    <>
+      <MenuCard
+        title="Eventos Próximos"
+        description="Explora los eventos y actividades programadas."
+        link="/events"
+        icon={<CalendarIcon className="w-12 h-12 text-blue-500" />}
+      />
+      <MenuCard
+        title="Solicitud en proceso"
+        description="Se le notificará cuando se termine de procesar su solicitud."
+        link="/#"
+        icon={<ClockIcon className="w-12 h-12 text-blue-500" />}
+        disabled={true}
+      />
+    </>
+  );
+
+  const renderCards = () => {
+    switch (role) {
+      case 'admin':
+        return {
+          title: `Panel de Administración - ${user}`,
+          cards: AdminCards,
+          gridCols: 'lg:grid-cols-2 xl:grid-cols-4',
+        };
+      case 'coordinator':
+        return {
+          title: `Panel de Coordinación - ${user}`,
+          cards: CoordinatorCards,
+          gridCols: 'lg:grid-cols-2',
+        };
+      case 'requester':
+        return {
+          title: `Panel de Solicitante - ${user}`,
+          cards: RequesterCards,
+          gridCols: 'lg:grid-cols-2',
+        };
+      case 'pending':
+        return {
+          title: `Panel de Visitante - ${user}`,
+          cards: PendingCards,
+          gridCols: 'lg:grid-cols-2',
+        };
+      case 'externalvisitor':
+        return {
+          title: `Panel de Visitante Externo - ${user}`,
+          cards: VisitorExternalCards,
+          gridCols: 'lg:grid-cols-2',
+        };
+      case 'visitor':
+      default:
+        return {
+          title: `Panel de Visitante Interno - ${user}`,
+          cards: VisitorInternalCards,
+          gridCols: 'lg:grid-cols-2',
+        };
+    }
+  };
+
+  const { title, cards, gridCols } = renderCards();
+
+  // Función para renderizar el modal apropiado
+  const renderModal = (Component, props, onClose) => {
+    const ModalComponent = isMobile ? ModalMobile : Modal;
+    return (
+      <ModalComponent onClose={onClose}>
+        <Component {...props} />
+      </ModalComponent>
+    );
+  };
+
   return (
-    <div className="min-h-screen grid grid-rows-[auto_auto_1fr_auto]">
+    <div className="min-h-screen grid grid-rows-[auto_auto_1fr_auto] bg-gray-50">
       <Header />
       <HeroSection
-        title={`Bienvenido, ${user}`} // Muestra el nombre del usuario en el HeroSection
-        subtitle="En este panel encontrarás tu opciones"
+        title={`¡Bienvenido(a), ${user}!`}
+        subtitle="Encuentra todas tus opciones principales en el panel de control"
         backgroundImage={backgroundImage}
       />
 
       {/* Main Content */}
-      <div className="container mx-auto p-4">
-        {role === 'admin' ? (
-          <div>
-            <h2 className="text-2xl font-semibold mb-6 text-center">
-              Panel de Administración
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <MenuCard
-                title="Gestionar espacios"
-                description="Configura y administra los espacios disponibles"
-                link="/admin/rooms"
-                icon="🏠"
-              />
-              <MenuCard
-                title="Gestionar reservas"
-                description="Revisa y gestiona las reservas de los usuarios"
-                link="/reservations"
-                icon="📑"
-              />
-              <MenuCard
-                title="Gestionar usuarios"
-                description="Revisa y gestiona la lista de usuarios registrados"
-                link="/users"
-                icon="👤"
-              />
-            </div>
-          </div>
-        ) : (
-          <div>
-            <h2 className="text-2xl font-semibold mb-6 text-center">
-              Panel de Usuario
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-              <MenuCard
-                title="Solicitar reserva"
-                description="Solicita una reseva para tu evento"
-                link="/create-reservation"
-                icon="📝"
-              />
-              <MenuCard
-                title="Consultar mis reservas"
-                description="Revisa las reservas que has realizado"
-                link="/my-reservations"
-                icon="🔍"
-              />
-            </div>
-          </div>
-        )}
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-gray-800 mb-2">{title}</h2>
+          <p className="text-gray-600 max-w-2xl mx-auto">
+            Selecciona una de las opciones disponibles para comenzar
+          </p>
+        </div>
+
+        <div
+          className="grid gap-6 justify-center"
+          style={{
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 340px))',
+          }}
+        >
+          {' '}
+          {cards}
+        </div>
       </div>
 
       <Footer />
-    </div>
-  );
-};
 
-// Componente MenuCard para mostrar cada opción en forma de tarjeta (card)
-const MenuCard = ({ title, description, link, icon }) => {
-  return (
-    <a
-      href={link}
-      className="bg-white shadow-lg rounded-lg p-6 hover:shadow-xl transform transition-transform hover:-translate-y-1 min-h-[215px] flex flex-col justify-between"
-    >
-      <div className="text-4xl mb-4">{icon}</div>
-      <h3 className="text-xl font-semibold mb-2">{title}</h3>
-      <p className="text-gray-600 flex-grow">{description}</p>
-    </a>
+      {/* Modal para completar información de usuario externo */}
+      {showCompleteExternalModal &&
+        renderModal(
+          CompleteExternalUserForm,
+          {
+            onClose: () => setShowCompleteExternalModal(false),
+            onSuccess: handleCompleteExternalSuccess,
+          },
+          () => setShowCompleteExternalModal(false)
+        )}
+
+      {/* Modal para la Solicitud de Ascenso de Rol */}
+      {showRequestUpgradeModal &&
+        renderModal(
+          RequestUpgradeForm,
+          {
+            onClose: () => setShowRequestUpgradeModal(false),
+            onSuccess: handleUpgradeSuccess,
+          },
+          () => setShowRequestUpgradeModal(false)
+        )}
+    </div>
   );
 };
 

@@ -4,10 +4,10 @@ import AddEventForm from '../components/AddEventForm';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import axiosInstance from '../axiosConfig';
-import { useNavigate } from 'react-router-dom'; // Importar useNavigate
+import { useNavigate } from 'react-router-dom';
 
 const CreateReservationPage = () => {
-  const navigate = useNavigate(); // Inicializar el hook de navegación
+  const navigate = useNavigate();
 
   // Función para manejar la creación del evento y la subida de archivos
   const handleEventCreated = async (event, programFile, agreementFile) => {

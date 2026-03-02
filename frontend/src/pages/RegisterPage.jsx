@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import axiosInstance from '../axiosConfig';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import Swal from 'sweetalert2';
+import Swal from '../utils/swal';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { login } from '../features/auth/authActions';
@@ -15,6 +15,8 @@ import {
   FaTrash,
   FaEye,
   FaEyeSlash,
+  FaUniversity,
+  FaUserGraduate,
 } from 'react-icons/fa';
 
 const RegisterPage = () => {
@@ -26,6 +28,7 @@ const RegisterPage = () => {
     confirmPassword: '', // Nuevo campo para confirmar la contraseña
     ci: '',
     status: true, // Valor predeterminado para el estado (activo)
+    isExternal: false, // Por defecto, usuario externo (no pertenece a la comunidad universitaria)
   });
   const [errors, setErrors] = useState({});
   const [error, setError] = useState('');
@@ -39,8 +42,13 @@ const RegisterPage = () => {
   const dispatch = useDispatch();
 
   const handleChange = e => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    const { name, value, type, checked } = e.target;
+
+    if (type === 'checkbox') {
+      setFormData({ ...formData, [name]: checked });
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
 
     // Limpiar el error al modificar el campo
     setErrors({ ...errors, [name]: '' });
@@ -136,9 +144,15 @@ const RegisterPage = () => {
     e.preventDefault();
 
     if (validate()) {
+      // Preparar datos para enviar (incluyendo isExternal)
+      const userData = {
+        ...formData,
+        isExternal: formData.isExternal, // Enviar el valor del checkbox
+      };
+
       // Enviar la solicitud POST a la API backend para crear un nuevo usuario
       axiosInstance
-        .post('/users', formData)
+        .post('/users', userData)
         .then(response => {
           console.log('Usuario registrado:', response.data);
           // Mostrar SweetAlert de éxito
@@ -262,8 +276,8 @@ const RegisterPage = () => {
                   passwordStrength === 'Débil'
                     ? 'text-red-500'
                     : passwordStrength === 'Medio'
-                    ? 'text-yellow-500'
-                    : 'text-green-500'
+                      ? 'text-yellow-500'
+                      : 'text-green-500'
                 }`}
               >
                 {passwordStrength}.
@@ -343,6 +357,43 @@ const RegisterPage = () => {
                 Solo números.
               </small>
             )}
+          </div>
+
+          {/* Pertenece a la Comunidad Universitaria */}
+          <div className="mb-6">
+            <div className="flex items-center mb-2">
+              <label
+                htmlFor="isExternal"
+                className="font-semibold flex items-center"
+              >
+                <FaUniversity className="mr-2" />
+                ¿Formas parte de la comunidad universitaria?
+              </label>
+            </div>
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="isExternal"
+                name="isExternal"
+                checked={!formData.isExternal} // Invertir la lógica para mostrar correctamente
+                onChange={e => {
+                  // Invertimos la lógica: si el checkbox está marcado, NO es externo
+                  setFormData({ ...formData, isExternal: !e.target.checked });
+                }}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="isExternal" className="ml-2 text-gray-700">
+                Sí, soy parte de la comunidad universitaria
+                <span className="text-sm text-gray-500 block">
+                  (estudiante, profesor, empleado o egresado)
+                </span>
+              </label>
+            </div>
+            <small className="text-gray-500 text-sm mt-1 block">
+              {formData.isExternal
+                ? 'Estás registrándote como usuario externo a la universidad.'
+                : 'Estás registrándote como miembro de la comunidad universitaria.'}
+            </small>
           </div>
 
           <button

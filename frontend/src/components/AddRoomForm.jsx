@@ -1,147 +1,672 @@
 // src/components/AddRoomForm.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axiosInstance from '../axiosConfig';
+import { useDispatch } from 'react-redux';
+import { createRoom as createRoomThunk } from '../features/rooms/roomsSlice';
+import Swal from '../utils/swal';
+import {
+  FaUsers,
+  FaWheelchair,
+  FaWifi,
+  FaToilet,
+  FaMicrophoneAlt,
+  FaVideo,
+  FaMoneyBillWave,
+  FaExchangeAlt,
+  FaBox,
+} from 'react-icons/fa';
 
-const AddRoomForm = ({ onRoomCreated }) => {
+const AddRoomForm = ({ onRoomCreated, onClose }) => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     capacity: '',
     location: '',
     staffowner: '',
+    isInCUC: true,
+    cost: '0',
+    isAccessible: false,
+    canExonerate: false,
+    hasBathrooms: false,
+    hasInternet: false,
+    hasAudioEquipment: false,
+    hasVideoEquipment: false,
+    acceptsTransfer: false,
+    acceptsMaterials: false,
   });
-  const [imageFile, setImageFile] = useState(null); // Nuevo estado para la imagen
+  const [imageFile, setImageFile] = useState(null);
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [dependencies, setDependencies] = useState([]);
+  const [selectedDependencyId, setSelectedDependencyId] = useState('');
+  const [showAddDependency, setShowAddDependency] = useState(false);
+  const [newDependency, setNewDependency] = useState({
+    name: '',
+    description: '',
+  });
+  const dispatch = useDispatch();
 
   const handleChange = e => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    const { name, value, type, checked } = e.target;
+    if (type === 'checkbox') {
+      setFormData({ ...formData, [name]: checked });
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
   };
 
   const handleImageChange = e => {
     setImageFile(e.target.files[0]);
   };
 
-  const handleSubmit = e => {
+  useEffect(() => {
+    axiosInstance
+      .get('/dependencies')
+      .then(res => setDependencies(res.data || []))
+      .catch(err => console.error('Error fetching dependencies', err));
+  }, []);
+
+  const handleSubmit = async e => {
     e.preventDefault();
 
-    const data = new FormData();
-    // Agregar los campos del formulario al FormData
-    Object.keys(formData).forEach(key => {
-      data.append(key, formData[key]);
-    });
-    // Agregar el archivo de imagen
-    if (imageFile) {
-      data.append('image', imageFile);
+    // Validación básica
+    if (
+      !formData.name ||
+      !formData.capacity ||
+      !formData.location ||
+      !formData.staffowner
+    ) {
+      setError('Por favor complete todos los campos obligatorios.');
+      return;
     }
 
-    axiosInstance
-      .post('/rooms', data, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      })
-      .then(response => {
-        console.log('Espacio creado:', response.data);
-        onRoomCreated(response.data);
-      })
-      .catch(error => {
-        console.error('Error al crear el espacio:', error);
+    // validar dependencia
+    if (!selectedDependencyId) {
+      setError(
+        'Por favor seleccione la dependencia a la que pertenece el espacio.'
+      );
+      return;
+    }
 
-        const errorMessage =
-          error.response?.data?.error ||
-          error.response?.data?.errors?.join(', ') ||
-          'Error al crear el espacio. Por favor, intente nuevamente.';
+    // Validar que al menos un método de pago esté seleccionado
+    if (!formData.acceptsTransfer && !formData.acceptsMaterials) {
+      setError(
+        'Debe seleccionar al menos un método de pago (Transferencia o Materiales).'
+      );
+      return;
+    }
 
-        setError(errorMessage);
+    // Validar que el costo sea un número válido si se ingresa
+    if (formData.cost && isNaN(parseFloat(formData.cost))) {
+      setError('El costo debe ser un número válido.');
+      return;
+    }
+
+    // Validar que la capacidad sea un número positivo
+    if (parseInt(formData.capacity) <= 0) {
+      setError('La capacidad debe ser un número positivo.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError('');
+
+    // Mostrar modal de confirmación
+    const confirmResult = await Swal.fire({
+      title: '¿Crear nuevo espacio?',
+      text: `¿Está seguro de que desea crear el espacio "${formData.name}"?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Sí, crear',
+      cancelButtonText: 'Cancelar',
+    });
+
+    if (!confirmResult.isConfirmed) {
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Mostrar modal de carga
+    Swal.fire({
+      title: 'Creando espacio...',
+      text: `Por favor espere mientras se crea "${formData.name}"`,
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      showConfirmButton: false,
+      willOpen: () => {
+        Swal.showLoading();
+      },
+    });
+
+    try {
+      const data = new FormData();
+
+      // Los booleanos deben enviarse como strings 'true'/'false'
+      Object.keys(formData).forEach(key => {
+        const value = formData[key];
+        // Los checkboxes son booleanos, convertirlos a string
+        if (typeof value === 'boolean') {
+          data.append(key, value ? 'true' : 'false');
+        } else {
+          data.append(key, value);
+        }
       });
+
+      // agregar dependencyId
+      data.append('dependencyId', selectedDependencyId);
+
+      // Agregar el archivo de imagen
+      if (imageFile) {
+        data.append('image', imageFile);
+        console.log('Imagen agregada:', imageFile.name);
+      }
+
+      // Dispatch thunk para que Redux cache update
+      const result = await dispatch(createRoomThunk(data)).unwrap();
+
+      // Cerrar modal de carga
+      Swal.close();
+
+      // Mostrar modal de éxito
+      await Swal.fire({
+        title: '¡Creado!',
+        text: `El espacio "${formData.name}" ha sido creado exitosamente.`,
+        icon: 'success',
+        confirmButtonColor: '#3085d6',
+      });
+
+      // Llamar a la función del padre para actualizar la lista
+      onRoomCreated(result);
+    } catch (error) {
+      console.error('Error al crear el espacio:', error);
+
+      // Cerrar modal de carga
+      Swal.close();
+
+      let errorMessage =
+        error.response?.data?.error ||
+        (error.response?.data?.errors
+          ? error.response.data.errors.join(', ')
+          : undefined) ||
+        'Error al crear el espacio. Por favor, intente nuevamente.';
+
+      if (error.response?.status === 403) {
+        // permiso negado (coordinador intentando crear en dependencia sin permiso)
+        errorMessage =
+          error.response.data.error ||
+          'No tienes permisos para crear salas en esta dependencia.';
+      }
+
+      // Mostrar modal de error
+      await Swal.fire({
+        title: 'Error',
+        text: errorMessage,
+        icon: 'error',
+        confirmButtonColor: '#d33',
+      });
+
+      setError(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCreateDependency = async () => {
+    if (!newDependency.name.trim()) {
+      Swal.fire({
+        title: 'Error',
+        text: 'El nombre es requerido',
+        icon: 'error',
+      });
+      return;
+    }
+
+    try {
+      const res = await axiosInstance.post('/dependencies', newDependency);
+      // refresh deps
+      const depsRes = await axiosInstance.get('/dependencies');
+      setDependencies(depsRes.data || []);
+      setSelectedDependencyId(res.data.id);
+      setShowAddDependency(false);
+      setNewDependency({ name: '', description: '' });
+      Swal.fire({
+        title: '¡Creada!',
+        text: 'Dependencia creada.',
+        icon: 'success',
+      });
+    } catch (err) {
+      console.error('Error creating dependency', err);
+      Swal.fire({
+        title: 'Error',
+        text: err.response?.data?.error || 'No se pudo crear la dependencia',
+        icon: 'error',
+      });
+    }
+  };
+
+  const handleCancel = () => {
+    if (isSubmitting) {
+      Swal.fire({
+        title: '¿Estás seguro?',
+        text: 'El proceso de creación se cancelará y se perderán los datos ingresados.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Sí, cancelar',
+        cancelButtonText: 'Continuar',
+      }).then(result => {
+        if (result.isConfirmed) {
+          onClose();
+        }
+      });
+    } else {
+      onClose();
+    }
   };
 
   return (
-    <div className="my-8">
-      <h2 className="text-3xl font-bold mb-6 text-center text-gray-800">
-        Crear Nuevo Espacio
-      </h2>
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-800">
+          Crear Nuevo Espacio
+        </h2>
+        <button
+          onClick={handleCancel}
+          disabled={isSubmitting}
+          className="text-gray-500 hover:text-gray-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Cerrar
+        </button>
+      </div>
+
       {error && (
-        <p className="text-red-500 mb-4 text-center bg-red-100 p-2 rounded">
+        <div className="mb-6 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
           {error}
-        </p>
+        </div>
       )}
-      <form onSubmit={handleSubmit} className="space-y-6">
+
+      <form onSubmit={handleSubmit} className="space-y-4">
         {/* Información de la Sala */}
         <div className="bg-white shadow-md rounded px-8 pt-6 pb-8">
           {/* Nombre de la Sala */}
           <div className="mb-4">
             <label className="block text-gray-700 font-medium mb-2">
-              Nombre del Espacio
+              Nombre del Espacio *
             </label>
             <input
               type="text"
               name="name"
-              className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               value={formData.name}
               onChange={handleChange}
               required
+              disabled={isSubmitting}
+              placeholder="Ingrese el nombre del espacio"
             />
           </div>
+
           {/* Descripción */}
           <div className="mb-4">
             <label className="block text-gray-700 font-medium mb-2">
-              Descripción
+              Descripción *
             </label>
             <textarea
               name="description"
-              className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               value={formData.description}
               onChange={handleChange}
               rows="4"
+              required
+              disabled={isSubmitting}
+              placeholder="Describa el espacio"
             ></textarea>
           </div>
-          {/* Capacidad y Ubicación */}
-          <div className="flex flex-wrap -mx-2">
+
+          {/* Capacidad, Ubicación y Costo */}
+          <div className="flex flex-wrap -mx-2 mb-4">
             {/* Capacidad */}
-            <div className="w-full md:w-1/2 px-2 mb-4 md:mb-0">
+            <div className="w-full md:w-1/3 px-2 mb-4 md:mb-0">
               <label className="block text-gray-700 font-medium mb-2">
-                Capacidad
+                Capacidad *
               </label>
               <input
                 type="number"
                 name="capacity"
-                className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 value={formData.capacity}
                 onChange={handleChange}
                 required
+                disabled={isSubmitting}
+                min="1"
+                placeholder="Ej: 50"
               />
             </div>
+
             {/* Ubicación */}
-            <div className="w-full md:w-1/2 px-2">
+            <div className="w-full md:w-1/3 px-2 mb-4 md:mb-0">
               <label className="block text-gray-700 font-medium mb-2">
-                Ubicación
+                Ubicación *
               </label>
               <input
                 type="text"
                 name="location"
-                className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 value={formData.location}
                 onChange={handleChange}
                 required
+                disabled={isSubmitting}
+                placeholder="Ej: Edificio A, Piso 2"
+              />
+            </div>
+
+            {/* Costo */}
+            <div className="w-full md:w-1/3 px-2">
+              <label className="block text-gray-700 font-medium mb-2">
+                Costo ($)
+              </label>
+              <input
+                type="text"
+                name="cost"
+                className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                value={formData.cost}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                placeholder="Ej: 100.00"
+              />
+              <p className="text-xs text-gray-500 mt-1">0 = Gratuito</p>
+            </div>
+          </div>
+
+          {/* Dependencia */}
+          <div className="mb-4">
+            <label className="block text-gray-700 font-medium mb-2">
+              Dependencia *
+            </label>
+            {!showAddDependency ? (
+              <div className="flex items-center space-x-2">
+                <select
+                  name="dependency"
+                  className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={selectedDependencyId}
+                  onChange={e => setSelectedDependencyId(e.target.value)}
+                  required
+                  disabled={isSubmitting}
+                >
+                  <option value="">-- Selecciona una dependencia --</option>
+                  {dependencies.map(dep => (
+                    <option key={dep.id} value={dep.id}>
+                      {dep.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowAddDependency(true)}
+                  className="px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isSubmitting}
+                >
+                  Agregar
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="Nombre de la dependencia"
+                  value={newDependency.name}
+                  onChange={e =>
+                    setNewDependency({ ...newDependency, name: e.target.value })
+                  }
+                  className="w-full border rounded px-3 py-2"
+                  disabled={isSubmitting}
+                />
+                <textarea
+                  placeholder="Descripción (opcional)"
+                  value={newDependency.description}
+                  onChange={e =>
+                    setNewDependency({
+                      ...newDependency,
+                      description: e.target.value,
+                    })
+                  }
+                  className="w-full border rounded px-3 py-2"
+                  rows={3}
+                  disabled={isSubmitting}
+                />
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={handleCreateDependency}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isSubmitting}
+                  >
+                    Crear
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddDependency(false)}
+                    className="px-4 py-2 border rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={isSubmitting}
+                  >
+                    Atrás
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Características del espacio */}
+          <div className="mb-4">
+            <h3 className="text-lg font-medium text-gray-700 mb-3">
+              Características del Espacio
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {/* Accesibilidad */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="isAccessible"
+                  id="isAccessible"
+                  checked={formData.isAccessible}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="isAccessible"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaWheelchair className="mr-1" /> Accesibilidad motriz
+                </label>
+              </div>
+
+              {/* Baños */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="hasBathrooms"
+                  id="hasBathrooms"
+                  checked={formData.hasBathrooms}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="hasBathrooms"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaToilet className="mr-1" /> Baños disponibles
+                </label>
+              </div>
+
+              {/* Internet */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="hasInternet"
+                  id="hasInternet"
+                  checked={formData.hasInternet}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="hasInternet"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaWifi className="mr-1" /> Conexión a Internet
+                </label>
+              </div>
+
+              {/* Equipo de audio */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="hasAudioEquipment"
+                  id="hasAudioEquipment"
+                  checked={formData.hasAudioEquipment}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="hasAudioEquipment"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaMicrophoneAlt className="mr-1" /> Equipo de audio
+                </label>
+              </div>
+
+              {/* Equipo de video */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="hasVideoEquipment"
+                  id="hasVideoEquipment"
+                  checked={formData.hasVideoEquipment}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="hasVideoEquipment"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaVideo className="mr-1" /> Equipo de video
+                </label>
+              </div>
+
+              {/* Exoneración */}
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="canExonerate"
+                  id="canExonerate"
+                  checked={formData.canExonerate}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="canExonerate"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaMoneyBillWave className="mr-1" /> Permite exoneración
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* Métodos de pago */}
+          <div className="mb-4">
+            <h3 className="text-lg font-medium text-gray-700 mb-3">
+              Métodos de Pago Aceptados *
+            </h3>
+            <div className="flex flex-col sm:flex-row sm:space-x-6 space-y-2 sm:space-y-0">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="acceptsTransfer"
+                  id="acceptsTransfer"
+                  checked={formData.acceptsTransfer}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="acceptsTransfer"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaExchangeAlt className="mr-1" /> Transferencia
+                </label>
+              </div>
+
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  name="acceptsMaterials"
+                  id="acceptsMaterials"
+                  checked={formData.acceptsMaterials}
+                  onChange={handleChange}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                  disabled={isSubmitting}
+                />
+                <label
+                  htmlFor="acceptsMaterials"
+                  className="ml-2 block text-sm text-gray-700 flex items-center"
+                >
+                  <FaBox className="mr-1" /> Materiales
+                </label>
+              </div>
+            </div>
+            {!formData.acceptsTransfer && !formData.acceptsMaterials && (
+              <p className="text-red-500 text-xs mt-1">
+                Debe seleccionar al menos un método de pago
+              </p>
+            )}
+          </div>
+
+          {/* ¿Ubicado en CUC? y Encargado */}
+          <div className="flex flex-wrap -mx-2 mb-4">
+            {/* ¿Ubicado en CUC? */}
+            <div className="w-full md:w-1/2 px-2 mb-4 md:mb-0">
+              <label className="block text-gray-700 font-medium mb-2">
+                ¿Ubicado en la Ciudad Universitaria de Caracas? *
+              </label>
+              <select
+                name="isInCUC"
+                className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                value={formData.isInCUC}
+                onChange={handleChange}
+                required
+                disabled={isSubmitting}
+              >
+                <option value={true}>Sí</option>
+                <option value={false}>No</option>
+              </select>
+            </div>
+
+            {/* Encargado */}
+            <div className="w-full md:w-1/2 px-2">
+              <label className="block text-gray-700 font-medium mb-2">
+                Encargado *
+              </label>
+              <input
+                type="text"
+                name="staffowner"
+                className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                value={formData.staffowner}
+                onChange={handleChange}
+                required
+                disabled={isSubmitting}
+                placeholder="Nombre del encargado"
               />
             </div>
           </div>
-          {/* Encargado */}
-          <div className="mt-4">
-            <label className="block text-gray-700 font-medium mb-2">
-              Encargado
-            </label>
-            <input
-              type="text"
-              name="staffowner"
-              className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={formData.staffowner}
-              onChange={handleChange}
-              required
-            />
-          </div>
+
           {/* Campo para subir imagen */}
           <div className="mt-4">
             <label className="block text-gray-700 font-medium mb-2">
@@ -152,18 +677,60 @@ const AddRoomForm = ({ onRoomCreated }) => {
               name="image"
               accept="image/*"
               onChange={handleImageChange}
-              className="w-full"
+              className="w-full disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={isSubmitting}
             />
+            <p className="text-sm text-gray-500 mt-1">
+              Formatos aceptados: JPG, PNG, GIF. Tamaño máximo: 5MB
+            </p>
           </div>
         </div>
 
-        {/* Botón de Envío */}
-        <div className="text-center">
+        {/* Botones de acción */}
+        <div className="flex justify-between pt-4">
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={isSubmitting}
+            className="bg-gray-500 hover:bg-gray-600 text-white font-semibold px-6 py-3 rounded-lg shadow-md transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Cancelar
+          </button>
           <button
             type="submit"
-            className="bg-green-600 hover:bg-green-700 text-white font-semibold px-6 py-3 rounded shadow-md transition duration-200"
+            disabled={
+              isSubmitting ||
+              (!formData.acceptsTransfer && !formData.acceptsMaterials)
+            }
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-lg shadow-md transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
           >
-            Crear Espacio
+            {isSubmitting ? (
+              <>
+                <svg
+                  className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                Creando...
+              </>
+            ) : (
+              'Crear Espacio'
+            )}
           </button>
         </div>
       </form>

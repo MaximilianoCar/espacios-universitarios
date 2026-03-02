@@ -1,9 +1,9 @@
-// src/pages/LoginPage.js
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import { useDispatch } from 'react-redux';
+import ForgotPasswordModal from '../components/ForgotPasswordModal';
 import { login } from '../features/auth/authActions';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 
@@ -12,27 +12,24 @@ const LoginPage = () => {
     email: '',
     password: '',
   });
-  const dispatch = useDispatch();
-  const navigate = useNavigate(); // Para redirigir después del login
+  const [showPassword, setShowPassword] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [errorMessage, setErrorMessage] = useState('');
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
 
-  const [showPassword, setShowPassword] = useState(false); // Estado para controlar la visibilidad de la contraseña
-  const [errors, setErrors] = useState({}); // Estado para manejar errores de validación
-  const [errorMessage, setErrorMessage] = useState(''); // Estado para manejar mensajes de error generales
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
 
   const handleChange = e => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
-
-    // Limpiar el error al modificar el campo
     setErrors({ ...errors, [name]: '' });
     setErrorMessage('');
   };
 
-  // Función de validación básica
   const validate = () => {
     const newErrors = {};
 
-    // Validar Correo Electrónico
     if (!formData.email.trim()) {
       newErrors.email = 'El correo electrónico es requerido.';
     } else if (
@@ -41,14 +38,11 @@ const LoginPage = () => {
       newErrors.email = 'El correo electrónico no es válido.';
     }
 
-    // Validar Contraseña
     if (!formData.password) {
       newErrors.password = 'La contraseña es requerida.';
     }
 
     setErrors(newErrors);
-
-    // Retornar si hay errores
     return Object.keys(newErrors).length === 0;
   };
 
@@ -56,107 +50,152 @@ const LoginPage = () => {
     e.preventDefault();
 
     if (validate()) {
-      dispatch(login(formData.email, formData.password, navigate))
-        .then(() => {
-          // Opcional: Puedes manejar acciones adicionales después del login exitoso
-        })
-        .catch(error => {
-          // Manejar error del login
+      dispatch(login(formData.email, formData.password, navigate)).catch(
+        error => {
           console.error('Error al iniciar sesión:', error);
           setErrorMessage(
             error.response?.data?.error ||
               'Error al iniciar sesión. Por favor, verifica tus credenciales e intenta nuevamente.'
           );
-        });
+        }
+      );
     } else {
       setErrorMessage('Por favor, corrige los errores en el formulario.');
     }
   };
 
   return (
-    <div className="min-h-screen grid grid-rows-[auto_1fr_auto]">
-      <Header />
-      <div className="container mx-auto my-24">
-        <h2 className="text-3xl font-bold mb-8 text-center">
-          Inicio de Sesión
-        </h2>
-        {errorMessage && (
-          <p className="text-red-500 mb-4 text-center">{errorMessage}</p>
-        )}
-        <form
-          onSubmit={handleSubmit}
-          className="max-w-md mx-auto bg-white p-6 rounded shadow"
-        >
-          {/* Email */}
-          <div className="mb-4">
-            <label htmlFor="email" className="block mb-1 font-semibold">
-              Correo Electrónico
-            </label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              className={`w-full border p-2 rounded ${
-                errors.email ? 'border-red-500' : ''
-              }`}
-              value={formData.email}
-              onChange={handleChange}
-              placeholder="ejemplo@correo.com"
-              required
-            />
-            {errors.email && (
-              <p className="text-red-500 text-sm mt-1">{errors.email}</p>
-            )}
-          </div>
+    <>
+      <div className="min-h-screen grid grid-rows-[auto_1fr_auto]">
+        <Header />
+        <div className="container mx-auto my-24 px-4">
+          <div className="max-w-md mx-auto">
+            <div className="text-center mb-8">
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">
+                Inicio de Sesión
+              </h2>
+              <p className="text-gray-600">
+                Accede a tu cuenta para gestionar tus reservas
+              </p>
+            </div>
 
-          {/* Password */}
-          <div className="mb-4 relative">
-            <label htmlFor="password" className="block mb-1 font-semibold">
-              Contraseña
-            </label>
-            <input
-              type={showPassword ? 'text' : 'password'}
-              id="password"
-              name="password"
-              className={`w-full border p-2 rounded pr-10 ${
-                errors.password ? 'border-red-500' : ''
-              }`}
-              value={formData.password}
-              onChange={handleChange}
-              placeholder="Ingresa tu contraseña"
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(prev => !prev)}
-              className="absolute top-9 right-3 text-gray-600 hover:text-gray-800 focus:outline-none"
-              aria-label={
-                showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'
-              }
-            >
-              {showPassword ? <FaEyeSlash /> : <FaEye />}
-            </button>
-            {errors.password && (
-              <p className="text-red-500 text-sm mt-1">{errors.password}</p>
-            )}
-          </div>
+            <div className="bg-white rounded-xl shadow-lg p-8">
+              {errorMessage && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+                  {errorMessage}
+                </div>
+              )}
 
-          <button
-            type="submit"
-            className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
-          >
-            Iniciar Sesión
-          </button>
-          <p className="mt-4 text-center">
-            ¿No tienes una cuenta?{' '}
-            <a href="/register" className="text-blue-600 hover:underline">
-              Regístrate
-            </a>
-          </p>
-        </form>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Email */}
+                <div>
+                  <label
+                    htmlFor="email"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Correo Electrónico
+                  </label>
+                  <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition ${
+                      errors.email ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    value={formData.email}
+                    onChange={handleChange}
+                    placeholder="ejemplo@correo.com"
+                  />
+                  {errors.email && (
+                    <p className="mt-2 text-sm text-red-600">{errors.email}</p>
+                  )}
+                </div>
+
+                {/* Password */}
+                <div>
+                  <label
+                    htmlFor="password"
+                    className="block text-sm font-medium text-gray-700 mb-2"
+                  >
+                    Contraseña
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      id="password"
+                      name="password"
+                      className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition ${
+                        errors.password ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      value={formData.password}
+                      onChange={handleChange}
+                      placeholder="Ingresa tu contraseña"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(prev => !prev)}
+                      className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600 transition"
+                      aria-label={
+                        showPassword
+                          ? 'Ocultar contraseña'
+                          : 'Mostrar contraseña'
+                      }
+                    >
+                      {showPassword ? (
+                        <FaEyeSlash size={20} />
+                      ) : (
+                        <FaEye size={20} />
+                      )}
+                    </button>
+                  </div>
+                  {errors.password && (
+                    <p className="mt-2 text-sm text-red-600">
+                      {errors.password}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPasswordModal(true)}
+                    className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                  >
+                    ¿Olvidaste tu contraseña?
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition duration-200 shadow-md hover:shadow-lg"
+                >
+                  Iniciar Sesión
+                </button>
+              </form>
+
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <p className="text-center text-gray-600">
+                  ¿No tienes una cuenta?{' '}
+                  <a
+                    href="/register"
+                    className="text-blue-600 hover:text-blue-800 font-medium hover:underline"
+                  >
+                    Regístrate aquí
+                  </a>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <Footer />
       </div>
-      <Footer />
-    </div>
+
+      <ForgotPasswordModal
+        isOpen={showForgotPasswordModal}
+        onClose={() => setShowForgotPasswordModal(false)}
+        onSuccess={() => {}}
+      />
+    </>
   );
 };
 

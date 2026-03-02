@@ -10,7 +10,13 @@ module.exports = {
         type: Sequelize.INTEGER,
       },
       role: {
-        type: Sequelize.ENUM('admin', 'user'),
+        type: Sequelize.ENUM(
+          'visitor',
+          'requester',
+          'coordinator',
+          'admin',
+          'pending'
+        ),
         allowNull: false,
       },
       name: {
@@ -29,9 +35,23 @@ module.exports = {
         type: Sequelize.STRING,
         allowNull: false,
       },
+      ci: {
+        type: Sequelize.STRING,
+        unique: true,
+        allowNull: true,
+      },
       status: {
         type: Sequelize.BOOLEAN,
         allowNull: false,
+      },
+      // NUEVO CAMPO DE RUTA DE CERTIFICACIÓN
+      certificationPath: {
+        type: Sequelize.STRING,
+        allowNull: true,
+      },
+      refreshToken: {
+        type: Sequelize.TEXT,
+        allowNull: true,
       },
       createdAt: {
         allowNull: false,

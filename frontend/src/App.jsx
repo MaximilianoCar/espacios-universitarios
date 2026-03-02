@@ -1,99 +1,244 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import HomePage from './pages/HomePage';
-import EventsPage from './pages/EventsPage';
-import EventDetailsPage from './pages/EventDetailsPage';
-import RoomsPage from './pages/RoomsPage';
-import RoomDetailsPage from './pages/RoomDetailsPage';
-import RegisterPage from './pages/RegisterPage';
-import LoginPage from './pages/LoginPage';
-import UsersPage from './pages/UsersPage';
-import CreateReservationPage from './pages/CreateReservationPage';
-import UserReservationsPage from './pages/UserReservationsPage';
-import AdminReservationsPage from './pages/AdminReservationsPage';
-import AdminRoomsPage from './pages/AdminRoomsPage';
-import ProtectedRoute from './components/ProtectedRoute';
-import { useDispatch } from 'react-redux';
-import { refreshToken } from './features/auth/authActions';
+import { useDispatch, useSelector } from 'react-redux';
+
+// --- IMPORTS ESTÁTICOS (Críticos para el primer renderizado) ---
 import Layout from './components/Layout';
+import LoginPage from './pages/LoginPage';
+import { refreshToken } from './features/auth/authActions';
+import ProtectedRoute from './components/ProtectedRoute';
+
+// --- COMPONENTE DE LOADING ---
+const PageLoader = () => (
+  <div
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '60vh',
+      width: '100%',
+      gap: '1rem',
+    }}
+  >
+    <div
+      style={{
+        width: '50px',
+        height: '50px',
+        border: '4px solid #f3f3f3',
+        borderTop: '4px solid #3498db',
+        borderRadius: '50%',
+        animation: 'spin 1s linear infinite',
+      }}
+    />
+    <style>{`
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    `}</style>
+    <p
+      style={{
+        color: '#666',
+        fontSize: '1.1rem',
+        margin: 0,
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+      }}
+    >
+      Cargando...
+    </p>
+  </div>
+);
+
+// --- IMPORTS LAZY (Páginas que se cargan bajo demanda) ---
+const HomePage = lazy(() => import('./pages/HomePage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const EventsPage = lazy(() => import('./pages/EventsPage'));
+const EventDetailsPage = lazy(() => import('./pages/EventDetailsPage'));
+const RoomsPage = lazy(() => import('./pages/RoomsPage'));
+const RoomDetailsPage = lazy(() => import('./pages/RoomDetailsPage'));
+const UsersPage = lazy(() => import('./pages/UsersPage'));
+const CreateReservationPage = lazy(
+  () => import('./pages/CreateReservationPage')
+);
+const UserReservationsPage = lazy(() => import('./pages/UserReservationsPage'));
+const AdminReservationsPage = lazy(
+  () => import('./pages/AdminReservationsPage')
+);
+const AdminRoomsPage = lazy(() => import('./pages/AdminRoomsPage'));
+const AdminPendingRequestsPage = lazy(
+  () => import('./pages/AdminPendingRequestsPage')
+);
+const PreviewEventPage = lazy(() => import('./pages/PreviewEventPage'));
 
 function App() {
   const dispatch = useDispatch();
+  const { isAuthenticated } = useSelector(state => state.auth);
 
   useEffect(() => {
     // Intentar renovar el token al cargar la app
     dispatch(refreshToken());
 
-    const interval = setInterval(() => {
-      // Renovar el token cada 50 minutos (o el tiempo adecuado según tu configuración)
-      dispatch(refreshToken());
-    }, 50 * 60 * 1000);
+    const interval = setInterval(
+      () => {
+        // Renovar el token cada 50 minutos
+        dispatch(refreshToken());
+      },
+      50 * 60 * 1000
+    );
 
-    return () => clearInterval(interval); // Limpiar el intervalo al desmontar
+    return () => clearInterval(interval);
   }, [dispatch]);
 
   return (
     <Layout>
-      <Routes>
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/home" element={<HomePage />} />
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          {/* --- RUTAS PÚBLICAS --- */}
+          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/login" element={<LoginPage />} />
 
-        {/* Rutas públicas */}
-        <Route path="/events" element={<EventsPage />} />
-        <Route path="/events/:id" element={<EventDetailsPage />} />
-        <Route path="/rooms" element={<RoomsPage />} />
-        <Route path="/rooms/:id" element={<RoomDetailsPage />} />
+          {/* --- RUTAS PROTEGIDAS (TODAS USAN EL MISMO PROTECTOR) --- */}
 
-        {/* Rutas protegidas solo para autenticados */}
-        <Route
-          path="/create-reservation"
-          element={
-            <ProtectedRoute>
-              <CreateReservationPage />
-            </ProtectedRoute>
-          }
-        />
+          {/* Rutas para TODOS los usuarios autenticados */}
+          <Route
+            path="/home"
+            element={
+              <ProtectedRoute>
+                <HomePage />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="/my-reservations"
-          element={
-            <ProtectedRoute>
-              <UserReservationsPage />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/events"
+            element={
+              <ProtectedRoute>
+                <EventsPage />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Rutas protegidas solo para administradores */}
-        <Route
-          path="/reservations"
-          element={
-            <ProtectedRoute adminOnly={true}>
-              <AdminReservationsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/users"
-          element={
-            <ProtectedRoute adminOnly={true}>
-              <UsersPage />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/events/:id"
+            element={
+              <ProtectedRoute>
+                <EventDetailsPage />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="/admin/rooms"
-          element={
-            <ProtectedRoute adminOnly={true}>
-              <AdminRoomsPage />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="/preview/:id"
+            element={
+              <ProtectedRoute>
+                <PreviewEventPage />
+              </ProtectedRoute>
+            }
+          />
 
-        {/* Ruta para manejar cualquier ruta no válida */}
-        <Route path="*" element={<Navigate to="/home" replace />} />
-      </Routes>
+          <Route
+            path="/rooms"
+            element={
+              <ProtectedRoute>
+                <RoomsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/rooms/:id"
+            element={
+              <ProtectedRoute>
+                <RoomDetailsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Rutas para REQUESTER (y admin/coord) */}
+          <Route
+            path="/create-reservation"
+            element={
+              <ProtectedRoute
+                allowedRoles={['requester', 'admin', 'coordinator']}
+              >
+                <CreateReservationPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/my-reservations"
+            element={
+              <ProtectedRoute
+                allowedRoles={['requester', 'admin', 'coordinator']}
+              >
+                <UserReservationsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Rutas exclusivas para ADMIN */}
+          <Route
+            path="/reservations"
+            element={
+              <ProtectedRoute adminOnly={true}>
+                <AdminReservationsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/pending"
+            element={
+              <ProtectedRoute adminOnly={true}>
+                <AdminPendingRequestsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/users"
+            element={
+              <ProtectedRoute adminOnly={true}>
+                <UsersPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin/rooms"
+            element={
+              <ProtectedRoute adminOnly={true}>
+                <AdminRoomsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* --- RUTAS DE REDIRECCIÓN --- */}
+          <Route
+            path="/"
+            element={
+              isAuthenticated ? (
+                <Navigate to="/home" replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+
+          <Route
+            path="*"
+            element={
+              isAuthenticated ? (
+                <Navigate to="/home" replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+        </Routes>
+      </Suspense>
     </Layout>
   );
 }
