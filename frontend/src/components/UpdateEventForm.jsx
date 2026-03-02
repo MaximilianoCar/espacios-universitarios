@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axiosInstance from '../axiosConfig';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  fetchRooms,
+  selectRooms,
+  selectRoomsLastFetched,
+} from '../features/rooms/roomsSlice';
 
 const UpdateEventForm = ({ event, onEventUpdated }) => {
   const [formData, setFormData] = useState({
@@ -21,20 +27,15 @@ const UpdateEventForm = ({ event, onEventUpdated }) => {
     Array.isArray(event.schedules) && event.schedules.length > 0
   );
   const [error, setError] = useState('');
-  const [rooms, setRooms] = useState([]);
+  const dispatch = useDispatch();
+  const rooms = useSelector(selectRooms);
+  const lastFetched = useSelector(selectRoomsLastFetched);
 
   useEffect(() => {
-    let mounted = true;
-    axiosInstance
-      .get('/rooms')
-      .then(response => {
-        if (mounted) setRooms(response.data);
-      })
-      .catch(err => {
-        console.error('Error fetching rooms:', err);
-      });
-    return () => (mounted = false);
-  }, []);
+    if (!lastFetched) {
+      dispatch(fetchRooms());
+    }
+  }, [dispatch, lastFetched]);
 
   const addSchedule = () => {
     setSchedules(prev => [

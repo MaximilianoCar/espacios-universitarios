@@ -1,17 +1,17 @@
+// src/components/ModalCalendar.jsx
 import React from 'react';
 
-const Modal = ({ children, onClose }) => {
+const ModalCalendar = ({ children, onClose }) => {
   return (
-    <div className="fixed inset-0 flex items-center justify-center z-50">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div
-        className="absolute inset-0 bg-black opacity-50"
-        onClick={onClose}
-      ></div>
-      <div className="bg-white rounded-lg p-3 z-10 mx-auto w-[45%] min-h-[95%]">
+        className="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[95vh] flex flex-col relative overflow-hidden"
+        onClick={e => e.stopPropagation()} // Evita que el modal se cierre al hacer click dentro
+      >
         {children}
       </div>
     </div>
   );
 };
 
-export default Modal;
+export default ModalCalendar;

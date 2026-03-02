@@ -1,7 +1,8 @@
-// components/CreateRoomModal.jsx
-import React, { useState, useEffect } from 'react';
+import { useDispatch } from 'react-redux';
 import axiosInstance from '../axiosConfig';
-import Swal from '../utils/swal';
+import { useState, useEffect } from 'react';
+import Swal from 'sweetalert2';
+import { createRoom as createRoomThunk } from '../features/rooms/roomsSlice';
 import {
   FaFileAlt,
   FaUsers,
@@ -51,6 +52,7 @@ const CreateRoomModal = ({ isOpen, onClose, onRoomCreated }) => {
   });
   const [errors, setErrors] = useState({});
   const [imagePreview, setImagePreview] = useState(null);
+  const dispatch = useDispatch();
 
   // Cargar dependencias al abrir el modal
   const fetchDependencies = async () => {
@@ -203,7 +205,6 @@ const CreateRoomModal = ({ isOpen, onClose, onRoomCreated }) => {
       return;
     }
 
-    // Validación local para evitar dependencias con el mismo nombre (case-insensitive)
     const exists = dependencies.find(
       d => d.name.toLowerCase() === newDependency.name.trim().toLowerCase()
     );
@@ -227,7 +228,6 @@ const CreateRoomModal = ({ isOpen, onClose, onRoomCreated }) => {
         showConfirmButton: false,
       });
 
-      // Actualizar lista y seleccionar nueva dependencia
       await fetchDependencies();
       setSelectedDependencyId(res.data.id);
       setCurrentView('room');
@@ -290,9 +290,7 @@ const CreateRoomModal = ({ isOpen, onClose, onRoomCreated }) => {
     if (formData.imageFile) data.append('image', formData.imageFile);
 
     try {
-      await axiosInstance.post('/rooms', data, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await dispatch(createRoomThunk(data)).unwrap();
 
       Swal.fire({
         title: '¡Éxito!',
@@ -309,7 +307,7 @@ const CreateRoomModal = ({ isOpen, onClose, onRoomCreated }) => {
       console.error('Error creating room:', error);
       Swal.fire({
         title: 'Error',
-        text: error.response?.data?.error || 'Error al crear espacio',
+        text: error.message || 'Error al crear espacio',
         icon: 'error',
       });
     } finally {

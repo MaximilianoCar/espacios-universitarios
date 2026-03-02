@@ -1,7 +1,8 @@
-// components/UpdateRoomModal.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import axiosInstance from '../axiosConfig';
-import Swal from '../utils/swal';
+import Swal from 'sweetalert2';
+import { useDispatch } from 'react-redux';
+import { updateRoom as updateRoomThunk } from '../features/rooms/roomsSlice';
 import {
   FaFileAlt,
   FaUsers,
@@ -54,6 +55,7 @@ const UpdateRoomModal = ({ isOpen, onClose, room, onRoomUpdated }) => {
   const [errors, setErrors] = useState({});
   const [imagePreview, setImagePreview] = useState(null);
   const [currentImagePath, setCurrentImagePath] = useState(null);
+  const dispatch = useDispatch();
 
   // Inicializar formulario
   useEffect(() => {
@@ -61,40 +63,35 @@ const UpdateRoomModal = ({ isOpen, onClose, room, onRoomUpdated }) => {
       if (!room || !isOpen) return;
 
       try {
-        const [depsRes, roomRes] = await Promise.all([
-          axiosInstance.get('/dependencies'),
-          axiosInstance.get(`/rooms/${room.id}`),
-        ]);
-
+        const depsRes = await axiosInstance.get('/dependencies');
         setDependencies(depsRes.data || []);
-        const r = roomRes.data;
 
         setFormData({
-          name: r.name || '',
-          description: r.description || '',
-          capacity: r.capacity || '',
-          location: r.location || '',
-          staffowner: r.staffowner || '',
-          isInCUC: r.isInCUC || false,
-          cost: r.cost || '0',
-          isAccessible: r.isAccessible || false,
-          canExonerate: r.canExonerate || false,
-          hasBathrooms: r.hasBathrooms || false,
-          hasInternet: r.hasInternet || false,
-          hasAudioEquipment: r.hasAudioEquipment || false,
-          hasVideoEquipment: r.hasVideoEquipment || false,
-          acceptsTransfer: r.acceptsTransfer || false,
-          acceptsMaterials: r.acceptsMaterials || false,
+          name: room.name || '',
+          description: room.description || '',
+          capacity: room.capacity || '',
+          location: room.location || '',
+          staffowner: room.staffowner || '',
+          isInCUC: room.isInCUC || false,
+          cost: room.cost || '0',
+          isAccessible: room.isAccessible || false,
+          canExonerate: room.canExonerate || false,
+          hasBathrooms: room.hasBathrooms || false,
+          hasInternet: room.hasInternet || false,
+          hasAudioEquipment: room.hasAudioEquipment || false,
+          hasVideoEquipment: room.hasVideoEquipment || false,
+          acceptsTransfer: room.acceptsTransfer || false,
+          acceptsMaterials: room.acceptsMaterials || false,
           imageFile: null,
         });
 
-        if (r.imagePath) {
-          const imageUrl = getMediaUrl(r.imagePath);
+        if (room.imagePath) {
+          const imageUrl = getMediaUrl(room.imagePath);
           setImagePreview(imageUrl);
           setCurrentImagePath(imageUrl);
         }
 
-        const deps = r.dependencies || [];
+        const deps = room.dependencies || [];
         setSelectedDependencyId(deps.length ? deps[0].id : '');
       } catch (err) {
         console.error('Error initializing update modal', err);
@@ -183,12 +180,10 @@ const UpdateRoomModal = ({ isOpen, onClose, room, onRoomUpdated }) => {
     if (formData.imageFile && formData.imageFile.size > 5 * 1024 * 1024)
       newErrors.imageFile = 'La imagen no debe exceder 5MB';
 
-    // Validar costo
     if (formData.cost && isNaN(parseFloat(formData.cost))) {
       newErrors.cost = 'El costo debe ser un número válido';
     }
 
-    // Validar métodos de pago
     if (!formData.acceptsTransfer && !formData.acceptsMaterials) {
       newErrors.paymentMethods = 'Debe seleccionar al menos un método de pago';
     }
@@ -218,7 +213,6 @@ const UpdateRoomModal = ({ isOpen, onClose, room, onRoomUpdated }) => {
       return;
     }
 
-    // Validación local para evitar dependencias con el mismo nombre (case-insensitive)
     const exists = dependencies.find(
       d => d.name.toLowerCase() === newDependency.name.trim().toLowerCase()
     );
@@ -304,9 +298,7 @@ const UpdateRoomModal = ({ isOpen, onClose, room, onRoomUpdated }) => {
     if (formData.imageFile) data.append('image', formData.imageFile);
 
     try {
-      await axiosInstance.put(`/rooms/${room.id}`, data, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await dispatch(updateRoomThunk({ id: room.id, data })).unwrap();
 
       Swal.fire({
         title: '¡Éxito!',
@@ -322,7 +314,7 @@ const UpdateRoomModal = ({ isOpen, onClose, room, onRoomUpdated }) => {
       console.error('Error updating room:', error);
       Swal.fire({
         title: 'Error',
-        text: error.response?.data?.error || 'Error al actualizar espacio',
+        text: error.message || 'Error al actualizar espacio',
         icon: 'error',
       });
     } finally {

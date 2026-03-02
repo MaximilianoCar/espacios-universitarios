@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import axiosInstance from '../axiosConfig';
 
-export const usePendingUsers = () => {
+export const usePendingUsers = ({ enabled = true } = {}) => {
   const [pendingUsersCount, setPendingUsersCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -10,7 +10,8 @@ export const usePendingUsers = () => {
 
   useEffect(() => {
     const fetchPendingUsersCount = async () => {
-      if (role !== 'admin') {
+      // Verificar si debe ejecutarse según el prop enabled y el rol
+      if (!enabled || role !== 'admin') {
         return;
       }
 
@@ -47,7 +48,7 @@ export const usePendingUsers = () => {
 
     const timer = setTimeout(fetchPendingUsersCount, 500);
     return () => clearTimeout(timer);
-  }, [role]);
+  }, [role, enabled]); // Añadir enabled a las dependencias
 
   return { pendingUsersCount, loading, error };
 };

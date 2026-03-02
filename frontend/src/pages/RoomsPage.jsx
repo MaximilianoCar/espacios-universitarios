@@ -1,8 +1,15 @@
 // src/pages/RoomsPage.jsx
 import React, { useEffect, useState } from 'react';
-import axiosInstance from '../axiosConfig';
+//import axiosInstance from '../axiosConfig';
 import { Link } from 'react-router-dom';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
+import {
+  fetchRooms,
+  selectRooms,
+  selectRoomsLoading,
+  invalidateRooms,
+  createRoom as createRoomThunk,
+} from '../features/rooms/roomsSlice';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SearchBar from '../components/SearchBar';
@@ -28,9 +35,10 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import getMediaUrl from '../utils/media';
 
 const RoomsPage = () => {
-  const [rooms, setRooms] = useState([]);
+  const rooms = useSelector(selectRooms);
+  const loading = useSelector(selectRoomsLoading);
   const [filteredRooms, setFilteredRooms] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const dispatch = useDispatch();
   const [showAddRoomForm, setShowAddRoomForm] = useState(false);
   const [showManageDepsModal, setShowManageDepsModal] = useState(false);
   const navigate = useNavigate();
@@ -48,26 +56,15 @@ const RoomsPage = () => {
     }
   };
 
-  // Fetch rooms from the backend API
+  // Fetch rooms using Redux cache
+  const roomsLastFetched = useSelector(state => state.rooms.lastFetched);
   useEffect(() => {
-    fetchRooms();
-  }, []);
+    if (!roomsLastFetched) dispatch(fetchRooms());
+  }, [dispatch, roomsLastFetched]);
 
-  const fetchRooms = () => {
-    setLoading(true);
-    axiosInstance
-      .get('/rooms')
-      .then(response => {
-        setRooms(response.data || []);
-        setFilteredRooms(response.data || []);
-      })
-      .catch(error => {
-        console.error('Error fetching rooms:', error);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  };
+  useEffect(() => {
+    setFilteredRooms(rooms || []);
+  }, [rooms]);
 
   const handleSearch = searchTerm => {
     if (!searchTerm.trim()) {
@@ -89,11 +86,20 @@ const RoomsPage = () => {
     setShowAddRoomForm(true);
   };
 
-  const handleRoomCreated = newRoom => {
-    // Update the rooms list with the new room
-    const updatedRooms = [...rooms, newRoom];
-    setRooms(updatedRooms);
-    setFilteredRooms(updatedRooms);
+  const handleRoomCreated = async newRoom => {
+    // If AddRoomForm returns created room, optimistically add it via thunk
+    if (newRoom) {
+      try {
+        await dispatch(createRoomThunk(newRoom)).unwrap();
+      } catch (err) {
+        console.error('Error creating room:', err);
+      }
+    } else {
+      // force refetch if creation happened elsewhere
+      dispatch(invalidateRooms());
+      dispatch(fetchRooms());
+    }
+
     setShowAddRoomForm(false);
   };
 

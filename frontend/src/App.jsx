@@ -7,9 +7,8 @@ import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import { refreshToken } from './features/auth/authActions';
 import ProtectedRoute from './components/ProtectedRoute';
-import ProtectedRouteCoord from './components/ProtectedRouteCoord';
 
-// --- COMPONENTE DE LOADING MEJORADO ---
+// --- COMPONENTE DE LOADING ---
 const PageLoader = () => (
   <div
     style={{
@@ -91,14 +90,6 @@ function App() {
     return () => clearInterval(interval);
   }, [dispatch]);
 
-  // Componente protector de rutas
-  const ProtectedElement = ({ children }) => {
-    if (!isAuthenticated) {
-      return <Navigate to="/login" replace />;
-    }
-    return children;
-  };
-
   return (
     <Layout>
       <Suspense fallback={<PageLoader />}>
@@ -107,125 +98,120 @@ function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/login" element={<LoginPage />} />
 
-          {/* --- RUTAS PROTEGIDAS BÁSICAS --- */}
+          {/* --- RUTAS PROTEGIDAS (TODAS USAN EL MISMO PROTECTOR) --- */}
+
+          {/* Rutas para TODOS los usuarios autenticados */}
           <Route
             path="/home"
             element={
-              <ProtectedElement>
+              <ProtectedRoute>
                 <HomePage />
-              </ProtectedElement>
+              </ProtectedRoute>
             }
           />
 
           <Route
             path="/events"
             element={
-              <ProtectedElement>
+              <ProtectedRoute>
                 <EventsPage />
-              </ProtectedElement>
+              </ProtectedRoute>
             }
           />
 
           <Route
             path="/events/:id"
             element={
-              <ProtectedElement>
+              <ProtectedRoute>
                 <EventDetailsPage />
-              </ProtectedElement>
+              </ProtectedRoute>
             }
           />
 
           <Route
             path="/preview/:id"
             element={
-              <ProtectedElement>
+              <ProtectedRoute>
                 <PreviewEventPage />
-              </ProtectedElement>
+              </ProtectedRoute>
             }
           />
 
           <Route
             path="/rooms"
             element={
-              <ProtectedElement>
+              <ProtectedRoute>
                 <RoomsPage />
-              </ProtectedElement>
+              </ProtectedRoute>
             }
           />
 
           <Route
             path="/rooms/:id"
             element={
-              <ProtectedElement>
+              <ProtectedRoute>
                 <RoomDetailsPage />
-              </ProtectedElement>
+              </ProtectedRoute>
             }
           />
 
-          {/* --- RUTAS CON PROTECCIÓN ADICIONAL DE ROLES --- */}
+          {/* Rutas para REQUESTER (y admin/coord) */}
           <Route
             path="/create-reservation"
             element={
-              <ProtectedElement>
-                <ProtectedRoute>
-                  <CreateReservationPage />
-                </ProtectedRoute>
-              </ProtectedElement>
+              <ProtectedRoute
+                allowedRoles={['requester', 'admin', 'coordinator']}
+              >
+                <CreateReservationPage />
+              </ProtectedRoute>
             }
           />
 
           <Route
             path="/my-reservations"
             element={
-              <ProtectedElement>
-                <ProtectedRoute>
-                  <UserReservationsPage />
-                </ProtectedRoute>
-              </ProtectedElement>
+              <ProtectedRoute
+                allowedRoles={['requester', 'admin', 'coordinator']}
+              >
+                <UserReservationsPage />
+              </ProtectedRoute>
             }
           />
 
+          {/* Rutas exclusivas para ADMIN */}
           <Route
             path="/reservations"
             element={
-              <ProtectedElement>
-                <ProtectedRouteCoord adminOnly={true}>
-                  <AdminReservationsPage />
-                </ProtectedRouteCoord>
-              </ProtectedElement>
+              <ProtectedRoute adminOnly={true}>
+                <AdminReservationsPage />
+              </ProtectedRoute>
             }
           />
 
           <Route
             path="/pending"
             element={
-              <ProtectedElement>
-                <ProtectedRouteCoord adminOnly={true}>
-                  <AdminPendingRequestsPage />
-                </ProtectedRouteCoord>
-              </ProtectedElement>
+              <ProtectedRoute adminOnly={true}>
+                <AdminPendingRequestsPage />
+              </ProtectedRoute>
             }
           />
 
           <Route
             path="/users"
             element={
-              <ProtectedElement>
-                <ProtectedRoute adminOnly={true}>
-                  <UsersPage />
-                </ProtectedRoute>
-              </ProtectedElement>
+              <ProtectedRoute adminOnly={true}>
+                <UsersPage />
+              </ProtectedRoute>
             }
           />
 
           <Route
             path="/admin/rooms"
             element={
-              <ProtectedElement>
-                <ProtectedRouteCoord adminOnly={true}>
-                  <AdminRoomsPage />
-                </ProtectedRouteCoord>
-              </ProtectedElement>
+              <ProtectedRoute adminOnly={true}>
+                <AdminRoomsPage />
+              </ProtectedRoute>
             }
           />
 

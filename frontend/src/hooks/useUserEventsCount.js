@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import axiosInstance from '../axiosConfig';
 
-export const useUserEventsCount = () => {
+export const useUserEventsCount = ({ enabled = true } = {}) => {
   const [eventsCount, setEventsCount] = useState({
     approved: 0,
     denied: 0,
@@ -15,8 +15,8 @@ export const useUserEventsCount = () => {
 
   useEffect(() => {
     const fetchUserEventsCount = async () => {
-      // Solo hacer la petición si es requester
-      if (role !== 'requester') {
+      // Verificar si debe ejecutarse según el prop enabled y el rol
+      if (!enabled || role !== 'requester') {
         return;
       }
 
@@ -36,7 +36,7 @@ export const useUserEventsCount = () => {
           data: error.response?.data,
         });
 
-        // rrores
+        // errores
         if (error.response?.status === 404) {
           setError('Endpoint no encontrado. Verifica las rutas del backend.');
         } else if (error.response?.status === 500) {
@@ -54,7 +54,7 @@ export const useUserEventsCount = () => {
 
     const timer = setTimeout(fetchUserEventsCount, 500);
     return () => clearTimeout(timer);
-  }, [role]);
+  }, [role, enabled]); // Añadir enabled a las dependencias
 
   return { eventsCount, loading, error };
 };

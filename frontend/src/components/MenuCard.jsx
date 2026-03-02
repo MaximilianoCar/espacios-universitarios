@@ -1,5 +1,6 @@
 // src/components/MenuCard.jsx
 import React from 'react';
+import { Link } from 'react-router-dom'; // 👈 IMPORTAR LINK
 import NotificationBadge from './NotificationBadge';
 
 const MenuCard = ({
@@ -102,21 +103,22 @@ const MenuCard = ({
   }
 
   // Render como enlace
+  if (link && !disabled) {
+    return (
+      <Link
+        to={link}
+        className={`${cardClasses} group no-underline hover:no-underline`}
+      >
+        {CardContent}
+      </Link>
+    );
+  }
+
+  // Render deshabilitado (sin interacción)
   return (
-    <a
-      href={disabled ? '#' : link}
-      onClick={e => {
-        if (disabled) {
-          e.preventDefault();
-        }
-        if (!disabled && onClick) {
-          onClick(e);
-        }
-      }}
-      className={`${cardClasses} group no-underline hover:no-underline`}
-    >
+    <div className={`${cardClasses} group no-underline hover:no-underline`}>
       {CardContent}
-    </a>
+    </div>
   );
 };
 

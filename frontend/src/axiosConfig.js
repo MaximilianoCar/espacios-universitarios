@@ -35,7 +35,7 @@ axiosInstance.interceptors.request.use(
   config => {
     const token = localStorage.getItem('token');
 
-    console.log('Token en interceptor:', token ? 'Presente' : 'Ausente');
+    //console.log('Token en interceptor:', token ? 'Presente' : 'Ausente');
 
     if (token) {
       // Verificar que el token tenga formato válido
@@ -59,15 +59,15 @@ axiosInstance.interceptors.request.use(
 // Agregar interceptor de respuesta para debugging
 axiosInstance.interceptors.response.use(
   response => {
-    console.log('Respuesta exitosa:', response.config.url);
+    //console.log('Respuesta exitosa:', response.config.url);
     return response;
   },
   error => {
-    console.error('Error en respuesta:', {
-      url: error.config?.url,
-      status: error.response?.status,
-      message: error.message,
-    });
+    //console.error('Error en respuesta:', {
+    //  url: error.config?.url,
+    //  status: error.response?.status,
+    //  message: error.message,
+    //});
     return Promise.reject(error);
   }
 );

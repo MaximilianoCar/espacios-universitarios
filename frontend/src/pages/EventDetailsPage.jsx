@@ -234,13 +234,10 @@ const EventDetailsPage = () => {
     if (event.imagePath) {
       const result = await Swal.fire({
         title: 'Imagen del evento',
-        text: '¿Deseas subir una nueva imagen o quitar la actual?',
-        showDenyButton: true,
+        text: '¿Deseas subir una nueva imagen?',
         showCancelButton: true,
         confirmButtonText: 'Subir nueva',
         confirmButtonColor: '#3085d6',
-        denyButtonText: 'Quitar imagen',
-        denyButtonColor: '#3085d6',
         cancelButtonText: 'Cancelar',
         cancelButtonColor: '#d33',
         icon: 'question',

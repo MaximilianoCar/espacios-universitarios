@@ -150,4 +150,63 @@ module.exports = {
   createEvent,
   updateEvent,
   deleteEvent,
+  async addOrUpdateAttendees(googleEventId, emails) {
+    try {
+      if (!googleEventId || !Array.isArray(emails) || emails.length === 0)
+        return null;
+      const { calendar } = await getCalendar();
+
+      // Obtener evento actual
+      const calendarId =
+        process.env.CALENDAR_OWNER_EMAIL ||
+        'espaciosuniversitariosucv@gmail.com';
+
+      const getRes = await calendar.events.get({
+        calendarId,
+        eventId: googleEventId,
+      });
+      const ev = getRes.data;
+
+      const existing = ev.attendees || [];
+      const normalized = emails.map(e => ({ email: e.trim().toLowerCase() }));
+
+      // Merge: mantener existentes y añadir/actualizar con los nuevos
+      const mergedMap = {};
+      for (const a of existing) mergedMap[(a.email || '').toLowerCase()] = a;
+      for (const a of normalized) mergedMap[a.email] = { email: a.email }; // overwrite or add
+
+      const attendees = Object.values(mergedMap);
+
+      const resource = { attendees };
+
+      const res = await calendar.events.patch({
+        calendarId,
+        eventId: googleEventId,
+        resource,
+        sendUpdates: 'all',
+      });
+
+      return res.data;
+    } catch (err) {
+      console.error('Google Calendar addOrUpdateAttendees error:', err.message);
+      return null;
+    }
+  },
+  async getEvent(googleEventId) {
+    try {
+      if (!googleEventId) return null;
+      const { calendar } = await getCalendar();
+      const calendarId =
+        process.env.CALENDAR_OWNER_EMAIL ||
+        'espaciosuniversitariosucv@gmail.com';
+      const res = await calendar.events.get({
+        calendarId,
+        eventId: googleEventId,
+      });
+      return res.data || null;
+    } catch (err) {
+      console.error('Google Calendar getEvent error:', err.message);
+      return null;
+    }
+  },
 };

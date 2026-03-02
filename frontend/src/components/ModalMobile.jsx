@@ -1,15 +1,23 @@
+// src/components/ModalMobile.jsx
 import React from 'react';
+import { FaTimes } from 'react-icons/fa';
 
-const ModalMobile = ({ children, onClose }) => {
+const ModalMobile = ({ children, onClose, title }) => {
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-start pt-4">
-      <div
-        className="absolute inset-0 bg-black opacity-50"
-        onClick={onClose}
-      ></div>
-      <div className="relative bg-white rounded-xl shadow-2xl w-[85vw] max-w-md mx-auto my-auto max-h-[90vh] overflow-y-auto">
-        {children}
+    <div className="fixed inset-0 z-50 bg-white flex flex-col">
+      {/* Header del Modal Móvil */}
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
+        <h3 className="font-bold text-gray-800">{title}</h3>
+        <button
+          onClick={onClose}
+          className="p-2 text-gray-500 hover:bg-gray-200 rounded-full transition-colors"
+        >
+          <FaTimes size={20} />
+        </button>
       </div>
+
+      {/* Contenido que se estira para llenar la pantalla */}
+      <div className="flex-grow overflow-hidden">{children}</div>
     </div>
   );
 };

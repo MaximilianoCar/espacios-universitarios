@@ -1,6 +1,13 @@
 // src/pages/EventsPage.jsx
 import React, { useEffect, useState, useMemo } from 'react';
 import axiosInstance from '../axiosConfig';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+  fetchEvents,
+  selectEvents,
+  selectEventsLoading,
+  selectEventsLastFetched,
+} from '../features/events/eventsSlice';
 import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -23,9 +30,22 @@ import ModalCalendar from '../components/ModalCalendar.jsx';
 import ModalMobile from '../components/ModalMobile';
 
 const EventsPage = () => {
-  const [events, setEvents] = useState([]);
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Redux state
+  const reduxEvents = useSelector(selectEvents);
+  const reduxLoading = useSelector(selectEventsLoading);
+  const eventsLastFetched = useSelector(selectEventsLastFetched);
+  const { role } = useSelector(state => state.auth);
+
+  // Local state for admin/coordinator
+  const [localEvents, setLocalEvents] = useState([]);
+  const [localLoading, setLocalLoading] = useState(false);
+
+  // Unified state
   const [filteredEvents, setFilteredEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showCalendarModal, setShowCalendarModal] = useState(false);
   const [calendarDate, setCalendarDate] = useState(() => {
     const d = new Date();
@@ -33,8 +53,8 @@ const EventsPage = () => {
   });
   const [selectedDay, setSelectedDay] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
+
+  const isAdminOrCoordinator = role === 'admin' || role === 'coordinator';
 
   const handleBack = () => {
     if (location.key !== 'default') {
@@ -44,22 +64,34 @@ const EventsPage = () => {
     }
   };
 
-  // Obtener eventos de la API y filtrar solo los eventos aprobados
   useEffect(() => {
-    axiosInstance
-      .get('/events')
-      .then(response => {
-        const approvedEvents = response.data;
-        console.log('Approved Events:', approvedEvents);
-        setEvents(approvedEvents);
-        setFilteredEvents(approvedEvents);
-        setLoading(false);
-      })
-      .catch(error => {
-        console.error('Error fetching events:', error);
-        setLoading(false);
-      });
-  }, []);
+    if (isAdminOrCoordinator) {
+      setLocalLoading(true);
+      axiosInstance
+        .get('/events')
+        .then(response => {
+          setLocalEvents(response.data || []);
+        })
+        .catch(error => {
+          console.error('Error fetching events for admin:', error);
+        })
+        .finally(() => {
+          setLocalLoading(false);
+        });
+    } else {
+      const TEN_MINUTES = 10 * 60 * 1000;
+      if (!eventsLastFetched || Date.now() - eventsLastFetched > TEN_MINUTES) {
+        dispatch(fetchEvents());
+      }
+    }
+  }, [dispatch, eventsLastFetched, isAdminOrCoordinator]);
+
+  const events = isAdminOrCoordinator ? localEvents : reduxEvents;
+  const loading = isAdminOrCoordinator ? localLoading : reduxLoading;
+
+  useEffect(() => {
+    setFilteredEvents(events || []);
+  }, [events]);
 
   // Detectar tamaño de pantalla para elegir modal (Mobile vs Desktop)
   useEffect(() => {
@@ -183,6 +215,51 @@ const EventsPage = () => {
     })}`;
   };
 
+  // Componente que muestra el iframe del calendario con estado de carga y error
+  const CalendarIframe = () => {
+    const [iframeLoading, setIframeLoading] = useState(true);
+    const [iframeError, setIframeError] = useState(false);
+
+    // Detectar si estamos en móvil para cambiar la URL
+    const isSmallScreen = window.innerWidth < 768;
+
+    // Agregamos &mode=AGENDA si es móvil para que se vea como lista
+    const src = `https://calendar.google.com/calendar/embed?src=espaciosuniversitariosucv%40gmail.com&ctz=America%2FCaracas${
+      isSmallScreen ? '&mode=AGENDA' : ''
+    }`;
+
+    return (
+      <div className="w-full h-full flex flex-col overflow-hidden">
+        {iframeLoading && !iframeError && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-white z-10">
+            <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500 mb-3"></div>
+            <div className="text-gray-600">Cargando calendario...</div>
+          </div>
+        )}
+
+        {iframeError && (
+          <div className="p-6 text-center text-red-600">
+            No se pudo cargar el calendario.
+          </div>
+        )}
+
+        {/* Eliminamos el min-w que forzaba el scroll horizontal */}
+        <div className="flex-grow w-full h-full overflow-hidden">
+          <iframe
+            title="Calendario UCV"
+            src={src}
+            className="w-full h-full border-0"
+            style={{ minHeight: '100%' }}
+            onLoad={() => setIframeLoading(false)}
+            onError={() => {
+              setIframeLoading(false);
+              setIframeError(true);
+            }}
+          />
+        </div>
+      </div>
+    );
+  };
   // Mobile Calendar Component (sin cambios)
   const MobileCalendar = () => {
     const y = calendarDate.getFullYear();
@@ -509,217 +586,23 @@ const EventsPage = () => {
         {showCalendarModal &&
           (isMobile ? (
             <ModalMobile onClose={closeCalendar} title="Calendario de Eventos">
-              <button
-                onClick={closeCalendar}
-                className="absolute top-4 right-4 z-10 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <FaTimes size={20} />
-              </button>
-              <MobileCalendar />
+              <div className="flex-grow h-full w-full bg-white">
+                <CalendarIframe />
+              </div>
             </ModalMobile>
           ) : (
             <ModalCalendar onClose={closeCalendar}>
-              <button
-                onClick={closeCalendar}
-                className="absolute top-4 right-4 z-10 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
-              >
-                <FaTimes size={20} />
-              </button>
+              <div className="relative flex flex-col h-[85vh] w-full max-w-5xl bg-white rounded-lg overflow-hidden">
+                <button
+                  onClick={closeCalendar}
+                  className="absolute top-4 right-4 z-20 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <FaTimes size={20} />
+                </button>
 
-              <div className="max-w-4xl mx-auto pt-8">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-xl font-semibold">
-                      Calendario de Eventos
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      Mes:{' '}
-                      {calendarDate.toLocaleString('es-ES', {
-                        month: 'long',
-                        year: 'numeric',
-                      })}
-                    </p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={prevMonth}
-                      className="p-2 rounded-lg bg-white hover:bg-gray-50 border border-gray-300 flex items-center justify-center transition-all duration-200 hover:border-blue-300"
-                      title="Mes anterior"
-                    >
-                      <FaChevronLeft
-                        className="text-blue-600 hover:text-blue-600"
-                        size={16}
-                      />
-                    </button>
-
-                    <button
-                      onClick={goToday}
-                      className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-sm transition-colors duration-200 border border-transparent hover:border-gray-300"
-                    >
-                      Hoy
-                    </button>
-
-                    <button
-                      onClick={nextMonth}
-                      className="p-2 rounded-lg bg-white hover:bg-gray-50 border border-gray-300 flex items-center justify-center transition-all duration-200 hover:border-blue-300"
-                      title="Mes siguiente"
-                    >
-                      <FaChevronRight
-                        className="text-blue-600 hover:text-blue-600"
-                        size={16}
-                      />
-                    </button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-7 gap-1 text-center">
-                  {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map(h => (
-                    <div
-                      key={h}
-                      className="text-sm font-medium text-gray-600 py-2"
-                    >
-                      {h}
-                    </div>
-                  ))}
-                  {(() => {
-                    const y = calendarDate.getFullYear();
-                    const m = calendarDate.getMonth();
-                    const firstDay = startOfMonth(calendarDate).getDay();
-                    const total = daysInMonth(y, m);
-                    const cells = [];
-                    for (let i = 0; i < firstDay; i++)
-                      cells.push(<div key={`b-${i}`} className="py-4"></div>);
-                    for (let d = 1; d <= total; d++) {
-                      const key = getKey(y, m, d);
-                      const dayEvents = eventsByDay[key] || [];
-                      const hasEvents = dayEvents.length > 0;
-                      const isToday =
-                        new Date().getDate() === d &&
-                        new Date().getMonth() === m &&
-                        new Date().getFullYear() === y;
-                      const isSelected =
-                        selectedDay &&
-                        selectedDay.year === y &&
-                        selectedDay.month === m &&
-                        selectedDay.day === d;
-                      cells.push(
-                        <div
-                          key={key}
-                          className={`
-                      p-1 h-16 border rounded cursor-pointer flex flex-col justify-between transition-all duration-150
-                      ${hasEvents ? 'bg-blue-50 border-blue-200' : 'bg-white'}
-                      ${isToday ? 'bg-blue-100 border-blue-300 shadow-sm' : ''}
-                      ${
-                        isSelected
-                          ? 'ring-2 ring-blue-500 bg-blue-100 shadow-md transform scale-105'
-                          : ''
-                      }
-                      hover:bg-gray-50 hover:shadow-sm hover:border-gray-300
-                    `}
-                          onClick={() =>
-                            setSelectedDay({ year: y, month: m, day: d })
-                          }
-                        >
-                          <div className="flex justify-between items-start">
-                            <div
-                              className={`text-xs font-medium ${
-                                isToday
-                                  ? 'text-blue-800 font-bold'
-                                  : 'text-gray-700'
-                              } ${isSelected ? 'text-blue-900 font-bold' : ''}`}
-                            >
-                              {d}
-                            </div>
-                            {hasEvents && (
-                              <div
-                                className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-0.5"
-                                title={`${dayEvents.length} eventos`}
-                              ></div>
-                            )}
-                          </div>
-                          <div className="flex justify-center">
-                            {hasEvents && (
-                              <span className="text-xs text-blue-600 font-medium">
-                                {dayEvents.length}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    }
-                    return cells;
-                  })()}
-                </div>
-                <div className="mt-6">
-                  {selectedDay ? (
-                    (() => {
-                      const key = getKey(
-                        selectedDay.year,
-                        selectedDay.month,
-                        selectedDay.day
-                      );
-                      const dayEvents = eventsByDay[key] || [];
-                      return (
-                        <div>
-                          <h4 className="font-semibold mb-3 text-lg">
-                            Eventos el {selectedDay.day}/{selectedDay.month + 1}
-                            /{selectedDay.year}
-                          </h4>
-                          {dayEvents.length > 0 ? (
-                            <div className="grid gap-3 max-h-60 overflow-y-auto">
-                              {dayEvents.map(ev => (
-                                <div
-                                  key={ev.id}
-                                  className="p-3 border rounded-lg bg-gray-50"
-                                >
-                                  <div className="flex justify-between items-start">
-                                    <div className="flex-1">
-                                      <div className="font-medium text-gray-900 mb-1">
-                                        {ev.name}
-                                      </div>
-                                      <div className="text-sm text-gray-600 mb-1">
-                                        {formatEventDateRange(ev)}
-                                      </div>
-                                      <div className="text-sm text-gray-500">
-                                        {new Date(
-                                          ev.eventFrom
-                                        ).toLocaleTimeString('es-ES', {
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                        })}{' '}
-                                        -{' '}
-                                        {new Date(
-                                          ev.eventTo
-                                        ).toLocaleTimeString('es-ES', {
-                                          hour: '2-digit',
-                                          minute: '2-digit',
-                                        })}
-                                      </div>
-                                    </div>
-                                    <div className="ml-4 flex-shrink-0">
-                                      <Link
-                                        to={`/events/${ev.id}`}
-                                        className="bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-500 whitespace-nowrap"
-                                      >
-                                        Ver Detalles
-                                      </Link>
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-center text-gray-500 py-6 border rounded-lg">
-                              No hay eventos programados para este día.
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()
-                  ) : (
-                    <div className="text-center text-gray-500 py-6 border rounded-lg">
-                      Selecciona un día para ver los eventos programados.
-                    </div>
-                  )}
+                {/* Padding superior para que el botón de cerrar no tape el calendario */}
+                <div className="flex-grow pt-12 pb-4 px-4">
+                  <CalendarIframe />
                 </div>
               </div>
             </ModalCalendar>

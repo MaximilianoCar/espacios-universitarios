@@ -19,7 +19,6 @@ const allowedOrigins = allowedOriginsEnv.split(',').map(s => s.trim());
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // permitir requests sin origin (ej: herramientas como curl, o same-origin)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
