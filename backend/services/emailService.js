@@ -271,7 +271,6 @@ const emailTemplates = {
           <p><strong>Estado actual:</strong> <span style="color: #ffc107;">Pendiente de revisión</span></p>
         </div>
         <p>Por favor, revisa esta solicitud y aprueba o rechaza según la disponibilidad.</p>
-        <a href="${process.env.APP_URL}/coord/reservas" 
            style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 0;">
           Gestionar Reservas Pendientes
         </a>
@@ -350,7 +349,6 @@ const emailTemplates = {
           <p><strong>Espacio:</strong> ${spaceName}</p>
         </div>
         <p>El programa del evento ha sido cargado y está disponible para su revisión.</p>
-        <a href="${process.env.APP_URL}/events/${eventId}" 
            style="background-color: #17a2b8; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px 0;">
           Revisar Programa del Evento
         </a>

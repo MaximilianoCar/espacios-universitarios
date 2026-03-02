@@ -18,6 +18,8 @@ import {
   FaFileImage,
   FaClipboardCheck,
   FaInfoCircle,
+  FaChevronLeft,
+  FaChevronRight,
 } from 'react-icons/fa';
 import getMediaUrl from '../utils/media';
 
@@ -72,6 +74,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
   const [errors, setErrors] = useState({});
   const [imagePreview, setImagePreview] = useState(null);
   const [activeSection, setActiveSection] = useState('basic');
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   const previousSchedulesHashRef = useRef('');
   const isFirstGenerationRef = useRef(true);
@@ -668,6 +671,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
     // Permitimos retroceder sin validación
     if (targetIndex < currentIndex) {
       setActiveSection(targetSection);
+      setShowMobileMenu(false);
       return;
     }
 
@@ -675,12 +679,17 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
     const sectionResult = validateSection(activeSection);
     if (sectionResult.valid) {
       setActiveSection(targetSection);
+      setShowMobileMenu(false);
     } else {
       const firstField = Object.keys(sectionResult.errors)[0];
       Swal.fire({
         title: 'Corrige errores',
         text: 'Hay errores en esta sección. Por favor corrígelos antes de avanzar.',
         icon: 'error',
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 3000,
       });
       const el = document.querySelector(`[name="${firstField}"]`);
       if (el) {
@@ -741,6 +750,10 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
         title: 'Corrige los errores',
         text: 'Hay errores en el formulario. Revisa los campos marcados en rojo.',
         icon: 'error',
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 3000,
       });
       return;
     }
@@ -998,25 +1011,96 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
     { id: 'review', label: 'Revisión', icon: FaClipboardCheck },
   ];
 
+  // Obtener la sección actual para mostrar
+  const currentSection = sectionTabs.find(t => t.id === activeSection);
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
+        {/* Header - Versión móvil simplificada */}
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex-shrink-0">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold text-gray-800">
+            <h2 className="text-lg sm:text-2xl font-bold text-gray-800 truncate pr-2">
+              {activeSection === 'basic'}
+              {activeSection === 'dates'}
+              {activeSection === 'review'}
               Actualizar Evento
             </h2>
             <button
               onClick={handleClose}
-              className="text-gray-400 hover:text-gray-600 text-2xl transition-colors"
+              className="text-gray-400 hover:text-gray-600 text-2xl sm:text-2xl transition-colors ml-2 flex-shrink-0"
               disabled={submitting}
             >
               &times;
             </button>
           </div>
 
-          {/* Navegación por secciones */}
-          <div className="mt-4 flex space-x-2 overflow-x-auto pb-2">
+          {/* Selector de secciones para móvil - Dropdown */}
+          <div className="mt-3 sm:hidden">
+            <button
+              onClick={() => setShowMobileMenu(!showMobileMenu)}
+              className="w-full flex items-center justify-between px-4 py-2 bg-gray-100 rounded-lg text-gray-700"
+            >
+              <span className="flex items-center">
+                {currentSection && (
+                  <>
+                    <currentSection.icon className="mr-2" />
+                    {currentSection.label}
+                  </>
+                )}
+              </span>
+              <svg
+                className={`w-5 h-5 transition-transform ${showMobileMenu ? 'rotate-180' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+
+            {/* Menú desplegable móvil */}
+            {showMobileMenu && (
+              <div className="absolute left-4 right-4 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                {sectionTabs.map(tab => {
+                  const Icon = tab.icon;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => handleSectionClick(tab.id)}
+                      className={`w-full flex items-center px-4 py-3 text-left border-b last:border-b-0 ${
+                        activeSection === tab.id
+                          ? 'bg-blue-50 text-blue-700'
+                          : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <Icon
+                        className={`mr-3 ${activeSection === tab.id ? 'text-blue-500' : 'text-gray-500'}`}
+                      />
+                      <span
+                        className={
+                          activeSection === tab.id ? 'font-medium' : ''
+                        }
+                      >
+                        {tab.label}
+                      </span>
+                      {activeSection === tab.id && (
+                        <span className="ml-auto text-blue-500">✓</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Navegación por secciones - Escritorio */}
+          <div className="hidden sm:flex mt-4 space-x-2 overflow-x-auto pb-2">
             {sectionTabs.map(tab => {
               const Icon = tab.icon;
               return (
@@ -1037,17 +1121,22 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6">
+        {/* Contenido scrolleable */}
+        <form
+          id="update-event-form"
+          onSubmit={handleSubmit}
+          className="flex-1 overflow-y-auto p-4 sm:p-6"
+        >
           {/* Sección: Información Básica */}
           {activeSection === 'basic' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Columna Izquierda */}
+            <div className="space-y-6">
+              {/* Versión móvil: una columna */}
               <div className="space-y-6">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h3 className="text-lg font-semibold text-blue-800 mb-2">
+                <div className="bg-blue-50 p-3 sm:p-4 rounded-lg">
+                  <h3 className="text-base sm:text-lg font-semibold text-blue-800 mb-1">
                     Información del Evento
                   </h3>
-                  <p className="text-sm text-blue-600">
+                  <p className="text-xs sm:text-sm text-blue-600">
                     Actualiza la información principal del evento.
                   </p>
                 </div>
@@ -1063,7 +1152,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                     name="name"
                     value={formData.name}
                     onChange={handleChange}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
+                    className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
                       errors.name ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="Ingrese el nombre del evento"
@@ -1088,7 +1177,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                     value={formData.description}
                     onChange={handleChange}
                     rows={4}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
+                    className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
                       errors.description ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="Describa el evento (máximo 5000 caracteres)"
@@ -1121,7 +1210,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                     value={formData.specialRequirements}
                     onChange={handleChange}
                     rows={3}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition ${
+                    className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition text-base ${
                       errors.specialRequirements
                         ? 'border-red-500'
                         : 'border-gray-300'
@@ -1141,18 +1230,6 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                     )}
                   </div>
                 </div>
-              </div>
-
-              {/* Columna Derecha */}
-              <div className="space-y-6">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h3 className="text-lg font-semibold text-blue-800 mb-2">
-                    Detalles Adicionales
-                  </h3>
-                  <p className="text-sm text-blue-600">
-                    Actualiza los detalles del evento.
-                  </p>
-                </div>
 
                 {/* Espacio (Room) */}
                 <div>
@@ -1164,7 +1241,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                     name="roomId"
                     value={formData.roomId}
                     onChange={handleChange}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
+                    className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
                       errors.roomId ? 'border-red-500' : 'border-gray-300'
                     }`}
                     disabled={loadingRooms}
@@ -1198,7 +1275,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                     value={formData.contact}
                     onChange={handleChange}
                     rows={3}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
+                    className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
                       errors.contact ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="Información para contactar al organizador"
@@ -1215,7 +1292,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                 </div>
 
                 {/* Capacidad y Costo */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       <FaUsers className="inline mr-2 text-blue-500" />
@@ -1228,7 +1305,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                       onChange={handleChange}
                       min="1"
                       max="10000"
-                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
+                      className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
                         errors.capacity ? 'border-red-500' : 'border-gray-300'
                       }`}
                       placeholder="Ej: 100"
@@ -1250,7 +1327,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                       name="cost"
                       value={formData.cost}
                       onChange={handleChange}
-                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
+                      className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
                         errors.cost ? 'border-red-500' : 'border-gray-300'
                       }`}
                       placeholder="Ej: $1000 o Gratis"
@@ -1264,11 +1341,11 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
 
                 {/* Método de Pago (siempre las 3 opciones en este modal) */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     <FaDollarSign className="inline mr-2 text-blue-500" />
                     Método de Pago <span className="text-red-500">*</span>
                   </label>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     <label className="inline-flex items-center gap-2">
                       <input
                         type="radio"
@@ -1276,8 +1353,11 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                         value="transfer"
                         checked={formData.paymentMethod === 'transfer'}
                         onChange={handleChange}
+                        className="w-4 h-4"
                       />
-                      <span className="text-sm">Transferencia</span>
+                      <span className="text-sm sm:text-base">
+                        Transferencia
+                      </span>
                     </label>
 
                     <label className="inline-flex items-center gap-2">
@@ -1287,8 +1367,9 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                         value="materials"
                         checked={formData.paymentMethod === 'materials'}
                         onChange={handleChange}
+                        className="w-4 h-4"
                       />
-                      <span className="text-sm">Materiales</span>
+                      <span className="text-sm sm:text-base">Materiales</span>
                     </label>
 
                     <label className="inline-flex items-center gap-2">
@@ -1298,8 +1379,9 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                         value="exoneration"
                         checked={formData.paymentMethod === 'exoneration'}
                         onChange={handleChange}
+                        className="w-4 h-4"
                       />
-                      <span className="text-sm">Exoneración</span>
+                      <span className="text-sm sm:text-base">Exoneración</span>
                     </label>
                   </div>
                   {errors.paymentMethod && (
@@ -1318,7 +1400,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                     name="status"
                     value={formData.status}
                     onChange={handleChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                    className="w-full px-4 py-3 sm:py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base"
                   >
                     <option value="pending">Pendiente</option>
                     <option value="approved">Aprobado</option>
@@ -1352,7 +1434,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                     name="imageFile"
                     onChange={handleChange}
                     accept="image/*"
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
+                    className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
                       errors.imageFile ? 'border-red-500' : 'border-gray-300'
                     }`}
                   />
@@ -1384,188 +1466,182 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
 
           {/* Sección: Fechas */}
           {activeSection === 'dates' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="space-y-6">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h3 className="text-lg font-semibold text-blue-800 mb-2">
-                    Fechas del Evento Principal
-                  </h3>
-                  <p className="text-sm text-blue-600">
-                    {isRecurrent
-                      ? 'Los eventos recurrentes no permiten modificar sus fechas.'
-                      : 'Actualiza las fechas y horas del evento.'}
-                  </p>
-                </div>
+            <div className="space-y-6">
+              <div className="bg-blue-50 p-3 sm:p-4 rounded-lg">
+                <h3 className="text-base sm:text-lg font-semibold text-blue-800 mb-1">
+                  Fechas del Evento Principal
+                </h3>
+                <p className="text-xs sm:text-sm text-blue-600">
+                  {isRecurrent
+                    ? 'Los eventos recurrentes no permiten modificar sus fechas.'
+                    : 'Actualiza las fechas y horas del evento.'}
+                </p>
+              </div>
 
-                {isRecurrent && (
-                  <div className="mb-4 p-4 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 rounded">
-                    <div className="flex items-start">
-                      <FaInfoCircle
-                        className="mr-3 mt-1 flex-shrink-0"
-                        size={20}
-                      />
-                      <div>
-                        <p className="font-medium">Evento Recurrente</p>
-                        <p className="text-sm mt-1">
-                          Este evento forma parte de una serie recurrente. Para
-                          modificar las fechas:
-                        </p>
-                        <ul className="list-disc list-inside text-sm mt-2 space-y-1">
-                          <li>
-                            Las fechas individuales no pueden modificarse aquí
-                          </li>
-                          <li>
-                            Si necesitas cambiar las fechas, deberás eliminar el
-                            evento recurrente y crear uno nuevo
-                          </li>
-                          <li>
-                            Puedes modificar otros datos como descripción,
-                            contacto, capacidad, etc.
-                          </li>
-                        </ul>
-                      </div>
+              {isRecurrent && (
+                <div className="mb-4 p-4 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 rounded">
+                  <div className="flex items-start">
+                    <FaInfoCircle
+                      className="mr-3 mt-1 flex-shrink-0"
+                      size={20}
+                    />
+                    <div>
+                      <p className="font-medium">Evento Recurrente</p>
+                      <p className="text-sm mt-1">
+                        Este evento forma parte de una serie recurrente. Para
+                        modificar las fechas:
+                      </p>
+                      <ul className="list-disc list-inside text-sm mt-2 space-y-1">
+                        <li>
+                          Las fechas individuales no pueden modificarse aquí
+                        </li>
+                        <li>
+                          Si necesitas cambiar las fechas, deberás eliminar el
+                          evento recurrente y crear uno nuevo
+                        </li>
+                        <li>
+                          Puedes modificar otros datos como descripción,
+                          contacto, capacidad, etc.
+                        </li>
+                      </ul>
                     </div>
                   </div>
-                )}
+                </div>
+              )}
 
-                <div className="bg-gray-50 p-4 rounded-lg space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      <FaCalendarAlt className="inline mr-2 text-blue-500" />
-                      Fechas del Evento Principal{' '}
-                      <span className="text-red-500">*</span>
-                    </label>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">
-                          Inicio del Evento
-                        </label>
-                        <input
-                          type="datetime-local"
-                          name="eventFrom"
-                          value={formData.eventFrom}
-                          onChange={handleChange}
-                          disabled={isRecurrent}
-                          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                            errors.eventFrom
-                              ? 'border-red-500'
-                              : 'border-gray-300'
-                          } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                          title={
-                            isRecurrent
-                              ? 'Los eventos recurrentes no permiten modificar sus fechas'
-                              : undefined
-                          }
-                        />
-                        {errors.eventFrom && (
-                          <p className="mt-1 text-sm text-red-600">
-                            {errors.eventFrom}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">
-                          Fin del Evento
-                        </label>
-                        <input
-                          type="datetime-local"
-                          name="eventTo"
-                          value={formData.eventTo}
-                          onChange={handleChange}
-                          disabled={isRecurrent}
-                          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                            errors.eventTo
-                              ? 'border-red-500'
-                              : 'border-gray-300'
-                          } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                          title={
-                            isRecurrent
-                              ? 'Los eventos recurrentes no permiten modificar sus fechas'
-                              : undefined
-                          }
-                        />
-                        {errors.eventTo && (
-                          <p className="mt-1 text-sm text-red-600">
-                            {errors.eventTo}
-                          </p>
-                        )}
-                      </div>
+              <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <FaCalendarAlt className="inline mr-2 text-blue-500" />
+                    Fechas del Evento Principal{' '}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">
+                        Inicio del Evento
+                      </label>
+                      <input
+                        type="datetime-local"
+                        name="eventFrom"
+                        value={formData.eventFrom}
+                        onChange={handleChange}
+                        disabled={isRecurrent}
+                        className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
+                          errors.eventFrom
+                            ? 'border-red-500'
+                            : 'border-gray-300'
+                        } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                        title={
+                          isRecurrent
+                            ? 'Los eventos recurrentes no permiten modificar sus fechas'
+                            : undefined
+                        }
+                      />
+                      {errors.eventFrom && (
+                        <p className="mt-1 text-sm text-red-600">
+                          {errors.eventFrom}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">
+                        Fin del Evento
+                      </label>
+                      <input
+                        type="datetime-local"
+                        name="eventTo"
+                        value={formData.eventTo}
+                        onChange={handleChange}
+                        disabled={isRecurrent}
+                        className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
+                          errors.eventTo ? 'border-red-500' : 'border-gray-300'
+                        } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                        title={
+                          isRecurrent
+                            ? 'Los eventos recurrentes no permiten modificar sus fechas'
+                            : undefined
+                        }
+                      />
+                      {errors.eventTo && (
+                        <p className="mt-1 text-sm text-red-600">
+                          {errors.eventTo}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-6">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h3 className="text-lg font-semibold text-blue-800 mb-2">
-                    Fechas de Reserva
-                  </h3>
-                  <p className="text-sm text-blue-600">
-                    {isRecurrent
-                      ? 'No disponible para eventos recurrentes'
-                      : 'Actualiza el período de reserva del espacio.'}
-                  </p>
-                </div>
+              <div className="bg-blue-50 p-3 sm:p-4 rounded-lg">
+                <h3 className="text-base sm:text-lg font-semibold text-blue-800 mb-1">
+                  Fechas de Reserva
+                </h3>
+                <p className="text-xs sm:text-sm text-blue-600">
+                  {isRecurrent
+                    ? 'No disponible para eventos recurrentes'
+                    : 'Actualiza el período de reserva del espacio.'}
+                </p>
+              </div>
 
-                <div className="bg-gray-50 p-4 rounded-lg space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      <FaCalendarAlt className="inline mr-2 text-blue-500" />
-                      Fechas de Reserva
-                      <span className="text-xs text-gray-500 ml-1">
-                        (Opcional)
-                      </span>
-                    </label>
-                    <p className="text-xs text-gray-500 mb-2">
-                      {isRecurrent
-                        ? 'No aplica para eventos recurrentes'
-                        : 'Si no se especifican, se usarán las fechas del evento.'}
-                    </p>
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">
-                          Inicio Reserva
-                        </label>
-                        <input
-                          type="datetime-local"
-                          name="reservationFrom"
-                          value={formData.reservationFrom}
-                          onChange={handleChange}
-                          disabled={isRecurrent}
-                          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                            errors.reservationFrom
-                              ? 'border-red-500'
-                              : 'border-gray-300'
-                          } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                          title={
-                            isRecurrent
-                              ? 'Los eventos recurrentes no permiten modificar fechas'
-                              : undefined
-                          }
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">
-                          Fin Reserva
-                        </label>
-                        <input
-                          type="datetime-local"
-                          name="reservationTo"
-                          value={formData.reservationTo}
-                          onChange={handleChange}
-                          disabled={isRecurrent}
-                          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                            errors.reservationTo
-                              ? 'border-red-500'
-                              : 'border-gray-300'
-                          } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                          title={
-                            isRecurrent
-                              ? 'Los eventos recurrentes no permiten modificar fechas'
-                              : undefined
-                          }
-                        />
-                      </div>
+              <div className="bg-gray-50 p-4 rounded-lg space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <FaCalendarAlt className="inline mr-2 text-blue-500" />
+                    Fechas de Reserva
+                    <span className="text-xs text-gray-500 ml-1">
+                      (Opcional)
+                    </span>
+                  </label>
+                  <p className="text-xs text-gray-500 mb-2">
+                    {isRecurrent
+                      ? 'No aplica para eventos recurrentes'
+                      : 'Si no se especifican, se usarán las fechas del evento.'}
+                  </p>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">
+                        Inicio Reserva
+                      </label>
+                      <input
+                        type="datetime-local"
+                        name="reservationFrom"
+                        value={formData.reservationFrom}
+                        onChange={handleChange}
+                        disabled={isRecurrent}
+                        className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
+                          errors.reservationFrom
+                            ? 'border-red-500'
+                            : 'border-gray-300'
+                        } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                        title={
+                          isRecurrent
+                            ? 'Los eventos recurrentes no permiten modificar fechas'
+                            : undefined
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">
+                        Fin Reserva
+                      </label>
+                      <input
+                        type="datetime-local"
+                        name="reservationTo"
+                        value={formData.reservationTo}
+                        onChange={handleChange}
+                        disabled={isRecurrent}
+                        className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
+                          errors.reservationTo
+                            ? 'border-red-500'
+                            : 'border-gray-300'
+                        } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                        title={
+                          isRecurrent
+                            ? 'Los eventos recurrentes no permiten modificar fechas'
+                            : undefined
+                        }
+                      />
                     </div>
                   </div>
                 </div>
@@ -1573,70 +1649,72 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
             </div>
           )}
 
-          {/* Recurrencia removida: la gestión de recurrencia no está disponible en este modal */}
-
           {/* Sección: Revisión */}
           {activeSection === 'review' && (
             <div className="space-y-6">
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <h3 className="text-lg font-semibold text-blue-800 mb-2">
+              <div className="bg-blue-50 p-3 sm:p-4 rounded-lg">
+                <h3 className="text-base sm:text-lg font-semibold text-blue-800 mb-1">
                   Resumen de la Actualización
                 </h3>
-                <p className="text-sm text-blue-600">
+                <p className="text-xs sm:text-sm text-blue-600">
                   Revisa toda la información antes de actualizar el evento.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-gray-50 p-6 rounded-lg space-y-4">
-                  <h4 className="font-bold text-gray-800">
+              <div className="space-y-4">
+                <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                  <h4 className="font-bold text-gray-800 text-base">
                     Información del Evento
                   </h4>
                   <div className="space-y-3">
-                    <div>
-                      <span className="font-medium text-gray-700">Nombre:</span>
-                      <p className="text-gray-600">
+                    <div className="border-b border-gray-200 pb-2">
+                      <span className="font-medium text-gray-700 block text-sm">
+                        Nombre:
+                      </span>
+                      <p className="text-gray-600 text-sm break-words">
                         {formData.name || 'No especificado'}
                       </p>
                     </div>
-                    <div>
-                      <span className="font-medium text-gray-700">
+                    <div className="border-b border-gray-200 pb-2">
+                      <span className="font-medium text-gray-700 block text-sm">
                         Descripción:
                       </span>
-                      <p className="text-gray-600 truncate">
+                      <p className="text-gray-600 text-sm break-words">
                         {formData.description || 'No especificada'}
                       </p>
                     </div>
-                    <div>
-                      <span className="font-medium text-gray-700">
+                    <div className="border-b border-gray-200 pb-2">
+                      <span className="font-medium text-gray-700 block text-sm">
                         Espacio:
                       </span>
-                      <p className="text-gray-600">
+                      <p className="text-gray-600 text-sm">
                         {rooms.find(r => r.id == formData.roomId)?.name ||
                           'No seleccionado'}
                       </p>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-2 border-b border-gray-200 pb-2">
                       <div>
-                        <span className="font-medium text-gray-700">
+                        <span className="font-medium text-gray-700 block text-sm">
                           Capacidad:
                         </span>
-                        <p className="text-gray-600">
+                        <p className="text-gray-600 text-sm">
                           {formData.capacity || 'No especificada'}
                         </p>
                       </div>
                       <div>
-                        <span className="font-medium text-gray-700">
+                        <span className="font-medium text-gray-700 block text-sm">
                           Costo:
                         </span>
-                        <p className="text-gray-600">
+                        <p className="text-gray-600 text-sm">
                           {formData.cost || 'No especificado'}
                         </p>
                       </div>
                     </div>
                     <div>
-                      <span className="font-medium text-gray-700">Estado:</span>
-                      <p className="text-gray-600">
+                      <span className="font-medium text-gray-700 block text-sm">
+                        Estado:
+                      </span>
+                      <p className="text-gray-600 text-sm">
                         {formData.status === 'pending'
                           ? 'Pendiente'
                           : formData.status === 'approved'
@@ -1647,170 +1725,190 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                   </div>
                 </div>
 
-                <div className="bg-gray-50 p-6 rounded-lg space-y-4">
-                  <h4 className="font-bold text-gray-800">Fechas y Horarios</h4>
+                <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                  <h4 className="font-bold text-gray-800 text-base">
+                    Fechas y Horarios
+                  </h4>
                   <div className="space-y-3">
-                    <div>
-                      <span className="font-medium text-gray-700">
+                    <div className="border-b border-gray-200 pb-2">
+                      <span className="font-medium text-gray-700 block text-sm">
                         Evento Principal:
                       </span>
-                      <p className="text-gray-600">
+                      <p className="text-gray-600 text-sm break-words">
                         {formData.eventFrom
                           ? `${new Date(formData.eventFrom).toLocaleString()} - ${new Date(formData.eventTo).toLocaleString()}`
                           : 'No especificado'}
                       </p>
                     </div>
-                    <div>
-                      <span className="font-medium text-gray-700">
+                    <div className="border-b border-gray-200 pb-2">
+                      <span className="font-medium text-gray-700 block text-sm">
                         Período de Reserva:
                       </span>
-                      <p className="text-gray-600">
+                      <p className="text-gray-600 text-sm break-words">
                         {formData.reservationFrom
                           ? `${new Date(formData.reservationFrom).toLocaleString()} - ${new Date(formData.reservationTo).toLocaleString()}`
                           : 'Mismas fechas del evento'}
                       </p>
                     </div>
-                    <div>
-                      <span className="font-medium text-gray-700">
+                    <div className="border-b border-gray-200 pb-2">
+                      <span className="font-medium text-gray-700 block text-sm">
                         Recurrencia:
                       </span>
-                      <p className="text-gray-600">
+                      <p className="text-gray-600 text-sm">
                         {recurrenceConfig.active
                           ? `${recurrenceConfig.frequency === 'weekly' ? 'Semanal' : recurrenceConfig.frequency === 'biweekly' ? 'Quincenal' : 'Mensual'} - ${recurrenceConfig.daysOfWeek.length} día(s)`
                           : 'Sin recurrencia'}
                       </p>
                     </div>
                     <div>
-                      <span className="font-medium text-gray-700">
+                      <span className="font-medium text-gray-700 block text-sm">
                         Total de Horarios:
                       </span>
-                      <p className="text-gray-600 font-bold">
+                      <p className="text-gray-600 font-bold text-base">
                         {schedules.length} horario(s)
                       </p>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Previsualización de Imagen */}
-              {imagePreview && (
-                <div className="bg-gray-50 p-6 rounded-lg">
-                  <h4 className="font-bold text-gray-800 mb-4">
-                    Imagen del Evento
-                  </h4>
-                  <div className="flex justify-center">
-                    <img
-                      src={imagePreview}
-                      alt="Previsualización"
-                      className="max-w-xs max-h-48 object-cover rounded-lg border border-gray-300"
-                    />
+                {/* Previsualización de Imagen */}
+                {imagePreview && (
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-bold text-gray-800 mb-3 text-base">
+                      Imagen del Evento
+                    </h4>
+                    <div className="flex justify-center">
+                      <img
+                        src={imagePreview}
+                        alt="Previsualización"
+                        className="max-w-full max-h-48 object-cover rounded-lg border border-gray-300"
+                      />
+                    </div>
+                    {formData.imageFile ? (
+                      <p className="text-center mt-2 text-green-600 text-sm">
+                        ✓ Nueva imagen seleccionada
+                      </p>
+                    ) : (
+                      <p className="text-center mt-2 text-gray-500 text-sm">
+                        Imagen actual (sin cambios)
+                      </p>
+                    )}
                   </div>
-                  {formData.imageFile ? (
-                    <p className="text-center mt-2 text-green-600 text-sm">
-                      ✓ Nueva imagen seleccionada
-                    </p>
-                  ) : (
-                    <p className="text-center mt-2 text-gray-500 text-sm">
-                      Imagen actual (sin cambios)
-                    </p>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
+        </form>
 
-          {/* Botones de navegación y acción */}
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <div className="flex justify-between items-center">
-              <div className="text-sm text-gray-500">
-                <span className="text-red-500">*</span> Campos obligatorios
-              </div>
+        {/* Botones de navegación y acción - Versión móvil sticky */}
+        <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 sm:px-6 py-3 sm:py-4 flex-shrink-0">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+            <div className="text-xs sm:text-sm text-gray-500 order-2 sm:order-1 text-center sm:text-left">
+              <span className="text-red-500">*</span> Campos obligatorios
+            </div>
 
-              <div className="flex space-x-3">
-                {/* Botones de navegación entre secciones */}
-                {activeSection !== 'basic' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const sections = ['basic', 'dates', 'review'];
-                      const currentIndex = sections.indexOf(activeSection);
-                      if (currentIndex > 0) {
-                        setActiveSection(sections[currentIndex - 1]);
-                      }
-                    }}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    Anterior
-                  </button>
-                )}
-
-                {activeSection !== 'review' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const sections = ['basic', 'dates', 'review'];
-                      const currentIndex = sections.indexOf(activeSection);
-                      if (currentIndex < sections.length - 1) {
-                        setActiveSection(sections[currentIndex + 1]);
-                      }
-                    }}
-                    className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
-                  >
-                    Siguiente
-                  </button>
-                )}
-
+            <div className="flex flex-wrap gap-2 sm:gap-3 justify-center sm:justify-end order-1 sm:order-2">
+              {/* Botones de navegación entre secciones */}
+              {activeSection !== 'basic' && (
                 <button
                   type="button"
-                  onClick={handleClose}
-                  className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-                  disabled={submitting}
+                  onClick={() => {
+                    const sections = ['basic', 'dates', 'review'];
+                    const currentIndex = sections.indexOf(activeSection);
+                    if (currentIndex > 0) {
+                      setActiveSection(sections[currentIndex - 1]);
+                    }
+                  }}
+                  className="flex-1 sm:flex-none px-3 sm:px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm flex items-center justify-center"
                 >
-                  Cancelar
+                  <FaChevronLeft className="mr-1 sm:mr-2 text-xs" />
+                  <span className="hidden sm:inline">Anterior</span>
+                  <span className="sm:hidden">Ant</span>
                 </button>
+              )}
 
-                {activeSection === 'review' && (
-                  <button
-                    type="submit"
-                    disabled={submitting || schedules.length === 0}
-                    className={`px-6 py-2 rounded-lg transition-colors flex items-center ${
-                      submitting || schedules.length === 0
-                        ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
-                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                    }`}
-                  >
-                    {submitting ? (
-                      <>
-                        <svg
-                          className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          />
-                        </svg>
-                        Actualizando...
-                      </>
-                    ) : (
-                      `Actualizar ${schedules.length > 1 ? `${schedules.length} Eventos` : 'Evento'}`
-                    )}
-                  </button>
-                )}
-              </div>
+              {activeSection !== 'review' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sections = ['basic', 'dates', 'review'];
+                    const currentIndex = sections.indexOf(activeSection);
+                    if (currentIndex < sections.length - 1) {
+                      setActiveSection(sections[currentIndex + 1]);
+                    }
+                  }}
+                  className="flex-1 sm:flex-none px-3 sm:px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm flex items-center justify-center"
+                >
+                  <span className="hidden sm:inline">Siguiente</span>
+                  <span className="sm:hidden">Sig</span>
+                  <FaChevronRight className="ml-1 sm:ml-2 text-xs" />
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={handleClose}
+                className="flex-1 sm:flex-none px-3 sm:px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors text-sm"
+                disabled={submitting}
+              >
+                Cancelar
+              </button>
+
+              {activeSection === 'review' && (
+                <button
+                  type="submit"
+                  form="update-event-form"
+                  disabled={submitting || schedules.length === 0}
+                  className={`flex-1 sm:flex-none px-3 sm:px-6 py-2 rounded-lg transition-colors flex items-center justify-center text-sm ${
+                    submitting || schedules.length === 0
+                      ? 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                >
+                  {submitting ? (
+                    <>
+                      <svg
+                        className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
+                      </svg>
+                      <span className="hidden sm:inline">Actualizando...</span>
+                      <span className="sm:hidden">...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="hidden sm:inline">
+                        Actualizar{' '}
+                        {schedules.length > 1
+                          ? `${schedules.length} Eventos`
+                          : 'Evento'}
+                      </span>
+                      <span className="sm:hidden">
+                        {schedules.length > 1
+                          ? `${schedules.length} Ev`
+                          : 'Actualizar'}
+                      </span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

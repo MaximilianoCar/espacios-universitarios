@@ -1,7 +1,7 @@
 // src/pages/HomePage.jsx
-import React from 'react';
+//import React from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import axiosInstance from '../axiosConfig';
+//import axiosInstance from '../axiosConfig';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import Header from '../components/Header';

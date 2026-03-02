@@ -4,6 +4,7 @@ const {
   User,
   CoordinatorDependencies,
   Room,
+  Invitation,
   Dependency,
   sequelize,
 } = require('../models');
@@ -137,49 +138,89 @@ exports.getInvitations = async (req, res) => {
 
 // Invitar por correos: añade/actualiza invitados en Google Calendar y guarda en tabla
 exports.inviteEmails = async (req, res) => {
+  const transaction = await sequelize.transaction();
   try {
     const { Invitation, Event } = require('../models');
     const { eventId } = req.params;
     const { emails } = req.body; // array de correos
 
     if (!Array.isArray(emails) || emails.length === 0) {
+      await transaction.rollback();
       return res.status(400).json({ message: 'No hay correos para invitar.' });
     }
 
-    const event = await Event.findByPk(eventId);
-    if (!event)
+    const event = await Event.findByPk(eventId, { transaction });
+    if (!event) {
+      await transaction.rollback();
       return res.status(404).json({ message: 'Evento no encontrado.' });
-
-    googleLink = `https://calendar.google.com/calendar/embed?src=espaciosuniversitariosucv%40gmail.com&ctz=America%2FCaracas`;
-    const now = new Date();
-
-    // Enviar emails usando emailService (uno por receptor). Usamos plantilla 'invitation'
-    const emailService = require('../services/emailService');
-
-    // Recorrer y enviar (fire-and-forget por design del emailService)
-    for (const rawEmail of emails) {
-      const e = rawEmail.trim().toLowerCase();
-      // enviar email con: nombre, nombre evento, espacio, desc, fechas y link
-      await emailService.sendEmail(e, 'invitation', [
-        '', // recipientName opcional
-        event.name || '',
-        await getRoomName(event.roomId),
-        event.description || '',
-        event.eventFrom || null,
-        event.eventTo || null,
-        googleLink,
-      ]);
-
-      // upsert invitation record
-      await Invitation.upsert({ eventId: event.id, email: e, lastSentAt: now });
     }
 
-    return res
-      .status(200)
-      .json({ message: 'Invitaciones enviadas (por correo).' });
+    const googleLink = `https://calendar.google.com/calendar/embed?src=espaciosuniversitariosucv%40gmail.com&ctz=America%2FCaracas`;
+    const now = new Date();
+
+    // Array para almacenar resultados de envío de emails (para posible logging)
+    const emailResults = [];
+
+    // Recorrer y enviar emails
+    for (const rawEmail of emails) {
+      const e = rawEmail.trim().toLowerCase();
+
+      // Enviar email (esto no es transaccional, no se puede deshacer)
+      try {
+        await emailService.sendEmail(e, 'invitation', [
+          '', // recipientName opcional
+          event.name || '',
+          await getRoomName(event.roomId),
+          event.description || '',
+          event.eventFrom || null,
+          event.eventTo || null,
+          googleLink,
+        ]);
+        emailResults.push({ email: e, success: true });
+      } catch (emailError) {
+        console.error(`Error enviando email a ${e}:`, emailError);
+        emailResults.push({
+          email: e,
+          success: false,
+          error: emailError.message,
+        });
+        // Continuamos con el siguiente email, pero no guardamos en BD si falló el envío
+        continue;
+      }
+
+      // upsert invitation record (solo si el email se envió correctamente)
+      await Invitation.upsert(
+        { eventId: event.id, email: e, lastSentAt: now },
+        { transaction }
+      );
+    }
+
+    // Confirmar la transacción (solo guarda las invitaciones de emails enviados exitosamente)
+    await transaction.commit();
+
+    // Verificar si hubo fallos en el envío
+    const failedEmails = emailResults.filter(r => !r.success);
+    if (failedEmails.length > 0) {
+      return res.status(207).json({
+        message: 'Algunas invitaciones no pudieron ser enviadas',
+        sent: emailResults.filter(r => r.success).length,
+        failed: failedEmails.map(r => r.email),
+        details: 'Las invitaciones enviadas exitosamente fueron guardadas.',
+      });
+    }
+
+    return res.status(200).json({
+      message: 'Invitaciones enviadas y guardadas correctamente.',
+      count: emails.length,
+    });
   } catch (err) {
+    // Si ocurre error, deshacer cambios en BD
+    if (transaction) await transaction.rollback();
+
     console.error('Error inviteEmails:', err);
-    return res.status(500).json({ message: 'Error interno' });
+    return res
+      .status(500)
+      .json({ message: 'Error interno al procesar invitaciones.' });
   }
 };
 
@@ -1105,6 +1146,8 @@ exports.getEventById = async (req, res) => {
 
 // Actualizar un evento por ID (Update)
 exports.updateEvent = async (req, res) => {
+  const transaction = await sequelize.transaction();
+
   try {
     const userRole = req.user.role;
     const userId = req.user.id;
@@ -1121,15 +1164,18 @@ exports.updateEvent = async (req, res) => {
           as: 'schedules',
         },
       ],
+      transaction,
     });
 
     if (!event) {
+      await transaction.rollback();
       return res.status(404).json({ error: 'Evento no encontrado.' });
     }
 
     // Verificar permisos según el rol
     if (userRole === 'requester') {
       if (event.userId != userId) {
+        await transaction.rollback();
         return res.status(403).json({
           message: 'No tienes permisos para realizar esta acción',
         });
@@ -1141,11 +1187,13 @@ exports.updateEvent = async (req, res) => {
         event.roomId
       );
       if (!hasPermission) {
+        await transaction.rollback();
         return res.status(403).json({
           message: 'No tienes permisos para modificar eventos de esta sala',
         });
       }
     } else if (userRole !== 'admin') {
+      await transaction.rollback();
       return res.status(403).json({
         message: 'No tienes permisos para realizar esta acción',
       });
@@ -1156,7 +1204,6 @@ exports.updateEvent = async (req, res) => {
 
     // Si es recurrente, no permitir cambios en las fechas principales
     if (isRecurrent) {
-      // Verificar si se intentan modificar fechas
       const fechaFields = [
         'eventFrom',
         'eventTo',
@@ -1171,6 +1218,7 @@ exports.updateEvent = async (req, res) => {
       );
 
       if (hasDateChanges) {
+        await transaction.rollback();
         return res.status(400).json({
           error:
             'Los eventos recurrentes no permiten modificar sus fechas. Si necesitas cambiar las fechas, elimina el evento recurrente y crea uno nuevo.',
@@ -1184,6 +1232,7 @@ exports.updateEvent = async (req, res) => {
     // Si se subió una nueva imagen, actualizar la ruta (normalizada)
     if (req.file) {
       if (event.imagePath) {
+        // Nota: la eliminación de archivos NO es transaccional, pero el orden es seguro
         await safeUnlink(event.imagePath, './uploads/events/images');
       }
       req.body.imagePath = normalizeFilePath(req.file.path);
@@ -1208,7 +1257,8 @@ exports.updateEvent = async (req, res) => {
       );
     }
 
-    await event.update(req.body);
+    // Actualizar el evento principal (DENTRO de la transacción)
+    await event.update(req.body, { transaction });
 
     // Procesar schedules SOLO si no es un evento recurrente
     let schedulesInput = req.body.schedules;
@@ -1229,348 +1279,29 @@ exports.updateEvent = async (req, res) => {
           (Array.isArray(schedulesInput.keep) ||
             Array.isArray(schedulesInput.removeIds))
         ) {
-          const keep = Array.isArray(schedulesInput.keep)
-            ? schedulesInput.keep
-            : [];
-          const removeIds = Array.isArray(schedulesInput.removeIds)
-            ? schedulesInput.removeIds
-                .map(id => Number(id))
-                .filter(id => !Number.isNaN(id))
-            : [];
-
-          const tSchedules = await sequelize.transaction();
-          try {
-            // Borrar schedules indicados (solo los que pertenecen a este event)
-            if (removeIds.length > 0) {
-              const schedulesToRemove = await EventSchedule.findAll({
-                where: { id: removeIds, eventId: event.id },
-                transaction: tSchedules,
-              });
-              // Borrar de Google Calendar si corresponde
-              for (const os of schedulesToRemove) {
-                if (os.googleEventId) {
-                  try {
-                    console.log(
-                      `Deleting Google Calendar event for removed schedule ${os.id}: ${os.googleEventId}`
-                    );
-                    await googleCalendarService.deleteEvent(os.googleEventId);
-                    console.log(
-                      `Deleted google event for removed schedule ${os.id}: ${os.googleEventId}`
-                    );
-                  } catch (err) {
-                    console.error(
-                      'Error deleting google event for removed schedule:',
-                      err
-                    );
-                  }
-                }
-              }
-
-              await EventSchedule.destroy({
-                where: { id: removeIds, eventId: event.id },
-                transaction: tSchedules,
-              });
-            }
-
-            const toCreate = [];
-            // Procesar keeps (actualizar existentes o acumular nuevos)
-            for (const s of keep) {
-              const evFrom = parseDateOrNullUpdate(s.eventFrom);
-              const evTo = parseDateOrNullUpdate(s.eventTo);
-              const resFrom = parseDateOrNullUpdate(s.reservationFrom);
-              const resTo = parseDateOrNullUpdate(s.reservationTo);
-
-              let dateOnly = s.dateOnly || null;
-              let startTime = s.startTime || null;
-              let endTime = s.endTime || null;
-              let dayOfWeek =
-                typeof s.dayOfWeek !== 'undefined' ? s.dayOfWeek : null;
-
-              if (!dateOnly && evFrom)
-                dateOnly = evFrom.toISOString().split('T')[0];
-              if (!startTime && evFrom)
-                startTime = evFrom.toISOString().split('T')[1].slice(0, 8);
-              if (!endTime && evTo)
-                endTime = evTo.toISOString().split('T')[1].slice(0, 8);
-              if (
-                (dayOfWeek === null || typeof dayOfWeek === 'undefined') &&
-                evFrom
-              )
-                dayOfWeek = evFrom.getUTCDay();
-
-              if (s.id) {
-                // actualizar si pertenece al evento
-                const existing = await EventSchedule.findOne({
-                  where: { id: s.id, eventId: event.id },
-                  transaction: tSchedules,
-                });
-                if (existing) {
-                  await existing.update(
-                    {
-                      eventFrom: evFrom,
-                      eventTo: evTo,
-                      reservationFrom: resFrom,
-                      reservationTo: resTo,
-                      dateOnly,
-                      startTime,
-                      endTime,
-                      dayOfWeek,
-                    },
-                    { transaction: tSchedules }
-                  );
-                }
-              } else {
-                toCreate.push({
-                  eventId: event.id,
-                  eventFrom: evFrom,
-                  eventTo: evTo,
-                  reservationFrom: resFrom,
-                  reservationTo: resTo,
-                  dateOnly,
-                  startTime,
-                  endTime,
-                  dayOfWeek,
-                });
-              }
-            }
-
-            // Validar nuevos antes de insertar
-            for (const sch of toCreate) {
-              if (
-                !sch.eventFrom ||
-                !sch.eventTo ||
-                !sch.reservationFrom ||
-                !sch.reservationTo ||
-                !sch.dateOnly ||
-                !sch.startTime ||
-                !sch.endTime ||
-                typeof sch.dayOfWeek === 'undefined' ||
-                sch.dayOfWeek === null
-              ) {
-                await tSchedules.rollback();
-                return res.status(400).json({
-                  error:
-                    'Cada schedule nuevo debe incluir eventFrom, eventTo, reservationFrom, reservationTo, dateOnly, startTime, endTime y dayOfWeek válidos.',
-                });
-              }
-            }
-
-            if (toCreate.length > 0) {
-              await EventSchedule.bulkCreate(toCreate, {
-                transaction: tSchedules,
-              });
-            }
-
-            await tSchedules.commit();
-            // Crear google events para los schedules recién creados (fuera de la transacción)
-            try {
-              const createdSchedules = await EventSchedule.findAll({
-                where: { eventId: event.id, googleEventId: null },
-              });
-              for (const sch of createdSchedules) {
-                try {
-                  console.log(
-                    `Creating Google Calendar event for new schedule ${sch.id} (Event ${event.id}) from ${sch.eventFrom} to ${sch.eventTo}`
-                  );
-                  const gId = await googleCalendarService.createEvent({
-                    name: event.name,
-                    description: event.description,
-                    eventFrom: sch.eventFrom,
-                    eventTo: sch.eventTo,
-                  });
-                  if (gId) {
-                    await sch.update({ googleEventId: gId });
-                    console.log(
-                      `Google Calendar event created for schedule ${sch.id}: ${gId}`
-                    );
-                  }
-                } catch (err) {
-                  console.error(
-                    'Error creating google event for new schedule (partial):',
-                    err
-                  );
-                }
-              }
-            } catch (err) {
-              console.error(
-                'Error fetching created schedules for google creation (partial):',
-                err
-              );
-            }
-          } catch (errSchedules) {
-            try {
-              await tSchedules.rollback();
-            } catch (rbErr) {
-              console.error('Error rolling back schedules transaction:', rbErr);
-            }
-            console.error(
-              'Error actualizando schedules del evento (partial):',
-              errSchedules
-            );
-            return res
-              .status(500)
-              .json({ error: 'Error al actualizar los horarios del evento.' });
-          }
+          // MODO: actualización parcial con keep/removeIds
+          await processSchedulesPartialMode(
+            event,
+            schedulesInput,
+            parseDateOrNullUpdate,
+            transaction
+          );
         } else if (Array.isArray(schedulesInput)) {
-          // backward-compatible: si se envía un array, reemplazar todo (comportamiento previo)
-          try {
-            // Primero intentar eliminar eventos de Google Calendar asociados a schedules antiguos
-            try {
-              const oldSchedules = await EventSchedule.findAll({
-                where: { eventId: event.id },
-              });
-              for (const os of oldSchedules) {
-                if (os.googleEventId) {
-                  try {
-                    console.log(
-                      `Deleting Google Calendar event for old schedule ${os.id}: ${os.googleEventId}`
-                    );
-                    await googleCalendarService.deleteEvent(os.googleEventId);
-                    console.log(
-                      `Deleted google event for schedule ${os.id}: ${os.googleEventId}`
-                    );
-                  } catch (err) {
-                    console.error(
-                      'Error deleting google event for schedule:',
-                      err
-                    );
-                  }
-                }
-              }
-            } catch (errOld) {
-              console.error(
-                'Error fetching old schedules for google deletion:',
-                errOld
-              );
-            }
-
-            const tSchedules = await sequelize.transaction();
-            try {
-              await EventSchedule.destroy({
-                where: { eventId: event.id },
-                transaction: tSchedules,
-              });
-
-              const schedulesToCreate = schedulesInput.map(s => {
-                const evFrom = parseDateOrNullUpdate(s.eventFrom);
-                const evTo = parseDateOrNullUpdate(s.eventTo);
-                const resFrom = parseDateOrNullUpdate(s.reservationFrom);
-                const resTo = parseDateOrNullUpdate(s.reservationTo);
-                let dateOnly = s.dateOnly || null;
-                let startTime = s.startTime || null;
-                let endTime = s.endTime || null;
-                let dayOfWeek =
-                  typeof s.dayOfWeek !== 'undefined' ? s.dayOfWeek : null;
-                if (!dateOnly && evFrom)
-                  dateOnly = evFrom.toISOString().split('T')[0];
-                if (!startTime && evFrom)
-                  startTime = evFrom.toISOString().split('T')[1].slice(0, 8);
-                if (!endTime && evTo)
-                  endTime = evTo.toISOString().split('T')[1].slice(0, 8);
-                if (
-                  (dayOfWeek === null || typeof dayOfWeek === 'undefined') &&
-                  evFrom
-                )
-                  dayOfWeek = evFrom.getUTCDay();
-                return {
-                  eventId: event.id,
-                  eventFrom: evFrom,
-                  eventTo: evTo,
-                  reservationFrom: resFrom,
-                  reservationTo: resTo,
-                  dateOnly,
-                  startTime,
-                  endTime,
-                  dayOfWeek,
-                };
-              });
-
-              for (const sch of schedulesToCreate) {
-                if (
-                  !sch.eventFrom ||
-                  !sch.eventTo ||
-                  !sch.reservationFrom ||
-                  !sch.reservationTo ||
-                  !sch.dateOnly ||
-                  !sch.startTime ||
-                  !sch.endTime ||
-                  typeof sch.dayOfWeek === 'undefined' ||
-                  sch.dayOfWeek === null
-                ) {
-                  await tSchedules.rollback();
-                  return res.status(400).json({
-                    error:
-                      'Cada schedule debe incluir eventFrom, eventTo, reservationFrom, reservationTo, dateOnly, startTime, endTime y dayOfWeek válidos.',
-                  });
-                }
-              }
-
-              if (schedulesToCreate.length > 0)
-                await EventSchedule.bulkCreate(schedulesToCreate, {
-                  transaction: tSchedules,
-                });
-              await tSchedules.commit();
-
-              // Crear google events para cada nuevo schedule (fuera de la transacción)
-              const createdSchedules = await EventSchedule.findAll({
-                where: { eventId: event.id },
-              });
-              for (const sch of createdSchedules) {
-                try {
-                  console.log(
-                    `Creating Google Calendar event for new schedule ${sch.id} (Event ${event.id}) from ${sch.eventFrom} to ${sch.eventTo}`
-                  );
-                  const gId = await googleCalendarService.createEvent({
-                    name: event.name,
-                    description: event.description,
-                    eventFrom: sch.eventFrom,
-                    eventTo: sch.eventTo,
-                  });
-                  if (gId) {
-                    await sch.update({ googleEventId: gId });
-                    console.log(
-                      `Google Calendar event created for schedule ${sch.id}: ${gId}`
-                    );
-                  }
-                } catch (err) {
-                  console.error(
-                    'Error creating google event for new schedule:',
-                    err
-                  );
-                }
-              }
-            } catch (errSchedules) {
-              try {
-                await tSchedules.rollback();
-              } catch (rbErr) {
-                console.error(
-                  'Error rolling back schedules transaction:',
-                  rbErr
-                );
-              }
-              console.error(
-                'Error actualizando schedules del evento:',
-                errSchedules
-              );
-              return res.status(500).json({
-                error: 'Error al actualizar los horarios del evento.',
-              });
-            }
-          } catch (schErr) {
-            console.error(
-              'Error actualizando schedules del evento (outer):',
-              schErr
-            );
-            return res
-              .status(500)
-              .json({ error: 'Error al actualizar los horarios del evento.' });
-          }
+          // MODO: reemplazar todos los schedules (comportamiento legacy)
+          await processSchedulesReplaceMode(
+            event,
+            schedulesInput,
+            parseDateOrNullUpdate,
+            transaction
+          );
         }
-      } catch (outerErr) {
-        console.error('Error procesando schedulesInput:', outerErr);
-        return res
-          .status(500)
-          .json({ error: 'Error al procesar los horarios enviados.' });
+      } catch (scheduleError) {
+        await transaction.rollback();
+        console.error('Error procesando schedules:', scheduleError);
+        return res.status(500).json({
+          error: 'Error al procesar los horarios del evento.',
+          details: scheduleError.message,
+        });
       }
     } else if (schedulesInput && isRecurrent) {
       console.log(
@@ -1578,322 +1309,34 @@ exports.updateEvent = async (req, res) => {
       );
     }
 
+    // Enviar notificaciones si cambió el estado (esto no es transaccional)
     if (req.body.status) {
-      if (
-        req.body.status === Event.STATUS.APPROVED ||
-        req.body.status === Event.STATUS.DENIED
-      ) {
-        try {
-          const user = await User.findByPk(event.userId);
-          const roomName = await getRoomName(event.roomId);
-
-          if (user) {
-            const fecha = event.date
-              ? new Date(event.date).toLocaleString()
-              : 'Fecha no especificada';
-
-            await emailService.notifyReservationResult(
-              user.email,
-              user.name,
-              roomName,
-              fecha,
-              req.body.status === Event.STATUS.APPROVED,
-              req.body.comments || ''
-            );
-
-            console.log(
-              `Notificación de estado (${req.body.status}) enviada a: ${user.email}`
-            );
-
-            // Notificar a las entidades según el estado
-            if (req.body.status === Event.STATUS.APPROVED) {
-              try {
-                await emailService.notifyAllEntitiesApproval(
-                  roomName,
-                  event.reservationFrom,
-                  event.reservationTo,
-                  event.eventFrom,
-                  event.eventTo,
-                  eventId,
-                  event.name
-                );
-                console.log(
-                  'Notificación de aprobación enviada a todas las entidades'
-                );
-              } catch (approvalError) {
-                console.error(
-                  'Error enviando notificación de aprobación a entidades:',
-                  approvalError
-                );
-              }
-            } else if (
-              req.body.status === Event.STATUS.DENIED &&
-              previousStatus === Event.STATUS.APPROVED
-            ) {
-              // solo enviar notificación de cancelación si el evento estaba previamente aprobado
-              try {
-                await emailService.notifyAllEntitiesCancellation(
-                  roomName,
-                  event.reservationFrom,
-                  event.reservationTo,
-                  event.eventFrom,
-                  event.eventTo,
-                  eventId,
-                  event.name
-                );
-                console.log(
-                  'Notificación de cancelación enviada a todas las entidades'
-                );
-              } catch (cancellationError) {
-                console.error(
-                  'Error enviando notificación de cancelación a entidades:',
-                  cancellationError
-                );
-              }
-            }
-          }
-        } catch (emailError) {
-          console.error('Error enviando notificación de estado:', emailError);
-        }
-      }
+      await sendStatusNotifications(req, event, previousStatus, eventId);
     }
 
+    // Confirmar la transacción principal
+    await transaction.commit();
+
+    // Responder al cliente
     res.status(200).json(event);
+
+    // --- OPERACIONES EN SEGUNDO PLANO (fuera de la transacción) ---
 
     // Actualizar/crear/eliminar evento en Google Calendar en segundo plano
     (async () => {
       try {
-        const roomName = await getRoomName(event.roomId);
-        const descriptionWithRoom = `${event.description || ''}\n\nEspacio: ${roomName}`;
-
-        // Caso 1: pasó de no-aprobado -> aprobado => crear en Google (tener en cuenta schedules)
-        if (
-          previousStatus !== Event.STATUS.APPROVED &&
-          event.status === Event.STATUS.APPROVED
-        ) {
-          // crear por schedules si existen
-          const schs = await EventSchedule.findAll({
-            where: { eventId: event.id },
-          });
-          if (schs && schs.length > 0) {
-            for (const sch of schs) {
-              try {
-                const gId = await googleCalendarService.createEvent({
-                  name: event.name,
-                  description: descriptionWithRoom,
-                  eventFrom: sch.eventFrom,
-                  eventTo: sch.eventTo,
-                });
-                if (gId) await sch.update({ googleEventId: gId });
-              } catch (err) {
-                console.error(
-                  'Error creating google event for schedule on approve:',
-                  err
-                );
-              }
-            }
-          } else {
-            try {
-              const createdId = await googleCalendarService.createEvent({
-                name: event.name,
-                description: descriptionWithRoom,
-                eventFrom: event.eventFrom,
-                eventTo: event.eventTo,
-              });
-              if (createdId)
-                await Event.update(
-                  { googleEventId: createdId },
-                  { where: { id: event.id } }
-                );
-            } catch (err) {
-              console.error('Error creating google event on approve:', err);
-            }
-          }
-
-          return;
-        }
-
-        // Caso 2: pasó de aprobado -> no-aprobado => borrar del calendario
-        if (
-          previousStatus === Event.STATUS.APPROVED &&
-          event.status !== Event.STATUS.APPROVED
-        ) {
-          // borrar google events asociados a schedules
-          try {
-            const schs = await EventSchedule.findAll({
-              where: { eventId: event.id },
-            });
-            for (const sch of schs) {
-              if (sch.googleEventId) {
-                try {
-                  await googleCalendarService.deleteEvent(sch.googleEventId);
-                  await sch.update({ googleEventId: null });
-                } catch (err) {
-                  console.error(
-                    'Error deleting google schedule event on status change:',
-                    err
-                  );
-                }
-              }
-            }
-          } catch (errSchDel) {
-            console.error(
-              'Error fetching schedules for google deletion on status change:',
-              errSchDel
-            );
-          }
-
-          // borrar google event asociado al Event (sin schedules)
-          if (event.googleEventId) {
-            try {
-              await googleCalendarService.deleteEvent(event.googleEventId);
-              await Event.update(
-                { googleEventId: null },
-                { where: { id: event.id } }
-              );
-            } catch (err) {
-              console.error(
-                'Error deleting google event on status change:',
-                err
-              );
-            }
-          }
-
-          return;
-        }
-
-        // Caso 3: sigue aprobado => actualizar/crear según corresponda
-        if (event.status === Event.STATUS.APPROVED) {
-          // si tiene schedules, actualizar cada schedule google event; crear si falta
-          const schs = await EventSchedule.findAll({
-            where: { eventId: event.id },
-          });
-          if (schs && schs.length > 0) {
-            // Si el Event tenía un googleEventId único y ahora hay schedules,
-            // reutilizar ese googleEventId para el primer schedule en lugar de crear uno nuevo.
-            try {
-              if (event.googleEventId) {
-                const sorted = schs
-                  .slice()
-                  .sort(
-                    (a, b) => new Date(a.eventFrom) - new Date(b.eventFrom)
-                  );
-                const first = sorted[0];
-                if (first && !first.googleEventId) {
-                  await first.update({ googleEventId: event.googleEventId });
-                  // limpiar el googleEventId del Event principal para evitar duplicados
-                  await Event.update(
-                    { googleEventId: null },
-                    { where: { id: event.id } }
-                  );
-                  // actualizar metadatos del evento transferido
-                  try {
-                    await googleCalendarService.updateEvent(
-                      first.googleEventId || event.googleEventId,
-                      {
-                        name: event.name,
-                        description: descriptionWithRoom,
-                        eventFrom: first.eventFrom,
-                        eventTo: first.eventTo,
-                      }
-                    );
-                  } catch (errUp) {
-                    console.error(
-                      'Error updating transferred google event metadata:',
-                      errUp
-                    );
-                  }
-                }
-              }
-            } catch (transferErr) {
-              console.error(
-                'Error transferring Event.googleEventId to schedule:',
-                transferErr
-              );
-            }
-
-            for (const sch of schs) {
-              try {
-                if (sch.googleEventId) {
-                  await googleCalendarService.updateEvent(sch.googleEventId, {
-                    name: event.name,
-                    description: descriptionWithRoom,
-                    eventFrom: sch.eventFrom,
-                    eventTo: sch.eventTo,
-                  });
-                  console.log(
-                    `Google Calendar event updated for schedule ${sch.id}`
-                  );
-                } else {
-                  const gId = await googleCalendarService.createEvent({
-                    name: event.name,
-                    description: descriptionWithRoom,
-                    eventFrom: sch.eventFrom,
-                    eventTo: sch.eventTo,
-                  });
-                  if (gId) await sch.update({ googleEventId: gId });
-                  console.log(
-                    `Google Calendar event created for schedule ${sch.id}: ${gId}`
-                  );
-                }
-              } catch (err) {
-                console.error(
-                  'Error updating/creating google schedule event:',
-                  err
-                );
-              }
-            }
-          } else {
-            // sin schedules: actualizar o crear el google event asociado al Event
-            if (event.googleEventId) {
-              try {
-                await googleCalendarService.updateEvent(event.googleEventId, {
-                  name: event.name,
-                  description: descriptionWithRoom,
-                  eventFrom: event.eventFrom,
-                  eventTo: event.eventTo,
-                });
-                console.log(
-                  `Google Calendar event updated for Event ${event.id}`
-                );
-              } catch (err) {
-                console.error('Error updating google event for Event:', err);
-              }
-            } else {
-              try {
-                const createdId = await googleCalendarService.createEvent({
-                  name: event.name,
-                  description: descriptionWithRoom,
-                  eventFrom: event.eventFrom,
-                  eventTo: event.eventTo,
-                });
-                if (createdId)
-                  await Event.update(
-                    { googleEventId: createdId },
-                    { where: { id: event.id } }
-                  );
-                console.log(
-                  `Google Calendar event created for Event ${event.id}: ${createdId}`
-                );
-              } catch (err) {
-                console.error(
-                  'Error creating google event for Event (approved):',
-                  err
-                );
-              }
-            }
-          }
-        }
+        await updateGoogleCalendarForEvent(event, previousStatus);
       } catch (err) {
-        console.error(
-          'Background Google Calendar update/create/delete failed:',
-          err
-        );
+        console.error('Background Google Calendar update failed:', err);
       }
     })();
   } catch (error) {
+    // Si ocurre error, deshacer cambios
+    if (transaction) await transaction.rollback();
+
     console.error('Error updating event:', error);
     const { UniqueConstraintError, ValidationError } = require('sequelize');
+
     if (error instanceof UniqueConstraintError) {
       return res.status(409).json({
         error: error.errors[0]?.message || 'Conflicto de integridad.',
@@ -1908,17 +1351,505 @@ exports.updateEvent = async (req, res) => {
   }
 };
 
+// Funciones auxiliares para updateEvent (para mantener el código organizado)
+
+async function processSchedulesPartialMode(
+  event,
+  schedulesInput,
+  parseDate,
+  transaction
+) {
+  const keep = Array.isArray(schedulesInput.keep) ? schedulesInput.keep : [];
+  const removeIds = Array.isArray(schedulesInput.removeIds)
+    ? schedulesInput.removeIds
+        .map(id => Number(id))
+        .filter(id => !Number.isNaN(id))
+    : [];
+
+  // Borrar schedules indicados
+  if (removeIds.length > 0) {
+    const schedulesToRemove = await EventSchedule.findAll({
+      where: { id: removeIds, eventId: event.id },
+      transaction,
+    });
+
+    // Recolectar googleEventId para borrado posterior (fuera de transacción)
+    for (const os of schedulesToRemove) {
+      if (os.googleEventId) {
+        // Guardar en memoria para borrar después
+        if (!global.scheduleGoogleIdsToDelete)
+          global.scheduleGoogleIdsToDelete = [];
+        global.scheduleGoogleIdsToDelete.push(os.googleEventId);
+      }
+    }
+
+    await EventSchedule.destroy({
+      where: { id: removeIds, eventId: event.id },
+      transaction,
+    });
+  }
+
+  const toCreate = [];
+
+  // Procesar keeps
+  for (const s of keep) {
+    const evFrom = parseDate(s.eventFrom);
+    const evTo = parseDate(s.eventTo);
+    const resFrom = parseDate(s.reservationFrom);
+    const resTo = parseDate(s.reservationTo);
+
+    let dateOnly = s.dateOnly || null;
+    let startTime = s.startTime || null;
+    let endTime = s.endTime || null;
+    let dayOfWeek = typeof s.dayOfWeek !== 'undefined' ? s.dayOfWeek : null;
+
+    if (!dateOnly && evFrom) dateOnly = evFrom.toISOString().split('T')[0];
+    if (!startTime && evFrom)
+      startTime = evFrom.toISOString().split('T')[1].slice(0, 8);
+    if (!endTime && evTo)
+      endTime = evTo.toISOString().split('T')[1].slice(0, 8);
+    if ((dayOfWeek === null || typeof dayOfWeek === 'undefined') && evFrom)
+      dayOfWeek = evFrom.getUTCDay();
+
+    if (s.id) {
+      // actualizar si pertenece al evento
+      const existing = await EventSchedule.findOne({
+        where: { id: s.id, eventId: event.id },
+        transaction,
+      });
+      if (existing) {
+        await existing.update(
+          {
+            eventFrom: evFrom,
+            eventTo: evTo,
+            reservationFrom: resFrom,
+            reservationTo: resTo,
+            dateOnly,
+            startTime,
+            endTime,
+            dayOfWeek,
+          },
+          { transaction }
+        );
+      }
+    } else {
+      toCreate.push({
+        eventId: event.id,
+        eventFrom: evFrom,
+        eventTo: evTo,
+        reservationFrom: resFrom,
+        reservationTo: resTo,
+        dateOnly,
+        startTime,
+        endTime,
+        dayOfWeek,
+      });
+    }
+  }
+
+  // Validar nuevos antes de insertar
+  for (const sch of toCreate) {
+    if (
+      !sch.eventFrom ||
+      !sch.eventTo ||
+      !sch.reservationFrom ||
+      !sch.reservationTo ||
+      !sch.dateOnly ||
+      !sch.startTime ||
+      !sch.endTime ||
+      typeof sch.dayOfWeek === 'undefined' ||
+      sch.dayOfWeek === null
+    ) {
+      throw new Error(
+        'Cada schedule nuevo debe incluir eventFrom, eventTo, reservationFrom, reservationTo, dateOnly, startTime, endTime y dayOfWeek válidos.'
+      );
+    }
+  }
+
+  if (toCreate.length > 0) {
+    await EventSchedule.bulkCreate(toCreate, { transaction });
+  }
+}
+
+async function processSchedulesReplaceMode(
+  event,
+  schedulesInput,
+  parseDate,
+  transaction
+) {
+  // Eliminar schedules antiguos y sus googleEventIds
+  const oldSchedules = await EventSchedule.findAll({
+    where: { eventId: event.id },
+    transaction,
+  });
+
+  for (const os of oldSchedules) {
+    if (os.googleEventId) {
+      if (!global.scheduleGoogleIdsToDelete)
+        global.scheduleGoogleIdsToDelete = [];
+      global.scheduleGoogleIdsToDelete.push(os.googleEventId);
+    }
+  }
+
+  await EventSchedule.destroy({
+    where: { eventId: event.id },
+    transaction,
+  });
+
+  const schedulesToCreate = schedulesInput.map(s => {
+    const evFrom = parseDate(s.eventFrom);
+    const evTo = parseDate(s.eventTo);
+    const resFrom = parseDate(s.reservationFrom);
+    const resTo = parseDate(s.reservationTo);
+
+    let dateOnly = s.dateOnly || null;
+    let startTime = s.startTime || null;
+    let endTime = s.endTime || null;
+    let dayOfWeek = typeof s.dayOfWeek !== 'undefined' ? s.dayOfWeek : null;
+
+    if (!dateOnly && evFrom) dateOnly = evFrom.toISOString().split('T')[0];
+    if (!startTime && evFrom)
+      startTime = evFrom.toISOString().split('T')[1].slice(0, 8);
+    if (!endTime && evTo)
+      endTime = evTo.toISOString().split('T')[1].slice(0, 8);
+    if ((dayOfWeek === null || typeof dayOfWeek === 'undefined') && evFrom)
+      dayOfWeek = evFrom.getUTCDay();
+
+    return {
+      eventId: event.id,
+      eventFrom: evFrom,
+      eventTo: evTo,
+      reservationFrom: resFrom,
+      reservationTo: resTo,
+      dateOnly,
+      startTime,
+      endTime,
+      dayOfWeek,
+    };
+  });
+
+  // Validar
+  for (const sch of schedulesToCreate) {
+    if (
+      !sch.eventFrom ||
+      !sch.eventTo ||
+      !sch.reservationFrom ||
+      !sch.reservationTo ||
+      !sch.dateOnly ||
+      !sch.startTime ||
+      !sch.endTime ||
+      typeof sch.dayOfWeek === 'undefined' ||
+      sch.dayOfWeek === null
+    ) {
+      throw new Error(
+        'Cada schedule debe incluir eventFrom, eventTo, reservationFrom, reservationTo, dateOnly, startTime, endTime y dayOfWeek válidos.'
+      );
+    }
+  }
+
+  if (schedulesToCreate.length > 0) {
+    await EventSchedule.bulkCreate(schedulesToCreate, { transaction });
+  }
+}
+
+async function sendStatusNotifications(req, event, previousStatus, eventId) {
+  if (
+    req.body.status === Event.STATUS.APPROVED ||
+    req.body.status === Event.STATUS.DENIED
+  ) {
+    try {
+      const user = await User.findByPk(event.userId);
+      const roomName = await getRoomName(event.roomId);
+
+      if (user) {
+        const fecha = event.date
+          ? new Date(event.date).toLocaleString()
+          : 'Fecha no especificada';
+
+        await emailService.notifyReservationResult(
+          user.email,
+          user.name,
+          roomName,
+          fecha,
+          req.body.status === Event.STATUS.APPROVED,
+          req.body.comments || ''
+        );
+
+        console.log(
+          `Notificación de estado (${req.body.status}) enviada a: ${user.email}`
+        );
+
+        // Notificar a las entidades según el estado
+        if (req.body.status === Event.STATUS.APPROVED) {
+          try {
+            await emailService.notifyAllEntitiesApproval(
+              roomName,
+              event.reservationFrom,
+              event.reservationTo,
+              event.eventFrom,
+              event.eventTo,
+              eventId,
+              event.name
+            );
+            console.log(
+              'Notificación de aprobación enviada a todas las entidades'
+            );
+          } catch (approvalError) {
+            console.error(
+              'Error enviando notificación de aprobación a entidades:',
+              approvalError
+            );
+          }
+        } else if (
+          req.body.status === Event.STATUS.DENIED &&
+          previousStatus === Event.STATUS.APPROVED
+        ) {
+          try {
+            await emailService.notifyAllEntitiesCancellation(
+              roomName,
+              event.reservationFrom,
+              event.reservationTo,
+              event.eventFrom,
+              event.eventTo,
+              eventId,
+              event.name
+            );
+            console.log(
+              'Notificación de cancelación enviada a todas las entidades'
+            );
+          } catch (cancellationError) {
+            console.error(
+              'Error enviando notificación de cancelación a entidades:',
+              cancellationError
+            );
+          }
+        }
+      }
+    } catch (emailError) {
+      console.error('Error enviando notificación de estado:', emailError);
+    }
+  }
+}
+
+async function updateGoogleCalendarForEvent(event, previousStatus) {
+  const roomName = await getRoomName(event.roomId);
+  const descriptionWithRoom = `${event.description || ''}\n\nEspacio: ${roomName}`;
+
+  // Caso 1: pasó de no-aprobado -> aprobado => crear en Google
+  if (
+    previousStatus !== Event.STATUS.APPROVED &&
+    event.status === Event.STATUS.APPROVED
+  ) {
+    const schs = await EventSchedule.findAll({ where: { eventId: event.id } });
+    if (schs && schs.length > 0) {
+      for (const sch of schs) {
+        try {
+          const gId = await googleCalendarService.createEvent({
+            name: event.name,
+            description: descriptionWithRoom,
+            eventFrom: sch.eventFrom,
+            eventTo: sch.eventTo,
+          });
+          if (gId) await sch.update({ googleEventId: gId });
+        } catch (err) {
+          console.error(
+            'Error creating google event for schedule on approve:',
+            err
+          );
+        }
+      }
+    } else {
+      try {
+        const createdId = await googleCalendarService.createEvent({
+          name: event.name,
+          description: descriptionWithRoom,
+          eventFrom: event.eventFrom,
+          eventTo: event.eventTo,
+        });
+        if (createdId)
+          await Event.update(
+            { googleEventId: createdId },
+            { where: { id: event.id } }
+          );
+      } catch (err) {
+        console.error('Error creating google event on approve:', err);
+      }
+    }
+    return;
+  }
+
+  // Caso 2: pasó de aprobado -> no-aprobado => borrar del calendario
+  if (
+    previousStatus === Event.STATUS.APPROVED &&
+    event.status !== Event.STATUS.APPROVED
+  ) {
+    // Borrar google events asociados a schedules
+    try {
+      const schs = await EventSchedule.findAll({
+        where: { eventId: event.id },
+      });
+      for (const sch of schs) {
+        if (sch.googleEventId) {
+          try {
+            await googleCalendarService.deleteEvent(sch.googleEventId);
+            await sch.update({ googleEventId: null });
+          } catch (err) {
+            console.error(
+              'Error deleting google schedule event on status change:',
+              err
+            );
+          }
+        }
+      }
+    } catch (errSchDel) {
+      console.error(
+        'Error fetching schedules for google deletion on status change:',
+        errSchDel
+      );
+    }
+
+    // Borrar google event asociado al Event (sin schedules)
+    if (event.googleEventId) {
+      try {
+        await googleCalendarService.deleteEvent(event.googleEventId);
+        await Event.update(
+          { googleEventId: null },
+          { where: { id: event.id } }
+        );
+      } catch (err) {
+        console.error('Error deleting google event on status change:', err);
+      }
+    }
+    return;
+  }
+
+  // Caso 3: sigue aprobado => actualizar/crear según corresponda
+  if (event.status === Event.STATUS.APPROVED) {
+    const schs = await EventSchedule.findAll({ where: { eventId: event.id } });
+    if (schs && schs.length > 0) {
+      // Transferir googleEventId del evento principal si existe
+      try {
+        if (event.googleEventId) {
+          const sorted = schs
+            .slice()
+            .sort((a, b) => new Date(a.eventFrom) - new Date(b.eventFrom));
+          const first = sorted[0];
+          if (first && !first.googleEventId) {
+            await first.update({ googleEventId: event.googleEventId });
+            await Event.update(
+              { googleEventId: null },
+              { where: { id: event.id } }
+            );
+            try {
+              await googleCalendarService.updateEvent(
+                first.googleEventId || event.googleEventId,
+                {
+                  name: event.name,
+                  description: descriptionWithRoom,
+                  eventFrom: first.eventFrom,
+                  eventTo: first.eventTo,
+                }
+              );
+            } catch (errUp) {
+              console.error(
+                'Error updating transferred google event metadata:',
+                errUp
+              );
+            }
+          }
+        }
+      } catch (transferErr) {
+        console.error(
+          'Error transferring Event.googleEventId to schedule:',
+          transferErr
+        );
+      }
+
+      for (const sch of schs) {
+        try {
+          if (sch.googleEventId) {
+            await googleCalendarService.updateEvent(sch.googleEventId, {
+              name: event.name,
+              description: descriptionWithRoom,
+              eventFrom: sch.eventFrom,
+              eventTo: sch.eventTo,
+            });
+            console.log(`Google Calendar event updated for schedule ${sch.id}`);
+          } else {
+            const gId = await googleCalendarService.createEvent({
+              name: event.name,
+              description: descriptionWithRoom,
+              eventFrom: sch.eventFrom,
+              eventTo: sch.eventTo,
+            });
+            if (gId) await sch.update({ googleEventId: gId });
+            console.log(
+              `Google Calendar event created for schedule ${sch.id}: ${gId}`
+            );
+          }
+        } catch (err) {
+          console.error('Error updating/creating google schedule event:', err);
+        }
+      }
+    } else {
+      // Sin schedules: actualizar o crear el google event asociado al Event
+      if (event.googleEventId) {
+        try {
+          await googleCalendarService.updateEvent(event.googleEventId, {
+            name: event.name,
+            description: descriptionWithRoom,
+            eventFrom: event.eventFrom,
+            eventTo: event.eventTo,
+          });
+          console.log(`Google Calendar event updated for Event ${event.id}`);
+        } catch (err) {
+          console.error('Error updating google event for Event:', err);
+        }
+      } else {
+        try {
+          const createdId = await googleCalendarService.createEvent({
+            name: event.name,
+            description: descriptionWithRoom,
+            eventFrom: event.eventFrom,
+            eventTo: event.eventTo,
+          });
+          if (createdId)
+            await Event.update(
+              { googleEventId: createdId },
+              { where: { id: event.id } }
+            );
+          console.log(
+            `Google Calendar event created for Event ${event.id}: ${createdId}`
+          );
+        } catch (err) {
+          console.error(
+            'Error creating google event for Event (approved):',
+            err
+          );
+        }
+      }
+    }
+  }
+}
+
 // Eliminar un evento por ID (Delete)
 exports.deleteEvent = async (req, res) => {
+  const transaction = await sequelize.transaction();
   try {
-    const event = await Event.findByPk(req.params.eventId); // Buscar el evento por ID
-    if (req.user.role == User.ROLES.USER && event.userId != req.user.id) {
+    const event = await Event.findByPk(req.params.eventId, { transaction });
+
+    // Verificar si el evento existe
+    if (!event) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Evento no encontrado.' });
+    }
+
+    // Verificar permisos
+    if (req.user.role === 'requester' && event.userId != req.user.id) {
+      await transaction.rollback();
       return res
         .status(403)
         .json({ message: 'No tienes permisos para realizar esta acción' });
-    }
-    if (!event) {
-      return res.status(404).json({ error: 'Evento no encontrado.' });
     }
 
     // Antes de eliminar el evento, recolectar google IDs de schedules para borrado en GCal
@@ -1926,19 +1857,34 @@ exports.deleteEvent = async (req, res) => {
     try {
       const schs = await EventSchedule.findAll({
         where: { eventId: event.id },
+        transaction,
       });
       for (const s of schs) {
         if (s.googleEventId) scheduleGoogleIds.push(s.googleEventId);
       }
     } catch (err) {
+      await transaction.rollback();
       console.error('Error fetching schedules before event delete:', err);
+      return res
+        .status(500)
+        .json({ error: 'Error al obtener los horarios del evento.' });
     }
 
-    const googleIdToDelete = event.googleEventId;
-    await event.destroy(); // Eliminar el evento (cascade elimina schedules)
-    res.status(204).json(); // Responder sin contenido
+    // Eliminar invitaciones asociadas
+    await Invitation.destroy({ where: { eventId: event.id }, transaction });
 
-    // Eliminar de Google Calendar en segundo plano si existía
+    const googleIdToDelete = event.googleEventId;
+
+    // Eliminar el evento (cascade elimina schedules si está configurado)
+    await event.destroy({ transaction });
+
+    // Confirmar la transacción
+    await transaction.commit();
+
+    // Responder sin contenido (204) ANTES de las operaciones en segundo plano
+    res.status(204).json();
+
+    // Eliminar de Google Calendar en segundo plano si existía (fuera de la transacción)
     (async () => {
       try {
         // borrar google id principal si existe
@@ -1961,12 +1907,16 @@ exports.deleteEvent = async (req, res) => {
       }
     })();
   } catch (error) {
+    // Si ocurre error, deshacer cambios
+    if (transaction) await transaction.rollback();
+
     console.error('Error deleting event:', error);
     const {
       ForeignKeyConstraintError,
       UniqueConstraintError,
       ValidationError,
     } = require('sequelize');
+
     if (error instanceof ForeignKeyConstraintError) {
       return res.status(409).json({
         error:
@@ -2514,7 +2464,7 @@ exports.getUserEventsCount = async (req, res) => {
       total: totalCount,
     };
 
-    console.log(`📊 Conteo de eventos para usuario ${userId}:`, result);
+    //console.log(`Conteo de eventos para usuario ${userId}:`, result);
     res.status(200).json(result);
   } catch (error) {
     console.error('Error en getUserEventsCount:', error);
