@@ -1,5 +1,5 @@
 // src/pages/EventsPage.jsx
-import React, { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import axiosInstance from '../axiosConfig';
 import { useDispatch, useSelector } from 'react-redux';
 import {
@@ -117,7 +117,7 @@ const EventsPage = () => {
     setFilteredEvents(filtered);
   };
 
-  // MODIFICADO: Ahora incluye todos los días entre eventFrom y eventTo
+  // incluye todos los días entre eventFrom y eventTo
   const eventsByDay = useMemo(() => {
     const map = {};
 

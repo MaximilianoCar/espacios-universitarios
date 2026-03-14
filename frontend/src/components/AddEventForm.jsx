@@ -11,7 +11,6 @@ import {
   PhotoIcon,
   InformationCircleIcon,
   ExclamationTriangleIcon,
-  ArrowPathIcon,
   DocumentTextIcon,
   ClipboardDocumentCheckIcon,
 } from '@heroicons/react/24/outline';

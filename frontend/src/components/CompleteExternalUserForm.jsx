@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axiosInstance from '../axiosConfig';
 import Swal from '../utils/swal';
 import {
-  FaBuilding,
   FaIdCard,
   FaFileUpload,
   FaUserTie,
@@ -186,6 +185,8 @@ const CompleteExternalUserForm = ({ onClose, onSuccess }) => {
     if (formData.isCompanyRepresentative) {
       data.append('companyName', formData.companyName);
       data.append('companyRif', formData.companyRif);
+    } else {
+      data.append('companyName', formData.companyName);
     }
 
     if (formData.ciFile) {

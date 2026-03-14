@@ -1,5 +1,5 @@
 // src/components/Layout.js
-import React from 'react';
+//import React from 'react';
 import fondoImagen from '../assets/ucvreloj.png';
 
 const Layout = ({ children }) => {

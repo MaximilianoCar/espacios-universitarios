@@ -7,6 +7,7 @@ import {
   selectRoomsLoading,
   selectRoomsLastFetched,
 } from '../features/rooms/roomsSlice';
+import { updateRequest } from '../features/requests/requestsSlice';
 import Swal from 'sweetalert2';
 import {
   FaCalendarAlt,
@@ -918,11 +919,12 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
     }
 
     try {
-      await axiosInstance.put(`/events/${event.id}`, data, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const updatedEvent = await dispatch(
+        updateRequest({
+          eventId: event.id,
+          payload: data,
+        })
+      ).unwrap();
 
       Swal.fire({
         title: '¡Evento actualizado!',
@@ -933,7 +935,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
 
       // Notificar al componente padre para refrescar
       if (onEventUpdated) {
-        onEventUpdated();
+        onEventUpdated(updatedEvent);
       }
 
       onClose();
