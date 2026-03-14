@@ -1,5 +1,5 @@
 // src/pages/AdminPendingRequestsPage.jsx
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import axiosInstance from '../axiosConfig';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -10,7 +10,6 @@ import {
   FaCheckCircle,
   FaTimesCircle,
   FaArrowLeft,
-  FaFileAlt,
 } from 'react-icons/fa';
 import Swal from '../utils/swal';
 

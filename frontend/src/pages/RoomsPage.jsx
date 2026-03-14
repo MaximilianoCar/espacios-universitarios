@@ -1,5 +1,5 @@
 // src/pages/RoomsPage.jsx
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 //import axiosInstance from '../axiosConfig';
 import { Link } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';

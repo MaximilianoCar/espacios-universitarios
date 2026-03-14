@@ -151,9 +151,10 @@ module.exports = (sequelize, DataTypes) => {
       }
 
       const { isCompanyRepresentative, companyName, companyRif, origin } = data;
-
+      //console.log('Completing external info with data:', data);
       // Marcar si es representante de empresa y validar campos cuando aplique
-      this.isCompanyRepresentative = Boolean(isCompanyRepresentative);
+      this.isCompanyRepresentative =
+        isCompanyRepresentative === true || isCompanyRepresentative === 'true';
 
       if (this.isCompanyRepresentative) {
         if (!companyName || !companyRif) {
@@ -164,8 +165,13 @@ module.exports = (sequelize, DataTypes) => {
         this.companyName = companyName;
         this.companyRif = companyRif;
       } else {
-        this.companyName = null;
-        this.companyRif = null;
+        if (!companyName) {
+          throw new Error(
+            'Los usuarios externos que no representan una empresa deben proporcionar el nombre de su organización de origen'
+          );
+        }
+        this.companyName = companyName;
+        //this.companyRif = null;
       }
 
       if (certificationPath) {

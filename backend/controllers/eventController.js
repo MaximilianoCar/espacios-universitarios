@@ -14,7 +14,7 @@ const path = require('path');
 const emailService = require('../services/emailService');
 const googleCalendarService = require('../services/googleCalendarService');
 
-// Normalizar rutas para usar slashes y eliminar prefijos como './' (compatibilidad Windows)
+// Normalizar rutas para usar slashes y eliminar prefijos como './'
 const normalizeFilePath = filePath => {
   if (!filePath) return filePath;
   // Reemplazar backslashes por slashes
@@ -1002,6 +1002,8 @@ exports.getAllEvents = async (req, res) => {
       const result = await Event.findAndCountAll({
         where: whereConditions,
         include: includeConditions,
+        distinct: true,
+        col: 'id',
         limit: pageSize,
         offset: offset,
         order: [['createdAt', 'DESC']],
@@ -1025,6 +1027,8 @@ exports.getAllEvents = async (req, res) => {
         const result = await Event.findAndCountAll({
           where: coordinatorWhere,
           include: includeConditions,
+          distinct: true,
+          col: 'id',
           limit: pageSize,
           offset: offset,
           order: [['createdAt', 'DESC']],
@@ -1272,7 +1276,7 @@ exports.updateEvent = async (req, res) => {
       }
     }
 
-    // IMPORTANTE: Para eventos recurrentes, NO modificar los schedules
+    // Para eventos recurrentes, NO modificar los schedules
     if (schedulesInput && !isRecurrent) {
       try {
         if (
@@ -1289,7 +1293,7 @@ exports.updateEvent = async (req, res) => {
             transaction
           );
         } else if (Array.isArray(schedulesInput)) {
-          // MODO: reemplazar todos los schedules (comportamiento legacy)
+          // MODO: reemplazar todos los schedules
           await processSchedulesReplaceMode(
             event,
             schedulesInput,
@@ -1353,7 +1357,7 @@ exports.updateEvent = async (req, res) => {
   }
 };
 
-// Funciones auxiliares para updateEvent (para mantener el código organizado)
+// Funciones auxiliares para updateEvent
 
 async function processSchedulesPartialMode(
   event,
@@ -1874,19 +1878,12 @@ exports.deleteEvent = async (req, res) => {
 
     // Eliminar invitaciones asociadas
     await Invitation.destroy({ where: { eventId: event.id }, transaction });
-
     const googleIdToDelete = event.googleEventId;
-
-    // Eliminar el evento (cascade elimina schedules si está configurado)
     await event.destroy({ transaction });
-
-    // Confirmar la transacción
     await transaction.commit();
-
-    // Responder sin contenido (204) ANTES de las operaciones en segundo plano
     res.status(204).json();
 
-    // Eliminar de Google Calendar en segundo plano si existía (fuera de la transacción)
+    // Eliminar de Google Calendar en segundo plano si existía
     (async () => {
       try {
         // borrar google id principal si existe
@@ -2334,6 +2331,10 @@ exports.getEventsByUser = async (req, res) => {
         as: 'room',
         attributes: ['id', 'name'],
       },
+      {
+        model: EventSchedule,
+        as: 'schedules',
+      },
     ];
 
     // Si hay un término de búsqueda, agregar condiciones
@@ -2352,6 +2353,8 @@ exports.getEventsByUser = async (req, res) => {
     const { count, rows: events } = await Event.findAndCountAll({
       where: whereConditions,
       include: includeConditions,
+      distinct: true,
+      col: 'id',
       limit: pageSize,
       offset: offset,
       order: [['createdAt', 'DESC']],

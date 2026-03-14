@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import axiosInstance from '../axiosConfig';
+import { useDispatch, useSelector } from 'react-redux';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import SearchBar from '../components/SearchBar2';
@@ -37,15 +38,113 @@ import Swal from '../utils/swal';
 import { Link } from 'react-router-dom';
 import { useNavigate, useLocation } from 'react-router-dom';
 import getMediaUrl from '../utils/media';
+import {
+  deleteRequest,
+  fetchRequests,
+  removeRequestAgreement,
+  updateRequest,
+  uploadRequestFiles,
+  selectRequests,
+  selectRequestsError,
+  selectRequestsStatus,
+  selectRequestsTotalEvents,
+  selectRequestsTotalPages,
+} from '../features/requests/requestsSlice';
 
 const PAGE_SIZE = 25; // Mismo que el backend
 
+const normalizeDayOfWeek = day => {
+  const parsed = Number(day);
+  if (Number.isNaN(parsed) || parsed < 0 || parsed > 6) return null;
+  return parsed;
+};
+
+const toValidDate = value => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+};
+
+const extractRecurrence = event => {
+  const recurrence = { active: false };
+  const daysSet = new Set();
+  let latestScheduleEnd = null;
+
+  if (Array.isArray(event?.schedules) && event.schedules.length > 1) {
+    event.schedules.forEach(schedule => {
+      const day = normalizeDayOfWeek(schedule?.dayOfWeek);
+      if (day !== null) {
+        daysSet.add(day);
+      }
+
+      const scheduleEnd =
+        toValidDate(schedule?.eventTo) ||
+        toValidDate(schedule?.reservationTo) ||
+        toValidDate(schedule?.dateOnly);
+
+      if (
+        scheduleEnd &&
+        (!latestScheduleEnd ||
+          scheduleEnd.getTime() > latestScheduleEnd.getTime())
+      ) {
+        latestScheduleEnd = scheduleEnd;
+      }
+    });
+  }
+
+  if (daysSet.size > 0) {
+    recurrence.active = true;
+    recurrence.daysOfWeek = Array.from(daysSet).sort((a, b) => a - b);
+  }
+
+  if (event?.periodicity) {
+    recurrence.active = true;
+    recurrence.periodicity = event.periodicity;
+  }
+
+  if (event?.repeatUntil) {
+    recurrence.active = true;
+    recurrence.repeatUntil = event.repeatUntil;
+  } else if (latestScheduleEnd && recurrence.active) {
+    // Fallback para payloads que no incluyen repeatUntil explícito.
+    recurrence.repeatUntil = latestScheduleEnd.toISOString();
+  }
+
+  if (event?.recurrenceCount || event?.occurrences) {
+    recurrence.active = true;
+    recurrence.occurrences = event.recurrenceCount || event.occurrences;
+  }
+
+  return recurrence;
+};
+
+const formatPeriodicity = periodicity => {
+  const normalized = String(periodicity || '').toLowerCase();
+  const labels = {
+    daily: 'Diaria',
+    weekly: 'Semanal',
+    monthly: 'Mensual',
+    yearly: 'Anual',
+  };
+  return labels[normalized] || periodicity;
+};
+
 const AdminReservationsPage = () => {
-  const [events, setEvents] = useState([]);
+  const dispatch = useDispatch();
+  const events = useSelector(selectRequests);
+  const requestsStatus = useSelector(selectRequestsStatus);
+  const requestsError = useSelector(selectRequestsError);
+  const totalEvents = useSelector(selectRequestsTotalEvents);
+  const totalPages = useSelector(selectRequestsTotalPages);
+  const loading = requestsStatus === 'loading';
+  const error =
+    typeof requestsError === 'string'
+      ? requestsError
+      : requestsError?.message || requestsError?.error || '';
+
   const [searchTerm, setSearchTerm] = useState('');
   const [currentSearch, setCurrentSearch] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
   const [uploadingAgreementId, setUploadingAgreementId] = useState(null);
   const [agreementFile, setAgreementFile] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -61,8 +160,6 @@ const AdminReservationsPage = () => {
 
   // Estados de paginación
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalEvents, setTotalEvents] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
 
   // estado menu acciones
   const [openMenuId, setOpenMenuId] = useState(null);
@@ -95,26 +192,6 @@ const AdminReservationsPage = () => {
       return <ModalMobile onClose={onClose}>{children}</ModalMobile>;
     }
     return <Modal onClose={onClose}>{children}</Modal>;
-  };
-
-  // Función para recargar eventos manteniendo la paginación actual
-  const refreshEvents = async () => {
-    try {
-      const response = await axiosInstance.get('/admin/events', {
-        params: {
-          page: currentPage,
-          pageSize: PAGE_SIZE,
-          search: searchTerm,
-        },
-      });
-      //console.log('Refreshed events:', response.data);
-      setEvents(response.data.events || []);
-      setTotalEvents(response.data.totalEvents || 0);
-      setTotalPages(response.data.totalPages || 1);
-    } catch (error) {
-      console.error('Error refreshing events:', error);
-      setError('Error al obtener los eventos.');
-    }
   };
 
   //manejar volver atras
@@ -153,55 +230,30 @@ const AdminReservationsPage = () => {
     setCurrentSearch(term);
     setCurrentPage(1); // Siempre volver a la página 1 al buscar
 
-    setLoading(true);
     try {
-      const response = await axiosInstance.get('/admin/events', {
-        params: {
+      await dispatch(
+        fetchRequests({
           page: 1,
           pageSize: PAGE_SIZE,
           search: term,
-        },
-      });
-
-      setEvents(response.data.events || []);
-      setTotalEvents(response.data.totalEvents || 0);
-      setTotalPages(response.data.totalPages || 1);
-      setError('');
+          force: true,
+        })
+      ).unwrap();
     } catch (error) {
       console.error('Error searching events:', error);
-      setError('Error al buscar eventos.');
-    } finally {
-      setLoading(false);
     }
   };
 
   // obtener los eventos con paginación del BACKEND
   useEffect(() => {
-    const fetchEvents = async () => {
-      setLoading(true);
-      try {
-        const response = await axiosInstance.get('/admin/events', {
-          params: {
-            page: currentPage,
-            pageSize: PAGE_SIZE,
-            search: searchTerm,
-          },
-        });
-
-        setEvents(response.data.events || []);
-        setTotalEvents(response.data.totalEvents || 0);
-        setTotalPages(response.data.totalPages || 1);
-        setError('');
-      } catch (error) {
-        console.error('Error fetching events:', error);
-        setError('Error al obtener los eventos.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchEvents();
-  }, [currentPage]); // Solo dependencia de currentPage
+    dispatch(
+      fetchRequests({
+        page: currentPage,
+        pageSize: PAGE_SIZE,
+        search: searchTerm,
+      })
+    );
+  }, [dispatch, currentPage, searchTerm]);
 
   // manejar la subida del archivo de contrato
   const handleUploadAgreement = async eventId => {
@@ -222,11 +274,9 @@ const AdminReservationsPage = () => {
     });
 
     try {
-      await axiosInstance.post(`/events/${eventId}/upload-files`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      await dispatch(
+        uploadRequestFiles({ eventId, payload: formData })
+      ).unwrap();
 
       Swal.close();
       Swal.fire(
@@ -237,9 +287,6 @@ const AdminReservationsPage = () => {
 
       setUploadingAgreementId(null);
       setAgreementFile(null);
-
-      // Recargar los datos manteniendo la paginación actual
-      await refreshEvents();
     } catch (error) {
       Swal.close();
       console.error('Error al subir el contrato:', error);
@@ -272,11 +319,14 @@ const AdminReservationsPage = () => {
 
   // Función para mostrar el modal de fechas
   const handleShowDates = event => {
+    const recurrence = extractRecurrence(event);
+
     setSelectedEventDates({
       eventFrom: event.eventFrom,
       eventTo: event.eventTo,
       reservationFrom: event.reservationFrom,
       reservationTo: event.reservationTo,
+      recurrence,
     });
     setShowDatesModal(true);
   };
@@ -338,10 +388,12 @@ const AdminReservationsPage = () => {
         });
 
         try {
-          await axiosInstance.put(`/events/${eventId}`, { status: newStatus });
-
-          // Recargar desde el backend manteniendo la paginación
-          await refreshEvents();
+          await dispatch(
+            updateRequest({
+              eventId,
+              payload: { status: newStatus },
+            })
+          ).unwrap();
 
           Swal.fire(
             '¡Aprobado!',
@@ -431,12 +483,15 @@ const AdminReservationsPage = () => {
         });
 
         try {
-          await axiosInstance.put(`/events/${eventId}`, {
-            status: newStatus,
-            comments: formValues.comments,
-          });
-
-          await refreshEvents();
+          await dispatch(
+            updateRequest({
+              eventId,
+              payload: {
+                status: newStatus,
+                comments: formValues.comments,
+              },
+            })
+          ).unwrap();
 
           Swal.fire(
             '¡Rechazado!',
@@ -490,10 +545,7 @@ const AdminReservationsPage = () => {
       });
 
       try {
-        await axiosInstance.delete(`/events/${eventId}`);
-
-        // Recargar los eventos
-        await refreshEvents();
+        await dispatch(deleteRequest(eventId)).unwrap();
 
         Swal.fire(
           '¡Eliminado!',
@@ -680,7 +732,6 @@ const AdminReservationsPage = () => {
           text: 'Las invitaciones se han enviado correctamente.',
           confirmButtonColor: '#4f46e5',
         });
-        await refreshEvents();
       } catch (err) {
         console.error(err);
         Swal.fire({
@@ -801,18 +852,18 @@ const AdminReservationsPage = () => {
                   showConfirmButton: false,
                 });
                 try {
-                  await axiosInstance.post(
-                    `/events/${event.id}/upload-files`,
-                    formData,
-                    { headers: { 'Content-Type': 'multipart/form-data' } }
-                  );
+                  await dispatch(
+                    uploadRequestFiles({
+                      eventId: event.id,
+                      payload: formData,
+                    })
+                  ).unwrap();
                   Swal.close();
                   await Swal.fire(
                     '¡Listo!',
                     'Contrato actualizado correctamente.',
                     'success'
                   );
-                  await refreshEvents();
                 } catch (err) {
                   Swal.close();
                   console.error(err);
@@ -845,14 +896,13 @@ const AdminReservationsPage = () => {
                   showConfirmButton: false,
                 });
                 try {
-                  await axiosInstance.delete(`/events/${event.id}/agreement`);
+                  await dispatch(removeRequestAgreement(event.id)).unwrap();
                   Swal.close();
                   await Swal.fire(
                     'Eliminado',
                     'Contrato eliminado correctamente.',
                     'success'
                   );
-                  await refreshEvents();
                 } catch (err) {
                   Swal.close();
                   console.error(err);
@@ -1074,7 +1124,9 @@ const AdminReservationsPage = () => {
           <CreateReservationModal
             isOpen={showCreateModal}
             onClose={() => setShowCreateModal(false)}
-            onReservationCreated={refreshEvents}
+            onReservationCreated={() => {
+              setShowCreateModal(false);
+            }}
           />
         )}
 
@@ -1089,7 +1141,6 @@ const AdminReservationsPage = () => {
             onEventUpdated={() => {
               setShowUpdateModal(false);
               setEventToEdit(null);
-              refreshEvents();
             }}
           />
         )}
@@ -1625,89 +1676,154 @@ const AdminReservationsPage = () => {
 
       {showDatesModal && (
         <RenderModal onClose={handleCloseDatesModal}>
-          <div className="p-5 border-b border-gray-200 sticky top-0 bg-white z-10">
-            <h2 className="text-lg font-bold text-gray-800">
-              Fechas del Evento
-            </h2>
-          </div>
-
-          <div className="p-5 space-y-4">
-            {/* Fechas del Evento */}
-            <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
-              <h3 className="text-base font-semibold text-blue-800 mb-3 flex items-center">
-                <FaCalendarAlt className="mr-2" size={16} />
+          <div className="w-full max-h-[85vh] flex flex-col">
+            <div className="px-4 py-3 border-b border-gray-200 sticky top-0 bg-white z-10">
+              <h2 className="text-lg font-bold text-gray-800">
                 Fechas del Evento
-              </h3>
+              </h2>
+            </div>
 
-              <div className="space-y-3">
-                <div className="bg-white rounded-lg p-3 border border-blue-100">
-                  <div className="text-xs font-medium text-blue-600 mb-1">
-                    INICIO DEL EVENTO
-                  </div>
-                  <div className="text-sm font-semibold text-gray-800">
-                    {formatDateTime(selectedEventDates.eventFrom).date}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {formatDateTime(selectedEventDates.eventFrom).time}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-3 border border-blue-200">
+                  <h3 className="text-sm font-semibold text-blue-800 mb-2 flex items-center">
+                    <FaCalendarAlt className="mr-2" size={14} />
+                    Evento
+                  </h3>
+
+                  <div className="space-y-2">
+                    <div className="bg-white rounded-lg p-2.5 border border-blue-100">
+                      <div className="text-[11px] font-medium text-blue-600 mb-0.5">
+                        INICIO
+                      </div>
+                      <div className="text-sm font-semibold text-gray-800 leading-tight">
+                        {formatDateTime(selectedEventDates.eventFrom).date}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {formatDateTime(selectedEventDates.eventFrom).time}
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg p-2.5 border border-blue-100">
+                      <div className="text-[11px] font-medium text-blue-600 mb-0.5">
+                        FIN
+                      </div>
+                      <div className="text-sm font-semibold text-gray-800 leading-tight">
+                        {formatDateTime(selectedEventDates.eventTo).date}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {formatDateTime(selectedEventDates.eventTo).time}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-lg p-3 border border-blue-100">
-                  <div className="text-xs font-medium text-blue-600 mb-1">
-                    FIN DEL EVENTO
-                  </div>
-                  <div className="text-sm font-semibold text-gray-800">
-                    {formatDateTime(selectedEventDates.eventTo).date}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {formatDateTime(selectedEventDates.eventTo).time}
+                <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-3 border border-green-200">
+                  <h3 className="text-sm font-semibold text-green-800 mb-2 flex items-center">
+                    <FaCalendarAlt className="mr-2" size={14} />
+                    Reserva
+                  </h3>
+
+                  <div className="space-y-2">
+                    <div className="bg-white rounded-lg p-2.5 border border-green-100">
+                      <div className="text-[11px] font-medium text-green-600 mb-0.5">
+                        INICIO
+                      </div>
+                      <div className="text-sm font-semibold text-gray-800 leading-tight">
+                        {
+                          formatDateTime(selectedEventDates.reservationFrom)
+                            .date
+                        }
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {
+                          formatDateTime(selectedEventDates.reservationFrom)
+                            .time
+                        }
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg p-2.5 border border-green-100">
+                      <div className="text-[11px] font-medium text-green-600 mb-0.5">
+                        FIN
+                      </div>
+                      <div className="text-sm font-semibold text-gray-800 leading-tight">
+                        {formatDateTime(selectedEventDates.reservationTo).date}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {formatDateTime(selectedEventDates.reservationTo).time}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Fechas de Reserva */}
-            <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
-              <h3 className="text-base font-semibold text-green-800 mb-3 flex items-center">
-                <FaCalendarAlt className="mr-2" size={16} />
-                Fechas de Reserva
-              </h3>
+              {selectedEventDates.recurrence?.active && (
+                <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl p-3 border border-purple-200">
+                  <h3 className="text-sm font-semibold text-purple-800 mb-2 flex items-center">
+                    <FaCalendarAlt className="mr-2" size={14} />
+                    Recurrencia
+                  </h3>
 
-              <div className="space-y-3">
-                <div className="bg-white rounded-lg p-3 border border-green-100">
-                  <div className="text-xs font-medium text-green-600 mb-1">
-                    INICIO DE RESERVA
-                  </div>
-                  <div className="text-sm font-semibold text-gray-800">
-                    {formatDateTime(selectedEventDates.reservationFrom).date}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {formatDateTime(selectedEventDates.reservationFrom).time}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {selectedEventDates.recurrence?.periodicity && (
+                      <div className="bg-white rounded-lg p-2.5 border border-purple-100">
+                        <div className="text-[11px] font-medium text-purple-600 mb-0.5">
+                          PERIODICIDAD
+                        </div>
+                        <div className="text-sm font-semibold text-gray-800">
+                          {formatPeriodicity(
+                            selectedEventDates.recurrence.periodicity
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedEventDates.recurrence?.occurrences && (
+                      <div className="bg-white rounded-lg p-2.5 border border-purple-100">
+                        <div className="text-[11px] font-medium text-purple-600 mb-0.5">
+                          REPETICIONES
+                        </div>
+                        <div className="text-sm font-semibold text-gray-800">
+                          {selectedEventDates.recurrence.occurrences}
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedEventDates.recurrence?.repeatUntil && (
+                      <div className="bg-white rounded-lg p-2.5 border border-purple-100">
+                        <div className="text-[11px] font-medium text-purple-600 mb-0.5">
+                          FIN DE RECURRENCIA
+                        </div>
+                        <div className="text-sm font-semibold text-gray-800 leading-tight">
+                          {
+                            formatDateTime(
+                              selectedEventDates.recurrence.repeatUntil
+                            ).date
+                          }
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          {
+                            formatDateTime(
+                              selectedEventDates.recurrence.repeatUntil
+                            ).time
+                          }
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                <div className="bg-white rounded-lg p-3 border border-green-100">
-                  <div className="text-xs font-medium text-green-600 mb-1">
-                    FIN DE RESERVA
-                  </div>
-                  <div className="text-sm font-semibold text-gray-800">
-                    {formatDateTime(selectedEventDates.reservationTo).date}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {formatDateTime(selectedEventDates.reservationTo).time}
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
-          </div>
 
-          <div className="p-5 border-t border-gray-200 sticky bottom-0 bg-white">
-            <button
-              onClick={handleCloseDatesModal}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-medium transition-colors text-sm"
-            >
-              Cerrar
-            </button>
+            <div className="px-4 py-3 border-t border-gray-200 sticky bottom-0 bg-white">
+              <button
+                onClick={handleCloseDatesModal}
+                className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-lg font-medium transition-colors text-sm"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </RenderModal>
       )}

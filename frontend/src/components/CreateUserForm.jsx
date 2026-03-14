@@ -1,8 +1,15 @@
 // src/components/CreateUserForm.jsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import axiosInstance from '../axiosConfig';
 import Swal from '../utils/swal';
-import { FaUniversity, FaUser, FaBuilding, FaInfoCircle } from 'react-icons/fa';
+import {
+  FaUniversity,
+  FaUser,
+  FaBuilding,
+  FaInfoCircle,
+  FaEye,
+  FaEyeSlash,
+} from 'react-icons/fa';
 
 const CreateUserForm = ({ onUserCreated, onCancel }) => {
   const [formData, setFormData] = useState({
@@ -20,6 +27,7 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCompanyFields, setShowCompanyFields] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Definir traducciones de roles
   const ROLE_OPTIONS = [
@@ -343,16 +351,28 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
             <label className="block text-gray-700 mb-2 font-medium">
               Contraseña *
             </label>
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              minLength="6"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Mínimo 6 caracteres"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                required
+                minLength="6"
+                className="w-full pr-10 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="Mínimo 6 caracteres"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(prev => !prev)}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                aria-label={
+                  showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'
+                }
+              >
+                {showPassword ? <FaEyeSlash /> : <FaEye />}
+              </button>
+            </div>
           </div>
 
           <div>

@@ -1,5 +1,5 @@
 // src/components/UpdateUserForm.jsx
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import axiosInstance from '../axiosConfig';
 import Swal from '../utils/swal';
 import { FaUniversity, FaUser, FaBuilding, FaInfoCircle } from 'react-icons/fa';

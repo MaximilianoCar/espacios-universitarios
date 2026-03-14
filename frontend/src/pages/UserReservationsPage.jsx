@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import axiosInstance from '../axiosConfig';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -13,7 +13,6 @@ import {
   FaMapPin,
   FaUsers,
   FaDollarSign,
-  FaFile,
   FaExternalLinkAlt,
   FaEllipsisV,
   FaFilePdf,
@@ -30,6 +29,83 @@ import { useNavigate } from 'react-router-dom';
 import getMediaUrl from '../utils/media';
 
 const PAGE_SIZE = 25; // mismo que el backend
+
+const normalizeDayOfWeek = day => {
+  const parsed = Number(day);
+  if (Number.isNaN(parsed) || parsed < 0 || parsed > 6) return null;
+  return parsed;
+};
+
+const toValidDate = value => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+};
+
+const extractRecurrence = event => {
+  const recurrence = { active: false };
+  const daysSet = new Set();
+  let latestScheduleEnd = null;
+
+  if (Array.isArray(event?.schedules) && event.schedules.length > 0) {
+    event.schedules.forEach(schedule => {
+      const day = normalizeDayOfWeek(schedule?.dayOfWeek);
+      if (day !== null) {
+        daysSet.add(day);
+      }
+
+      const scheduleEnd =
+        toValidDate(schedule?.eventTo) ||
+        toValidDate(schedule?.reservationTo) ||
+        toValidDate(schedule?.dateOnly);
+
+      if (
+        scheduleEnd &&
+        (!latestScheduleEnd ||
+          scheduleEnd.getTime() > latestScheduleEnd.getTime())
+      ) {
+        latestScheduleEnd = scheduleEnd;
+      }
+    });
+  }
+
+  if (daysSet.size > 0) {
+    recurrence.active = true;
+    recurrence.daysOfWeek = Array.from(daysSet).sort((a, b) => a - b);
+  }
+
+  if (event?.periodicity) {
+    recurrence.active = true;
+    recurrence.periodicity = event.periodicity;
+  }
+
+  if (event?.repeatUntil) {
+    recurrence.active = true;
+    recurrence.repeatUntil = event.repeatUntil;
+  } else if (latestScheduleEnd && recurrence.active) {
+    // Fallback para payloads que no incluyen repeatUntil explícito.
+    recurrence.repeatUntil = latestScheduleEnd.toISOString();
+  }
+
+  if (event?.recurrenceCount || event?.occurrences) {
+    recurrence.active = true;
+    recurrence.occurrences = event.recurrenceCount || event.occurrences;
+  }
+
+  return recurrence;
+};
+
+const formatPeriodicity = periodicity => {
+  const normalized = String(periodicity || '').toLowerCase();
+  const labels = {
+    daily: 'Diaria',
+    weekly: 'Semanal',
+    monthly: 'Mensual',
+    yearly: 'Anual',
+  };
+  return labels[normalized] || periodicity;
+};
 
 const UserReservationsPage = () => {
   const [events, setEvents] = useState([]);
@@ -590,6 +666,7 @@ const UserReservationsPage = () => {
       eventTo: event.eventTo,
       reservationFrom: event.reservationFrom,
       reservationTo: event.reservationTo,
+      recurrence: extractRecurrence(event),
     });
     setShowDatesModal(true);
   };
@@ -1362,89 +1439,154 @@ const UserReservationsPage = () => {
 
       {showDatesModal && (
         <RenderModal onClose={handleCloseDatesModal}>
-          <div className="p-5 border-b border-gray-200 sticky top-0 bg-white z-10">
-            <h2 className="text-lg font-bold text-gray-800">
-              Fechas del Evento
-            </h2>
-          </div>
-
-          <div className="p-5 space-y-4">
-            {/* Fechas del Evento */}
-            <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-4 border border-blue-200">
-              <h3 className="text-base font-semibold text-blue-800 mb-3 flex items-center">
-                <FaCalendarAlt className="mr-2" size={16} />
+          <div className="w-full max-h-[85vh] flex flex-col">
+            <div className="px-4 py-3 border-b border-gray-200 sticky top-0 bg-white z-10">
+              <h2 className="text-lg font-bold text-gray-800">
                 Fechas del Evento
-              </h3>
+              </h2>
+            </div>
 
-              <div className="space-y-3">
-                <div className="bg-white rounded-lg p-3 border border-blue-100">
-                  <div className="text-xs font-medium text-blue-600 mb-1">
-                    INICIO DEL EVENTO
-                  </div>
-                  <div className="text-sm font-semibold text-gray-800">
-                    {formatDateTime(selectedEventDates.eventFrom).date}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {formatDateTime(selectedEventDates.eventFrom).time}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-3 border border-blue-200">
+                  <h3 className="text-sm font-semibold text-blue-800 mb-2 flex items-center">
+                    <FaCalendarAlt className="mr-2" size={14} />
+                    Evento
+                  </h3>
+
+                  <div className="space-y-2">
+                    <div className="bg-white rounded-lg p-2.5 border border-blue-100">
+                      <div className="text-[11px] font-medium text-blue-600 mb-0.5">
+                        INICIO
+                      </div>
+                      <div className="text-sm font-semibold text-gray-800 leading-tight">
+                        {formatDateTime(selectedEventDates.eventFrom).date}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {formatDateTime(selectedEventDates.eventFrom).time}
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg p-2.5 border border-blue-100">
+                      <div className="text-[11px] font-medium text-blue-600 mb-0.5">
+                        FIN
+                      </div>
+                      <div className="text-sm font-semibold text-gray-800 leading-tight">
+                        {formatDateTime(selectedEventDates.eventTo).date}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {formatDateTime(selectedEventDates.eventTo).time}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="bg-white rounded-lg p-3 border border-blue-100">
-                  <div className="text-xs font-medium text-blue-600 mb-1">
-                    FIN DEL EVENTO
-                  </div>
-                  <div className="text-sm font-semibold text-gray-800">
-                    {formatDateTime(selectedEventDates.eventTo).date}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {formatDateTime(selectedEventDates.eventTo).time}
+                <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-3 border border-green-200">
+                  <h3 className="text-sm font-semibold text-green-800 mb-2 flex items-center">
+                    <FaCalendarAlt className="mr-2" size={14} />
+                    Reserva
+                  </h3>
+
+                  <div className="space-y-2">
+                    <div className="bg-white rounded-lg p-2.5 border border-green-100">
+                      <div className="text-[11px] font-medium text-green-600 mb-0.5">
+                        INICIO
+                      </div>
+                      <div className="text-sm font-semibold text-gray-800 leading-tight">
+                        {
+                          formatDateTime(selectedEventDates.reservationFrom)
+                            .date
+                        }
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {
+                          formatDateTime(selectedEventDates.reservationFrom)
+                            .time
+                        }
+                      </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg p-2.5 border border-green-100">
+                      <div className="text-[11px] font-medium text-green-600 mb-0.5">
+                        FIN
+                      </div>
+                      <div className="text-sm font-semibold text-gray-800 leading-tight">
+                        {formatDateTime(selectedEventDates.reservationTo).date}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        {formatDateTime(selectedEventDates.reservationTo).time}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Fechas de Reserva */}
-            <div className="bg-gradient-to-r from-green-50 to-green-100 rounded-xl p-4 border border-green-200">
-              <h3 className="text-base font-semibold text-green-800 mb-3 flex items-center">
-                <FaCalendarAlt className="mr-2" size={16} />
-                Fechas de Reserva
-              </h3>
+              {selectedEventDates.recurrence?.active && (
+                <div className="bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl p-3 border border-purple-200">
+                  <h3 className="text-sm font-semibold text-purple-800 mb-2 flex items-center">
+                    <FaCalendarAlt className="mr-2" size={14} />
+                    Recurrencia
+                  </h3>
 
-              <div className="space-y-3">
-                <div className="bg-white rounded-lg p-3 border border-green-100">
-                  <div className="text-xs font-medium text-green-600 mb-1">
-                    INICIO DE RESERVA
-                  </div>
-                  <div className="text-sm font-semibold text-gray-800">
-                    {formatDateTime(selectedEventDates.reservationFrom).date}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {formatDateTime(selectedEventDates.reservationFrom).time}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {selectedEventDates.recurrence?.periodicity && (
+                      <div className="bg-white rounded-lg p-2.5 border border-purple-100">
+                        <div className="text-[11px] font-medium text-purple-600 mb-0.5">
+                          PERIODICIDAD
+                        </div>
+                        <div className="text-sm font-semibold text-gray-800">
+                          {formatPeriodicity(
+                            selectedEventDates.recurrence.periodicity
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedEventDates.recurrence?.occurrences && (
+                      <div className="bg-white rounded-lg p-2.5 border border-purple-100">
+                        <div className="text-[11px] font-medium text-purple-600 mb-0.5">
+                          REPETICIONES
+                        </div>
+                        <div className="text-sm font-semibold text-gray-800">
+                          {selectedEventDates.recurrence.occurrences}
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedEventDates.recurrence?.repeatUntil && (
+                      <div className="bg-white rounded-lg p-2.5 border border-purple-100">
+                        <div className="text-[11px] font-medium text-purple-600 mb-0.5">
+                          FIN DE RECURRENCIA
+                        </div>
+                        <div className="text-sm font-semibold text-gray-800 leading-tight">
+                          {
+                            formatDateTime(
+                              selectedEventDates.recurrence.repeatUntil
+                            ).date
+                          }
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          {
+                            formatDateTime(
+                              selectedEventDates.recurrence.repeatUntil
+                            ).time
+                          }
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                <div className="bg-white rounded-lg p-3 border border-green-100">
-                  <div className="text-xs font-medium text-green-600 mb-1">
-                    FIN DE RESERVA
-                  </div>
-                  <div className="text-sm font-semibold text-gray-800">
-                    {formatDateTime(selectedEventDates.reservationTo).date}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {formatDateTime(selectedEventDates.reservationTo).time}
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
-          </div>
 
-          <div className="p-5 border-t border-gray-200 sticky bottom-0 bg-white">
-            <button
-              onClick={handleCloseDatesModal}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-medium transition-colors text-sm"
-            >
-              Cerrar
-            </button>
+            <div className="px-4 py-3 border-t border-gray-200 sticky bottom-0 bg-white">
+              <button
+                onClick={handleCloseDatesModal}
+                className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2.5 rounded-lg font-medium transition-colors text-sm"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </RenderModal>
       )}

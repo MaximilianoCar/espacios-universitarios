@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
-import axiosInstance from '../axiosConfig';
+import { useEffect, useState, useRef } from 'react';
+//import axiosInstance from '../axiosConfig';
 import {
   fetchRooms,
   deleteRoom as deleteRoomThunk,

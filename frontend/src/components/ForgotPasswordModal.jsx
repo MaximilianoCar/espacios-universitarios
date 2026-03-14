@@ -1,7 +1,8 @@
 // src/components/ForgotPasswordModal.js
-import React, { useState } from 'react';
+import { useState } from 'react';
 import axiosInstance from '../axiosConfig';
 import SwalHelpers from '../utils/swal';
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
 
 const ForgotPasswordModal = ({ isOpen, onClose, onSuccess }) => {
   const [step, setStep] = useState(1); // 1: email/ci, 2: código, 3: nueva contraseña
@@ -14,6 +15,8 @@ const ForgotPasswordModal = ({ isOpen, onClose, onSuccess }) => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   if (!isOpen) return null;
 
@@ -288,15 +291,29 @@ const ForgotPasswordModal = ({ isOpen, onClose, onSuccess }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Nueva Contraseña *
                 </label>
-                <input
-                  type="password"
-                  name="newPassword"
-                  value={formData.newPassword}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Mínimo 6 caracteres"
-                  disabled={isLoading}
-                />
+                <div className="relative">
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    name="newPassword"
+                    value={formData.newPassword}
+                    onChange={handleChange}
+                    className="w-full pr-10 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Mínimo 6 caracteres"
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(prev => !prev)}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    aria-label={
+                      showNewPassword
+                        ? 'Ocultar contraseña'
+                        : 'Mostrar contraseña'
+                    }
+                  >
+                    {showNewPassword ? <FaEyeSlash /> : <FaEye />}
+                  </button>
+                </div>
                 <p className="text-xs text-gray-500 mt-1">
                   La contraseña debe tener al menos 6 caracteres
                 </p>
@@ -306,15 +323,29 @@ const ForgotPasswordModal = ({ isOpen, onClose, onSuccess }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Confirmar Contraseña *
                 </label>
-                <input
-                  type="password"
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Repite la contraseña"
-                  disabled={isLoading}
-                />
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    name="confirmPassword"
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    className="w-full pr-10 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Repite la contraseña"
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(prev => !prev)}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    aria-label={
+                      showConfirmPassword
+                        ? 'Ocultar contraseña'
+                        : 'Mostrar contraseña'
+                    }
+                  >
+                    {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
+                  </button>
+                </div>
               </div>
             </div>
           )}

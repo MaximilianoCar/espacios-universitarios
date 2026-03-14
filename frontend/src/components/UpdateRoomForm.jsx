@@ -1,6 +1,6 @@
 // src/components/UpdateRoomForm.jsx (versión mejorada con imagen)
-import React, { useState } from 'react';
-import axiosInstance from '../axiosConfig';
+import { useState } from 'react';
+//import axiosInstance from '../axiosConfig';
 import Swal from 'sweetalert2';
 import { useDispatch } from 'react-redux';
 import { updateRoom as updateRoomThunk } from '../features/rooms/roomsSlice';

@@ -1,5 +1,5 @@
 // src/pages/RegisterPage.js
-import React, { useState } from 'react';
+import { useState } from 'react';
 import axiosInstance from '../axiosConfig';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -7,17 +7,7 @@ import Swal from '../utils/swal';
 import { useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { login } from '../features/auth/authActions';
-import {
-  FaUpload,
-  FaEnvelope,
-  FaCalendarAlt,
-  FaInfoCircle,
-  FaTrash,
-  FaEye,
-  FaEyeSlash,
-  FaUniversity,
-  FaUserGraduate,
-} from 'react-icons/fa';
+import { FaEye, FaEyeSlash, FaUniversity } from 'react-icons/fa';
 
 const RegisterPage = () => {
   const [formData, setFormData] = useState({
