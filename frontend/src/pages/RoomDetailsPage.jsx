@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import axiosInstance from '../axiosConfig';
 import { useDispatch, useSelector } from 'react-redux';
@@ -19,7 +19,6 @@ import {
   FaToilet,
   FaMicrophoneAlt,
   FaVideo,
-  FaMoneyBillWave,
   FaExchangeAlt,
   FaBox,
 } from 'react-icons/fa';

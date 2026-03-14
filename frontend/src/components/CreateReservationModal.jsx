@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import axiosInstance from '../axiosConfig';
+import { useDispatch } from 'react-redux';
 import Swal from '../utils/swal';
+import { createRequest } from '../features/requests/requestsSlice';
 import {
   FaCalendarAlt,
   FaUsers,
@@ -19,6 +21,7 @@ import {
 } from 'react-icons/fa';
 
 const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
+  const dispatch = useDispatch();
   const [rooms, setRooms] = useState([]);
   const [loadingRooms, setLoadingRooms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -850,11 +853,7 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
         }
       }
 
-      await axiosInstance.post('/events', data, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const createdEvent = await dispatch(createRequest(data)).unwrap();
 
       Swal.fire({
         title: '¡Reserva creada!',
@@ -869,7 +868,7 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
 
       // Notificar al componente padre para refrescar
       if (onReservationCreated) {
-        onReservationCreated();
+        onReservationCreated(createdEvent);
       }
 
       onClose();

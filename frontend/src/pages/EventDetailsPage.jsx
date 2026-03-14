@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import axiosInstance from '../axiosConfig';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import HeroSection from '../components/HeroSection';
@@ -10,6 +10,14 @@ import defaultBanner from '../assets/ucvfondo.jpg';
 import { CameraIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
 import { FaArrowLeft } from 'react-icons/fa';
 import getMediaUrl from '../utils/media';
+import {
+  deleteRequest,
+  removeRequestBanner,
+  removeRequestImage,
+  updateRequest,
+  uploadRequestBanner,
+  uploadRequestImage,
+} from '../features/requests/requestsSlice';
 
 const formatDateForInput = dateString => {
   if (!dateString) return '';
@@ -24,6 +32,7 @@ const formatDateForInput = dateString => {
 };
 
 const EventDetailsPage = () => {
+  const dispatch = useDispatch();
   const { id } = useParams();
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -44,6 +53,25 @@ const EventDetailsPage = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
+
+  const normalizeEventResponse = payload => {
+    if (!payload) return null;
+    return payload.event && typeof payload.event === 'object'
+      ? payload.event
+      : payload;
+  };
+
+  const mergeCurrentEvent = payload => {
+    const normalizedEvent = normalizeEventResponse(payload);
+    if (!normalizedEvent) return;
+
+    setEvent(prev => ({
+      ...prev,
+      ...normalizedEvent,
+      room: normalizedEvent.room || prev?.room,
+      schedules: normalizedEvent.schedules || prev?.schedules,
+    }));
+  };
 
   const handleBack = () => {
     if (location.key !== 'default') {
@@ -101,8 +129,8 @@ const EventDetailsPage = () => {
           didOpen: () => Swal.showLoading(),
         });
 
-        axiosInstance
-          .delete(`/events/${event.id}`)
+        dispatch(deleteRequest(event.id))
+          .unwrap()
           .then(() => {
             Swal.fire({
               title: '¡Eliminado!',
@@ -146,16 +174,16 @@ const EventDetailsPage = () => {
       if (result.isDenied) {
         // quitar banner
         try {
-          await axiosInstance.delete(`/events/${event.id}/banner`);
+          const payload = await dispatch(
+            removeRequestBanner(event.id)
+          ).unwrap();
           Swal.fire({
             title: 'Eliminado',
             text: 'Banner restaurado al predeterminado.',
             icon: 'success',
             confirmButtonColor: '#3085d6',
           });
-          // refrescar evento
-          const resp = await axiosInstance.get(`/events/${event.id}`);
-          setEvent(resp.data);
+          mergeCurrentEvent(payload);
         } catch (err) {
           console.error(err);
           Swal.fire({
@@ -200,13 +228,12 @@ const EventDetailsPage = () => {
       });
 
       try {
-        await axiosInstance.post(
-          `/events/${event.id}/upload-banner`,
-          formData,
-          { headers: { 'Content-Type': 'multipart/form-data' } }
-        );
-        // refrescar el evento
-        const refreshed = await axiosInstance.get(`/events/${event.id}`);
+        const payload = await dispatch(
+          uploadRequestBanner({
+            eventId: event.id,
+            payload: formData,
+          })
+        ).unwrap();
         Swal.close();
         Swal.fire({
           title: '¡Listo!',
@@ -214,7 +241,7 @@ const EventDetailsPage = () => {
           icon: 'success',
           confirmButtonColor: '#3085d6',
         });
-        setEvent(refreshed.data);
+        mergeCurrentEvent(payload);
       } catch (err) {
         Swal.close();
         console.error(err);
@@ -245,15 +272,14 @@ const EventDetailsPage = () => {
 
       if (result.isDenied) {
         try {
-          await axiosInstance.delete(`/events/${event.id}/image`);
+          const payload = await dispatch(removeRequestImage(event.id)).unwrap();
           Swal.fire({
             title: 'Eliminado',
             text: 'Imagen del evento eliminada.',
             icon: 'success',
             confirmButtonColor: '#3085d6',
           });
-          const resp = await axiosInstance.get(`/events/${event.id}`);
-          setEvent(resp.data);
+          mergeCurrentEvent(payload);
         } catch (err) {
           console.error(err);
           Swal.fire({
@@ -297,11 +323,12 @@ const EventDetailsPage = () => {
       });
 
       try {
-        await axiosInstance.post(`/events/${event.id}/upload-image`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-        // refrescar el evento
-        const refreshed = await axiosInstance.get(`/events/${event.id}`);
+        const payload = await dispatch(
+          uploadRequestImage({
+            eventId: event.id,
+            payload: formData,
+          })
+        ).unwrap();
         Swal.close();
         Swal.fire({
           title: '¡Listo!',
@@ -309,7 +336,7 @@ const EventDetailsPage = () => {
           icon: 'success',
           confirmButtonColor: '#3085d6',
         });
-        setEvent(refreshed.data);
+        mergeCurrentEvent(payload);
       } catch (err) {
         Swal.close();
         console.error(err);
@@ -527,7 +554,12 @@ const EventDetailsPage = () => {
       });
 
       try {
-        const resp = await axiosInstance.put(`/events/${event.id}`, formValues);
+        const payload = await dispatch(
+          updateRequest({
+            eventId: event.id,
+            payload: formValues,
+          })
+        ).unwrap();
 
         Swal.fire({
           title: '¡Actualizado!',
@@ -535,7 +567,7 @@ const EventDetailsPage = () => {
           icon: 'success',
           confirmButtonColor: '#3085d6',
         });
-        setEvent(resp.data);
+        mergeCurrentEvent(payload);
       } catch (error) {
         console.error('Error updating event:', error);
         Swal.fire({

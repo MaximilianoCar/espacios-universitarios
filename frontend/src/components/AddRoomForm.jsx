@@ -5,7 +5,6 @@ import { useDispatch } from 'react-redux';
 import { createRoom as createRoomThunk } from '../features/rooms/roomsSlice';
 import Swal from '../utils/swal';
 import {
-  FaUsers,
   FaWheelchair,
   FaWifi,
   FaToilet,

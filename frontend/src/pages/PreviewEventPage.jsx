@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import axiosInstance from '../axiosConfig';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -519,15 +519,15 @@ const PreviewEventPage = () => {
                       event.status === 'approved'
                         ? 'bg-green-100 text-green-800'
                         : event.status === 'denied'
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-yellow-100 text-yellow-800'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-yellow-100 text-yellow-800'
                     }`}
                   >
                     {event.status === 'approved'
                       ? 'Aprobado'
                       : event.status === 'denied'
-                      ? 'Rechazado'
-                      : 'Pendiente'}
+                        ? 'Rechazado'
+                        : 'Pendiente'}
                   </span>
                 </div>
                 <div>
