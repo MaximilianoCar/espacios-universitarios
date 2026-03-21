@@ -1,10 +1,15 @@
 const multer = require('multer');
 const path = require('path');
-
+const fs = require('fs');
 // Configurar almacenamiento
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/events/images/'); // Carpeta donde se guardarán las imágenes
+  destination: function (req, file, cb) {
+    const folder = 'uploads/events/images/';
+    // Verificar si la carpeta existe, si no, crearla
+    if (!fs.existsSync(folder)) {
+      fs.mkdirSync(folder, { recursive: true });
+    }
+    cb(null, folder);
   },
   filename: (req, file, cb) => {
     // Crear un nombre único para el archivo

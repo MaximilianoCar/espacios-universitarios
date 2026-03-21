@@ -561,7 +561,9 @@ exports.updateUser = async (req, res) => {
     } = require('sequelize');
     if (error instanceof UniqueConstraintError) {
       return res.status(409).json({
-        error: error.errors[0]?.message || 'Conflicto de integridad.',
+        error:
+          error.errors[0]?.message ||
+          'Conflicto de integridad (cédula o correo ya en uso por otro usuario).',
       });
     }
     if (error instanceof ValidationError) {

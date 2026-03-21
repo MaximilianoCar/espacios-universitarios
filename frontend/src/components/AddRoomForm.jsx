@@ -23,7 +23,7 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
     location: '',
     staffowner: '',
     isInCUC: true,
-    cost: '0',
+    cost: '',
     isAccessible: false,
     canExonerate: false,
     hasBathrooms: false,
@@ -364,7 +364,7 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
             {/* Costo */}
             <div className="w-full md:w-1/3 px-2">
               <label className="block text-gray-700 font-medium mb-2">
-                Costo ($)
+                Costo ($) *
               </label>
               <input
                 type="text"
@@ -372,8 +372,9 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
                 className="w-full border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 value={formData.cost}
                 onChange={handleChange}
+                required
                 disabled={isSubmitting}
-                placeholder="Ej: 100.00"
+                placeholder="Ej: 100"
               />
               <p className="text-xs text-gray-500 mt-1">0 = Gratuito</p>
             </div>
