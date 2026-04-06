@@ -1256,7 +1256,7 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
                       className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
                         errors.cost ? 'border-red-500' : 'border-gray-300'
                       }`}
-                      placeholder="Ej: $1000 o Gratis"
+                      placeholder="Ej: 1000 o 0 para gratuito"
                       maxLength={100}
                     />
                     {errors.cost && (

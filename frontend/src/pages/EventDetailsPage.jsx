@@ -572,7 +572,7 @@ const EventDetailsPage = () => {
         console.error('Error updating event:', error);
         Swal.fire({
           title: 'Error',
-          text: 'Error al actualizar el evento. Por favor, intente nuevamente.',
+          text: error.error || 'Error al actualizar el evento.',
           icon: 'error',
           confirmButtonColor: '#d33',
         });

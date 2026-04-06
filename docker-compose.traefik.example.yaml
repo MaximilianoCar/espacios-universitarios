@@ -1,0 +1,20 @@
+services:
+  node-app:
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.reservas-api.rule=Host(`api.tu-dominio.com`)
+      - traefik.http.routers.reservas-api.entrypoints=websecure
+      - traefik.http.routers.reservas-api.tls=true
+      - traefik.http.services.reservas-api.loadbalancer.server.port=3000
+
+  frontend:
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.reservas-web.rule=Host(`tu-dominio.com`)
+      - traefik.http.routers.reservas-web.entrypoints=websecure
+      - traefik.http.routers.reservas-web.tls=true
+      - traefik.http.services.reservas-web.loadbalancer.server.port=8080
+
+networks:
+  app-network:
+    external: false

@@ -378,7 +378,8 @@ const CompleteExternalUserForm = ({ onClose, onSuccess }) => {
                 <span className="text-red-500">*</span>
               </label>
               <p className="text-xs text-gray-500 mb-3">
-                Suba una copia de su cédula de identidad (imagen o PDF)
+                Suba una copia de su cédula de identidad (imagen o PDF) (Máximo
+                2MB)
               </p>
 
               {/* Previsualización */}
