@@ -64,14 +64,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
   });
 
   const [schedules, setSchedules] = useState([]);
-  const isRecurrent = Boolean(
-    (event &&
-      (event.periodicity ||
-        event.isRecurring ||
-        event.isRecurrent ||
-        event.recurrence)) ||
-    schedules.length > 1
-  );
+  const hasRecurringSchedules = (event?.schedules?.length || 0) > 1;
   const [errors, setErrors] = useState({});
   const [imagePreview, setImagePreview] = useState(null);
   const [activeSection, setActiveSection] = useState('basic');
@@ -139,6 +132,10 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
               (s.eventTo ? formatDateForInput(s.eventTo).slice(11, 16) : ''),
             dayOfWeek: typeof s.dayOfWeek !== 'undefined' ? s.dayOfWeek : null,
           }))
+        );
+        console.log(
+          'Horarios cargados desde event.schedules:',
+          event.schedules
         );
       } else {
         setSchedules([
@@ -495,13 +492,13 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
     // Validación de capacidad y costo
     if (!formData.capacity) newErrors.capacity = 'La capacidad es requerida';
     else if (parseInt(formData.capacity) <= 0)
-      newErrors.capacity = 'La capacidad debe ser un número positivo';
-    else if (parseInt(formData.capacity) > 10000)
-      newErrors.capacity = 'La capacidad máxima es 10,000 personas';
+      newErrors.capacity = 'La capacidad debe ser mayor a 0 personas';
+    else if (parseInt(formData.capacity) > 100000)
+      newErrors.capacity = 'La capacidad máxima es 100,000 personas';
 
     if (!formData.cost) newErrors.cost = 'El costo es requerido';
-    else if (formData.cost.length > 100)
-      newErrors.cost = 'El costo no puede exceder 100 caracteres';
+    else if (parseInt(formData.cost) < 0)
+      newErrors.cost = 'El costo no puede ser negativo';
 
     if (!formData.contact.trim())
       newErrors.contact = 'El contacto es requerido';
@@ -759,8 +756,8 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
       return;
     }
 
-    // Si el evento es recurrente, no permitir cambiar las fechas principales
-    if (isRecurrent) {
+    // Si el evento tiene recurrencia (múltiples schedules), no permitir cambiar fechas
+    if (hasRecurringSchedules) {
       const origEventFrom = formatDateForInput(event.eventFrom) || '';
       const origEventTo = formatDateForInput(event.eventTo) || '';
       const origResFrom =
@@ -775,7 +772,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
       ) {
         await Swal.fire({
           title: 'No permitido',
-          text: 'Este evento es recurrente; las fechas y horarios no pueden modificarse aquí.',
+          text: 'No se permite editar fechas en eventos con recurrencia. Elimina este evento y crea uno nuevo.',
           icon: 'warning',
           confirmButtonColor: '#3085d6',
         });
@@ -842,7 +839,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
       endTime: s.endTime,
       dayOfWeek: s.dayOfWeek,
     }));
-    if (!isRecurrent) {
+    if (!hasRecurringSchedules) {
       if (schedulesToSend.length > 0) {
         data.append('schedules', JSON.stringify(schedulesToSend));
       }
@@ -867,7 +864,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
       const roomChanged = String(formData.roomId) !== String(originalRoomId);
       const schedulesChanged = newHash !== origHash;
 
-      if (!isRecurrent && (roomChanged || schedulesChanged)) {
+      if (!hasRecurringSchedules && (roomChanged || schedulesChanged)) {
         const payload = {
           roomId: formData.roomId,
           schedules: schedulesToSend,
@@ -905,6 +902,8 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
             showCancelButton: true,
             confirmButtonText: 'Sí, crear',
             cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
           });
 
           if (!r.isConfirmed) {
@@ -1325,14 +1324,15 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                       Costo <span className="text-red-500">*</span>
                     </label>
                     <input
-                      type="text"
+                      type="number"
                       name="cost"
                       value={formData.cost}
                       onChange={handleChange}
+                      min="0"
                       className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
                         errors.cost ? 'border-red-500' : 'border-gray-300'
                       }`}
-                      placeholder="Ej: $1000 o Gratis"
+                      placeholder="Ej: 1000 o 0 para gratuito"
                       maxLength={100}
                     />
                     {errors.cost && (
@@ -1474,13 +1474,13 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                   Fechas del Evento Principal
                 </h3>
                 <p className="text-xs sm:text-sm text-blue-600">
-                  {isRecurrent
+                  {hasRecurringSchedules
                     ? 'Los eventos recurrentes no permiten modificar sus fechas.'
                     : 'Actualiza las fechas y horas del evento.'}
                 </p>
               </div>
 
-              {isRecurrent && (
+              {hasRecurringSchedules && (
                 <div className="mb-4 p-4 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-800 rounded">
                   <div className="flex items-start">
                     <FaInfoCircle
@@ -1498,8 +1498,8 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                           Las fechas individuales no pueden modificarse aquí
                         </li>
                         <li>
-                          Si necesitas cambiar las fechas, deberás eliminar el
-                          evento recurrente y crear uno nuevo
+                          Si necesitas cambiar las fechas, deberás eliminar y
+                          crear otro evento
                         </li>
                         <li>
                           Puedes modificar otros datos como descripción,
@@ -1528,14 +1528,14 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                         name="eventFrom"
                         value={formData.eventFrom}
                         onChange={handleChange}
-                        disabled={isRecurrent}
+                        disabled={hasRecurringSchedules}
                         className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
                           errors.eventFrom
                             ? 'border-red-500'
                             : 'border-gray-300'
-                        } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                        } ${hasRecurringSchedules ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                         title={
-                          isRecurrent
+                          hasRecurringSchedules
                             ? 'Los eventos recurrentes no permiten modificar sus fechas'
                             : undefined
                         }
@@ -1555,12 +1555,12 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                         name="eventTo"
                         value={formData.eventTo}
                         onChange={handleChange}
-                        disabled={isRecurrent}
+                        disabled={hasRecurringSchedules}
                         className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
                           errors.eventTo ? 'border-red-500' : 'border-gray-300'
-                        } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                        } ${hasRecurringSchedules ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                         title={
-                          isRecurrent
+                          hasRecurringSchedules
                             ? 'Los eventos recurrentes no permiten modificar sus fechas'
                             : undefined
                         }
@@ -1580,7 +1580,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                   Fechas de Reserva
                 </h3>
                 <p className="text-xs sm:text-sm text-blue-600">
-                  {isRecurrent
+                  {hasRecurringSchedules
                     ? 'No disponible para eventos recurrentes'
                     : 'Actualiza el período de reserva del espacio.'}
                 </p>
@@ -1596,7 +1596,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                     </span>
                   </label>
                   <p className="text-xs text-gray-500 mb-2">
-                    {isRecurrent
+                    {hasRecurringSchedules
                       ? 'No aplica para eventos recurrentes'
                       : 'Si no se especifican, se usarán las fechas del evento.'}
                   </p>
@@ -1610,14 +1610,14 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                         name="reservationFrom"
                         value={formData.reservationFrom}
                         onChange={handleChange}
-                        disabled={isRecurrent}
+                        disabled={hasRecurringSchedules}
                         className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
                           errors.reservationFrom
                             ? 'border-red-500'
                             : 'border-gray-300'
-                        } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                        } ${hasRecurringSchedules ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                         title={
-                          isRecurrent
+                          hasRecurringSchedules
                             ? 'Los eventos recurrentes no permiten modificar fechas'
                             : undefined
                         }
@@ -1632,14 +1632,14 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                         name="reservationTo"
                         value={formData.reservationTo}
                         onChange={handleChange}
-                        disabled={isRecurrent}
+                        disabled={hasRecurringSchedules}
                         className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
                           errors.reservationTo
                             ? 'border-red-500'
                             : 'border-gray-300'
-                        } ${isRecurrent ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                        } ${hasRecurringSchedules ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                         title={
-                          isRecurrent
+                          hasRecurringSchedules
                             ? 'Los eventos recurrentes no permiten modificar fechas'
                             : undefined
                         }
@@ -1757,9 +1757,16 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                         Recurrencia:
                       </span>
                       <p className="text-gray-600 text-sm">
-                        {recurrenceConfig.active
-                          ? `${recurrenceConfig.frequency === 'weekly' ? 'Semanal' : recurrenceConfig.frequency === 'biweekly' ? 'Quincenal' : 'Mensual'} - ${recurrenceConfig.daysOfWeek.length} día(s)`
-                          : 'Sin recurrencia'}
+                        {hasRecurringSchedules
+                          ? (() => {
+                              const endDate = schedules.reduce((max, s) => {
+                                const current = new Date(s.eventTo);
+                                return current > max ? current : max;
+                              }, new Date(schedules[0].eventTo));
+
+                              return `Semanal - fecha de fin: ${endDate.toLocaleDateString()}`;
+                            })()
+                          : 'Sin recurrenciaa'}
                       </p>
                     </div>
                     <div>
@@ -1767,7 +1774,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                         Total de Horarios:
                       </span>
                       <p className="text-gray-600 font-bold text-base">
-                        {schedules.length} horario(s)
+                        {(event.schedules || []).length} horario(s)
                       </p>
                     </div>
                   </div>

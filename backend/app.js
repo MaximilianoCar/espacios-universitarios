@@ -15,7 +15,7 @@ const app = express();
 app.set('trust proxy', true);
 
 // --- CORS Config ---
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:5173')
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:8080')
   .split(',')
   .map(s => s.trim());
 const corsOptions = {

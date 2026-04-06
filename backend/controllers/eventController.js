@@ -1205,8 +1205,9 @@ exports.updateEvent = async (req, res) => {
       });
     }
 
-    // Determinar si el evento es recurrente (tiene múltiples schedules)
-    const isRecurrent = event.schedules && event.schedules.length > 1;
+    // Determinar si el evento es recurrente (más de 1 horario)
+    const isRecurrent =
+      Array.isArray(event.schedules) && event.schedules.length > 1;
 
     // Si es recurrente, no permitir cambios en las fechas principales
     if (isRecurrent) {
@@ -1216,12 +1217,65 @@ exports.updateEvent = async (req, res) => {
         'reservationFrom',
         'reservationTo',
       ];
-      const hasDateChanges = fechaFields.some(
-        field =>
-          req.body[field] &&
-          new Date(req.body[field]).getTime() !==
-            new Date(event[field]).getTime()
+
+      const pad2 = n => String(n).padStart(2, '0');
+
+      // Compara fechas en una representación homogénea YYYY-MM-DDTHH:mm
+      // para evitar diferencias por UTC vs datetime-local.
+      const normalizeForComparison = value => {
+        if (value === undefined || value === null || value === '') return null;
+
+        if (typeof value === 'string') {
+          const m = value.match(
+            /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/
+          );
+          if (m) {
+            return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}`;
+          }
+        }
+
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return null;
+
+        const parts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'America/Caracas',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }).formatToParts(d);
+
+        const map = {};
+        for (const p of parts) {
+          if (p.type !== 'literal') map[p.type] = p.value;
+        }
+
+        return `${map.year}-${pad2(map.month)}-${pad2(map.day)}T${pad2(
+          map.hour
+        )}:${pad2(map.minute)}`;
+      };
+
+      const hasInvalidPayloadDate = fechaFields.some(
+        field => normalizeForComparison(req.body[field]) === null
       );
+
+      if (hasInvalidPayloadDate) {
+        await transaction.rollback();
+        return res.status(400).json({
+          error:
+            'Formato de fecha inválido en el payload para un evento recurrente.',
+        });
+      }
+
+      // Regla: el payload siempre trae fechas; si alguna difiere de la almacenada,
+      // se considera intento de modificación y se bloquea.
+      const hasDateChanges = fechaFields.some(field => {
+        const incoming = normalizeForComparison(req.body[field]);
+        const current = normalizeForComparison(event[field]);
+        return incoming !== current;
+      });
 
       if (hasDateChanges) {
         await transaction.rollback();
@@ -1266,6 +1320,9 @@ exports.updateEvent = async (req, res) => {
     // Actualizar el evento principal (DENTRO de la transacción)
     await event.update(req.body, { transaction });
 
+    // IDs de Google Calendar a eliminar cuando se reemplacen/remuevan schedules
+    const scheduleGoogleIdsToDelete = [];
+
     // Procesar schedules SOLO si no es un evento recurrente
     let schedulesInput = req.body.schedules;
     if (typeof schedulesInput === 'string') {
@@ -1290,7 +1347,8 @@ exports.updateEvent = async (req, res) => {
             event,
             schedulesInput,
             parseDateOrNullUpdate,
-            transaction
+            transaction,
+            scheduleGoogleIdsToDelete
           );
         } else if (Array.isArray(schedulesInput)) {
           // MODO: reemplazar todos los schedules
@@ -1298,7 +1356,8 @@ exports.updateEvent = async (req, res) => {
             event,
             schedulesInput,
             parseDateOrNullUpdate,
-            transaction
+            transaction,
+            scheduleGoogleIdsToDelete
           );
         }
       } catch (scheduleError) {
@@ -1313,6 +1372,47 @@ exports.updateEvent = async (req, res) => {
       console.log(
         `Evento recurrente detectado (ID: ${event.id}): ignorando actualización de schedules`
       );
+    } else if (!schedulesInput && !isRecurrent) {
+      // Fallback: cuando el cliente no envía schedules (p.ej. EventDetailsPage),
+      // mantener sincronizado el schedule único con las fechas del evento principal.
+      const existingSchedules = await EventSchedule.findAll({
+        where: { eventId: event.id },
+        order: [['eventFrom', 'ASC']],
+        transaction,
+      });
+
+      if (existingSchedules.length === 1) {
+        const onlySchedule = existingSchedules[0];
+        const eventFromDate = event.eventFrom
+          ? new Date(event.eventFrom)
+          : null;
+        const eventToDate = event.eventTo ? new Date(event.eventTo) : null;
+
+        const nextScheduleValues = {
+          eventFrom: eventFromDate || onlySchedule.eventFrom,
+          eventTo: eventToDate || onlySchedule.eventTo,
+          reservationFrom:
+            event.reservationFrom ||
+            eventFromDate ||
+            onlySchedule.reservationFrom,
+          reservationTo:
+            event.reservationTo || eventToDate || onlySchedule.reservationTo,
+          dateOnly: eventFromDate
+            ? eventFromDate.toISOString().split('T')[0]
+            : onlySchedule.dateOnly,
+          startTime: eventFromDate
+            ? eventFromDate.toISOString().split('T')[1].slice(0, 8)
+            : onlySchedule.startTime,
+          endTime: eventToDate
+            ? eventToDate.toISOString().split('T')[1].slice(0, 8)
+            : onlySchedule.endTime,
+          dayOfWeek: eventFromDate
+            ? eventFromDate.getUTCDay()
+            : onlySchedule.dayOfWeek,
+        };
+
+        await onlySchedule.update(nextScheduleValues, { transaction });
+      }
     }
 
     // Enviar notificaciones si cambió el estado (esto no es transaccional)
@@ -1331,7 +1431,11 @@ exports.updateEvent = async (req, res) => {
     // Actualizar/crear/eliminar evento en Google Calendar en segundo plano
     (async () => {
       try {
-        await updateGoogleCalendarForEvent(event, previousStatus);
+        await updateGoogleCalendarForEvent(
+          event,
+          previousStatus,
+          scheduleGoogleIdsToDelete
+        );
       } catch (err) {
         console.error('Background Google Calendar update failed:', err);
       }
@@ -1363,7 +1467,8 @@ async function processSchedulesPartialMode(
   event,
   schedulesInput,
   parseDate,
-  transaction
+  transaction,
+  scheduleGoogleIdsToDelete = []
 ) {
   const keep = Array.isArray(schedulesInput.keep) ? schedulesInput.keep : [];
   const removeIds = Array.isArray(schedulesInput.removeIds)
@@ -1382,10 +1487,7 @@ async function processSchedulesPartialMode(
     // Recolectar googleEventId para borrado posterior (fuera de transacción)
     for (const os of schedulesToRemove) {
       if (os.googleEventId) {
-        // Guardar en memoria para borrar después
-        if (!global.scheduleGoogleIdsToDelete)
-          global.scheduleGoogleIdsToDelete = [];
-        global.scheduleGoogleIdsToDelete.push(os.googleEventId);
+        scheduleGoogleIdsToDelete.push(os.googleEventId);
       }
     }
 
@@ -1481,7 +1583,8 @@ async function processSchedulesReplaceMode(
   event,
   schedulesInput,
   parseDate,
-  transaction
+  transaction,
+  scheduleGoogleIdsToDelete = []
 ) {
   // Eliminar schedules antiguos y sus googleEventIds
   const oldSchedules = await EventSchedule.findAll({
@@ -1491,9 +1594,7 @@ async function processSchedulesReplaceMode(
 
   for (const os of oldSchedules) {
     if (os.googleEventId) {
-      if (!global.scheduleGoogleIdsToDelete)
-        global.scheduleGoogleIdsToDelete = [];
-      global.scheduleGoogleIdsToDelete.push(os.googleEventId);
+      scheduleGoogleIdsToDelete.push(os.googleEventId);
     }
   }
 
@@ -1637,9 +1738,29 @@ async function sendStatusNotifications(req, event, previousStatus, eventId) {
   }
 }
 
-async function updateGoogleCalendarForEvent(event, previousStatus) {
+async function updateGoogleCalendarForEvent(
+  event,
+  previousStatus,
+  scheduleGoogleIdsToDelete = []
+) {
   const roomName = await getRoomName(event.roomId);
   const descriptionWithRoom = `${event.description || ''}\n\nEspacio: ${roomName}`;
+
+  // Si en la actualización se reemplazaron/removieron schedules, eliminar sus eventos viejos en GCal.
+  if (
+    Array.isArray(scheduleGoogleIdsToDelete) &&
+    scheduleGoogleIdsToDelete.length > 0
+  ) {
+    const uniqueIds = [...new Set(scheduleGoogleIdsToDelete.filter(Boolean))];
+    for (const gid of uniqueIds) {
+      try {
+        await googleCalendarService.deleteEvent(gid);
+        console.log(`Google Calendar schedule event deleted (stale): ${gid}`);
+      } catch (err) {
+        console.error('Error deleting stale google schedule event:', err);
+      }
+    }
+  }
 
   // Caso 1: pasó de no-aprobado -> aprobado => crear en Google
   if (
@@ -1876,9 +1997,22 @@ exports.deleteEvent = async (req, res) => {
         .json({ error: 'Error al obtener los horarios del evento.' });
     }
 
+    // Eliminar recurrencias asociadas de forma explícita para garantizar
+    // el borrado incluso si la FK no tiene CASCADE en una BD existente.
+    await EventSchedule.destroy({ where: { eventId: event.id }, transaction });
+
     // Eliminar invitaciones asociadas
     await Invitation.destroy({ where: { eventId: event.id }, transaction });
     const googleIdToDelete = event.googleEventId;
+
+    // Guardar rutas de archivos para limpieza posterior (fuera de transacción)
+    const filePathsToDelete = {
+      imagePath: event.imagePath,
+      bannerPath: event.bannerPath,
+      programPath: event.programPath,
+      agreementPath: event.agreementPath,
+    };
+
     await event.destroy({ transaction });
     await transaction.commit();
     res.status(204).json();
@@ -1901,6 +2035,14 @@ exports.deleteEvent = async (req, res) => {
             console.error('Error deleting google schedule event:', err);
           }
         }
+
+        // Limpiar archivos asociados en uploads (no bloqueante)
+        await Promise.allSettled([
+          safeUnlink(filePathsToDelete.imagePath, './uploads/events/images'),
+          safeUnlink(filePathsToDelete.bannerPath, './uploads/events/banners'),
+          safeUnlink(filePathsToDelete.programPath, './uploads/events'),
+          safeUnlink(filePathsToDelete.agreementPath, './uploads/events'),
+        ]);
       } catch (err) {
         console.error('Background Google Calendar delete failed:', err);
       }

@@ -107,6 +107,10 @@ const formatPeriodicity = periodicity => {
   return labels[normalized] || periodicity;
 };
 
+const isNoEventsForUserError = error =>
+  error?.response?.data?.error ===
+  'No se encontraron eventos para este usuario.';
+
 const UserReservationsPage = () => {
   const [events, setEvents] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -140,6 +144,13 @@ const UserReservationsPage = () => {
   // Estado para detectar si es móvil
   const [isMobile, setIsMobile] = useState(false);
 
+  const clearEventsWithoutError = () => {
+    setEvents([]);
+    setTotalEvents(0);
+    setTotalPages(1);
+    setError('');
+  };
+
   // Función para recargar eventos manteniendo la paginación actual
   const refreshEvents = async () => {
     try {
@@ -157,8 +168,12 @@ const UserReservationsPage = () => {
       // detectar y preguntar por calificaciones (una vez por sesión)
       checkUnratedAndPrompt(response.data.events || []);
     } catch (error) {
-      console.error('Error refreshing events:', error);
-      setError('Error al obtener las reservas.');
+      //console.error('Error refreshing events:', error);
+      if (isNoEventsForUserError(error)) {
+        clearEventsWithoutError();
+      } else {
+        setError('Error al obtener las reservas.');
+      }
     }
   };
 
@@ -213,8 +228,12 @@ const UserReservationsPage = () => {
       setTotalPages(response.data.totalPages || 1);
       setError('');
     } catch (error) {
-      console.error('Error searching events:', error);
-      setError('Error al buscar eventos.');
+      //console.error('Error searching events:', error);
+      if (isNoEventsForUserError(error)) {
+        clearEventsWithoutError();
+      } else {
+        setError('Error al buscar eventos.');
+      }
     } finally {
       setLoading(false);
     }
@@ -241,7 +260,11 @@ const UserReservationsPage = () => {
         checkUnratedAndPrompt(response.data.events || []);
       } catch (error) {
         console.error('Error fetching reservations:', error);
-        setError('Error al obtener las reservas.');
+        if (isNoEventsForUserError(error)) {
+          clearEventsWithoutError();
+        } else {
+          setError('Error al obtener las reservas.');
+        }
       } finally {
         setLoading(false);
       }

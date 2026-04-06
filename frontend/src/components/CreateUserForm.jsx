@@ -45,33 +45,41 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
   // Roles que SÍ pueden ser externos (además de externalvisitor que ya es externo por defecto)
   const ROLES_PUEDEN_SER_EXTERNOS = ['requester', 'pending'];
 
-  // Determinar si el rol actual permite ser externo
-  const puedeSerExterno = () => {
-    if (formData.role === 'externalvisitor') return true;
-    if (formData.role === 'visitor') return false;
-    return ROLES_PUEDEN_SER_EXTERNOS.includes(formData.role);
+  // Determinar si un rol permite ser externo
+  const roleCanBeExternal = role => {
+    if (role === 'externalvisitor') return true;
+    if (role === 'visitor') return false;
+    return ROLES_PUEDEN_SER_EXTERNOS.includes(role);
   };
 
-  // Determinar si el rol actual NO permite ser externo
-  const noPuedeSerExterno = () => {
-    return ROLES_NO_EXTERNOS.includes(formData.role);
+  // Determinar si un rol NO permite ser externo
+  const roleCannotBeExternal = role => {
+    return ROLES_NO_EXTERNOS.includes(role) || role === 'visitor';
+  };
+
+  // El checkbox solo debe poder togglearse manualmente en requester y pending.
+  const canToggleExternalCheckbox = role => {
+    return role === 'requester' || role === 'pending';
   };
 
   const handleChange = e => {
     const { name, value, type, checked } = e.target;
 
+    const normalizedValue =
+      name === 'ci' && type !== 'checkbox' ? value.replace(/\D/g, '') : value;
+
     setFormData(prev => {
       const newData = {
         ...prev,
-        [name]: type === 'checkbox' ? checked : value,
+        [name]: type === 'checkbox' ? checked : normalizedValue,
       };
 
       // Auto-ajustar isExternal según el rol seleccionado
       if (name === 'role') {
         if (value === 'externalvisitor') {
           newData.isExternal = true;
-          newData.isCompanyRepresentative = false;
-          setShowCompanyFields(false);
+          newData.isCompanyRepresentative = true;
+          setShowCompanyFields(true);
         } else if (value === 'visitor') {
           newData.isExternal = false;
           newData.isCompanyRepresentative = false;
@@ -84,20 +92,37 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
         } else {
           // Para otros roles (requester, pending), mantener el valor actual de isExternal
           // pero resetear campos de empresa si no es externo
-          if (!newData.isExternal) {
+          if (newData.isExternal) {
+            newData.isCompanyRepresentative = true;
+            setShowCompanyFields(true);
+          } else {
             newData.isCompanyRepresentative = false;
             setShowCompanyFields(false);
           }
         }
       }
 
+      if (name === 'isExternal') {
+        if (checked) {
+          newData.isCompanyRepresentative = true;
+          setShowCompanyFields(true);
+        } else {
+          newData.isCompanyRepresentative = false;
+          newData.companyName = '';
+          newData.companyRif = '';
+          setShowCompanyFields(false);
+        }
+      }
+
       // Mostrar/ocultar campos de empresa
       if (name === 'isCompanyRepresentative') {
-        setShowCompanyFields(checked);
+        if (!newData.isExternal) {
+          setShowCompanyFields(checked);
+        }
       }
 
       // Si se marca isExternal para roles que no lo permiten, mostrar error
-      if (name === 'isExternal' && checked && noPuedeSerExterno()) {
+      if (name === 'isExternal' && checked && roleCannotBeExternal(prev.role)) {
         // No permitir marcar externo para estos roles
         Swal.fire({
           title: 'Error',
@@ -124,8 +149,8 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
       // Auto-ajustar según el rol
       if (value === 'externalvisitor') {
         newData.isExternal = true;
-        newData.isCompanyRepresentative = false;
-        setShowCompanyFields(false);
+        newData.isCompanyRepresentative = true;
+        setShowCompanyFields(true);
       } else if (value === 'visitor') {
         newData.isExternal = false;
         newData.isCompanyRepresentative = false;
@@ -138,10 +163,13 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
       } else {
         // Para solicitante y pendiente, mantener isExternal si ya estaba marcado
         // pero solo si es compatible
-        if (!puedeSerExterno() && newData.isExternal) {
+        if (!roleCanBeExternal(value) && newData.isExternal) {
           newData.isExternal = false;
           newData.isCompanyRepresentative = false;
           setShowCompanyFields(false);
+        } else if (newData.isExternal) {
+          newData.isCompanyRepresentative = true;
+          setShowCompanyFields(true);
         }
       }
 
@@ -154,8 +182,19 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
     setIsSubmitting(true);
     setError('');
 
+    if (formData.ci && !/^\d+$/.test(formData.ci)) {
+      Swal.fire({
+        title: 'Error',
+        text: 'La cédula debe contener solo números.',
+        icon: 'error',
+        confirmButtonColor: '#d33',
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
     // Validación: Coordinador y Admin no pueden ser externos
-    if (noPuedeSerExterno() && formData.isExternal) {
+    if (roleCannotBeExternal(formData.role) && formData.isExternal) {
       Swal.fire({
         title: 'Error',
         text: 'Los roles de Coordinador y Administrador no pueden ser usuarios externos.',
@@ -166,12 +205,12 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
       return;
     }
 
-    // Validación: Campos de empresa para externos que son representantes
-    if (formData.isExternal && formData.isCompanyRepresentative) {
+    // Validación: Campos de empresa obligatorios para usuarios externos
+    if (formData.isExternal) {
       if (!formData.companyName.trim() || !formData.companyRif.trim()) {
         Swal.fire({
           title: 'Error',
-          text: 'Para usuarios que representan empresa, debe completar nombre y RIF de la empresa.',
+          text: 'Para usuarios externos, debe completar nombre y RIF de la empresa.',
           icon: 'error',
           confirmButtonColor: '#d33',
         });
@@ -183,18 +222,15 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
     // Preparar datos para enviar
     const dataToSend = {
       ...formData,
-      companyName:
-        formData.isExternal && formData.isCompanyRepresentative
-          ? formData.companyName.trim()
-          : null,
-      companyRif:
-        formData.isExternal && formData.isCompanyRepresentative
-          ? formData.companyRif.trim()
-          : null,
+      isCompanyRepresentative: formData.isExternal
+        ? true
+        : formData.isCompanyRepresentative,
+      companyName: formData.isExternal ? formData.companyName.trim() : null,
+      companyRif: formData.isExternal ? formData.companyRif.trim() : null,
     };
 
-    // Limpiar campos de empresa si no es externo o no es representante
-    if (!formData.isExternal || !formData.isCompanyRepresentative) {
+    // Limpiar campos de empresa si no es externo
+    if (!formData.isExternal) {
       dataToSend.companyName = null;
       dataToSend.companyRif = null;
     }
@@ -384,6 +420,8 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
               name="ci"
               value={formData.ci}
               onChange={handleChange}
+              inputMode="numeric"
+              pattern="[0-9]*"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="Opcional"
             />
@@ -431,9 +469,7 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
                 onChange={handleChange}
                 disabled={
                   formData.role === 'externalvisitor' ||
-                  formData.role === 'visitor' ||
-                  noPuedeSerExterno() ||
-                  !puedeSerExterno()
+                  !canToggleExternalCheckbox(formData.role)
                 }
                 className="h-4 w-4 text-blue-600 border-gray-300 rounded mr-2"
               />
@@ -444,13 +480,15 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
             <FaInfoCircle
               className="ml-2 text-gray-400"
               title={
-                noPuedeSerExterno()
+                roleCannotBeExternal(formData.role)
                   ? 'Los coordinadores y administradores no pueden ser externos'
                   : formData.role === 'externalvisitor'
                     ? 'Automáticamente externo por ser visitante externo'
                     : formData.role === 'visitor'
                       ? 'Solo para usuarios internos'
-                      : 'Puede marcar si el usuario es externo a la institución'
+                      : canToggleExternalCheckbox(formData.role)
+                        ? 'Puede marcar o desmarcar si el usuario es externo a la institución'
+                        : 'No disponible para este rol'
               }
             />
           </div>
@@ -470,8 +508,9 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
                 <input
                   type="checkbox"
                   name="isCompanyRepresentative"
-                  checked={formData.isCompanyRepresentative}
-                  onChange={handleChange}
+                  checked={true}
+                  readOnly
+                  disabled
                   className="h-4 w-4 text-green-600 border-gray-300 rounded mr-2"
                 />
                 <span className="text-gray-700 font-medium">
@@ -479,13 +518,13 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
                 </span>
               </label>
               <p className="text-xs text-gray-500 mt-1 ml-6">
-                Marque si el usuario viene en representación de una empresa u
-                organización externa
+                Para usuarios externos, este campo se marca automáticamente y
+                debe completar los datos de la empresa
               </p>
             </div>
 
             {/* Campos de empresa si es representante */}
-            {formData.isCompanyRepresentative && (
+            {formData.isExternal && (
               <div className="mt-4 space-y-3">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -497,7 +536,7 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
                       name="companyName"
                       value={formData.companyName}
                       onChange={handleChange}
-                      required={formData.isCompanyRepresentative}
+                      required={formData.isExternal}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                       placeholder="Ej: Mi Empresa S.A."
                     />
@@ -512,7 +551,7 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
                       name="companyRif"
                       value={formData.companyRif}
                       onChange={handleChange}
-                      required={formData.isCompanyRepresentative}
+                      required={formData.isExternal}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                       placeholder="Ej: J-12345678-9"
                     />
@@ -540,8 +579,9 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
                 <input
                   type="checkbox"
                   name="isCompanyRepresentative"
-                  checked={formData.isCompanyRepresentative}
-                  onChange={handleChange}
+                  checked={true}
+                  readOnly
+                  disabled
                   className="h-4 w-4 text-green-600 border-gray-300 rounded mr-2"
                 />
                 <span className="text-gray-700 font-medium">
@@ -549,13 +589,13 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
                 </span>
               </label>
               <p className="text-xs text-gray-500 mt-1 ml-6">
-                Marque si el usuario viene en representación de una empresa u
-                organización externa
+                Para usuarios externos, este campo se marca automáticamente y
+                debe completar los datos de la empresa
               </p>
             </div>
 
             {/* Campos de empresa si es representante */}
-            {formData.isCompanyRepresentative && (
+            {formData.isExternal && (
               <div className="mt-4 space-y-3">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -567,7 +607,7 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
                       name="companyName"
                       value={formData.companyName}
                       onChange={handleChange}
-                      required={formData.isCompanyRepresentative}
+                      required={formData.isExternal}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                       placeholder="Ej: Mi Empresa S.A."
                     />
@@ -582,7 +622,7 @@ const CreateUserForm = ({ onUserCreated, onCancel }) => {
                       name="companyRif"
                       value={formData.companyRif}
                       onChange={handleChange}
-                      required={formData.isCompanyRepresentative}
+                      required={formData.isExternal}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
                       placeholder="Ej: J-12345678-9"
                     />
