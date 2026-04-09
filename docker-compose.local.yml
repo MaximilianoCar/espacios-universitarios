@@ -1,0 +1,112 @@
+services:
+  espaciosuniversitarios-traefik:
+    image: traefik:v3.3
+    container_name: reservas-traefik-local
+    restart: unless-stopped
+    command:
+      - '--api.dashboard=true'
+      - '--api.insecure=true'
+      - '--providers.file.filename=/etc/traefik/dynamic.yml'
+      - '--providers.file.watch=true'
+      - '--entrypoints.web.address=:80'
+      - '--log.level=INFO'
+    ports:
+      - '80:80'
+      - '8080:8080'
+    volumes:
+      - './traefik/local.dynamic.yml:/etc/traefik/dynamic.yml:ro'
+    networks:
+      - web
+
+  espaciosuniversitarios-db:
+    image: postgres:18
+    container_name: reservas-postgres-local
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      TZ: ${TZ:-America/Caracas}
+      PGTZ: ${TZ:-America/Caracas}
+    ports:
+      - '${DB_PORT:-5432}:5432'
+    volumes:
+      - postgres-data-local:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER} -d ${DB_NAME}']
+      interval: 5s
+      timeout: 5s
+      retries: 8
+    networks:
+      - web
+
+  espaciosuniversitarios-node-app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: reservas-backend-local
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+      DB_HOST: espaciosuniversitarios-db
+      DB_PORT: 5432
+      TZ: ${TZ:-America/Caracas}
+      NODE_ENV: production
+      ALLOWED_ORIGINS: http://${LOCAL_HOST:-localhost},http://${LOCAL_HOST:-localhost}:80,http://localhost,http://localhost:80,http://127.0.0.1,http://127.0.0.1:80
+    volumes:
+      - uploads-data-local:/app/uploads
+    depends_on:
+      espaciosuniversitarios-db:
+        condition: service_healthy
+    networks:
+      - web
+
+  espaciosuniversitarios-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+        VITE_MEDIA_BASE_URL: /
+    container_name: reservas-frontend-local
+    restart: unless-stopped
+    depends_on:
+      - espaciosuniversitarios-node-app
+    networks:
+      - web
+
+  espaciosuniversitarios-db-backup:
+    image: postgres:18-alpine
+    container_name: reservas-postgres-backup-local
+    restart: unless-stopped
+    depends_on:
+      espaciosuniversitarios-db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DB_HOST: espaciosuniversitarios-db
+      DB_PORT: 5432
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+      TZ: ${TZ:-America/Caracas}
+    volumes:
+      - db-backups-local:/backups
+      - ./scripts/backup/backup.sh:/backup/backup.sh:ro
+    command: sh /backup/backup.sh
+    networks:
+      - web
+
+networks:
+  web:
+    driver: bridge
+
+volumes:
+  postgres-data-local:
+  uploads-data-local:
+  db-backups-local:

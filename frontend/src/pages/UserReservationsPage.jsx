@@ -135,6 +135,10 @@ const UserReservationsPage = () => {
   const [selectedEventDates, setSelectedEventDates] = useState({});
   const [showDescriptionModal, setShowDescriptionModal] = useState(false);
   const [selectedDescription, setSelectedDescription] = useState('');
+  const [selectedSpecialRequirements, setSelectedSpecialRequirements] =
+    useState('');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
+  const [selectedCapacity, setSelectedCapacity] = useState(null);
 
   // Estados para el modal de imagen
   const [selectedImage, setSelectedImage] = useState(null);
@@ -710,14 +714,25 @@ const UserReservationsPage = () => {
     setSelectedEventContact('');
   };
 
-  const handleShowDescription = description => {
+  const handleShowDescription = (
+    description,
+    specialRequirements,
+    capacity,
+    paymentMethod
+  ) => {
     setSelectedDescription(description);
+    setSelectedSpecialRequirements(specialRequirements);
+    setSelectedCapacity(capacity);
+    setSelectedPaymentMethod(paymentMethod);
     setShowDescriptionModal(true);
   };
 
   const handleCloseDescriptionModal = () => {
     setShowDescriptionModal(false);
     setSelectedDescription('');
+    setSelectedSpecialRequirements('');
+    setSelectedPaymentMethod('');
+    setSelectedCapacity(null);
   };
 
   // Manejador de clic en la imagen para mostrar el modal
@@ -1146,7 +1161,14 @@ const UserReservationsPage = () => {
                     {/* Descripción */}
                     <td className="py-2 px-4 border-b text-center">
                       <button
-                        onClick={() => handleShowDescription(event.description)}
+                        onClick={() =>
+                          handleShowDescription(
+                            event.description,
+                            event.specialRequirements,
+                            event.capacity,
+                            event.paymentMethod
+                          )
+                        }
                         className="text-blue-600 hover:text-blue-800 transition-colors"
                         title="Ver descripción"
                       >
@@ -1368,7 +1390,14 @@ const UserReservationsPage = () => {
                 {/* Botones de acción principales */}
                 <div className="grid grid-cols-3 gap-2 mb-3">
                   <button
-                    onClick={() => handleShowDescription(event.description)}
+                    onClick={() =>
+                      handleShowDescription(
+                        event.description,
+                        event.specialRequirements,
+                        event.capacity,
+                        event.paymentMethod
+                      )
+                    }
                     className="flex flex-col items-center justify-center bg-blue-500 hover:bg-blue-600 text-white py-2 px-1 rounded text-xs transition-colors"
                   >
                     <FaInfoCircle className="mb-1" size={14} />
@@ -1445,10 +1474,16 @@ const UserReservationsPage = () => {
             </h2>
           </div>
           <div className="p-5">
-            <div className="bg-blue-50 rounded-lg p-4 mb-4">
-              <p className="text-sm text-gray-700 leading-relaxed">
-                {selectedEventContact}
-              </p>
+            <div className="bg-blue-50 rounded-lg p-4 mb-4 space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-blue-800 mb-2">
+                  Contacto adicional
+                </h3>
+                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                  {selectedEventContact ||
+                    'No hay información de contacto adicional.'}
+                </p>
+              </div>
             </div>
             <button
               onClick={handleCloseContactModal}
@@ -1618,14 +1653,82 @@ const UserReservationsPage = () => {
         <RenderModal onClose={handleCloseDescriptionModal}>
           <div className="p-5 border-b border-gray-200">
             <h2 className="text-lg font-bold text-gray-800">
-              Descripción del Evento
+              Información del Evento
             </h2>
           </div>
           <div className="flex-1 p-5 overflow-y-auto">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
-                {selectedDescription || 'No hay descripción disponible.'}
-              </p>
+            <div className="bg-blue-50 rounded-lg p-4 space-y-4">
+              <div className="bg-white rounded-md p-3 border border-blue-100">
+                <h3 className="text-sm font-semibold text-blue-800 mb-2 flex items-center">
+                  <FaUsers className="mr-2 text-green-500" size={14} />
+                  Capacidad del Evento
+                </h3>
+                <div className="text-center py-2">
+                  <span className="text-2xl font-bold text-green-600">
+                    {selectedCapacity || 'N/A'}
+                  </span>
+                  <p className="text-xs text-gray-500 mt-1">personas</p>
+                </div>
+              </div>
+
+              <div className="border-t border-blue-200 pt-4">
+                <h3 className="text-sm font-semibold text-blue-800 mb-2">
+                  Descripción del Evento
+                </h3>
+                <div className="bg-white rounded-md p-3 border border-blue-100">
+                  {selectedDescription ? (
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                      {selectedDescription}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic text-center py-2">
+                      No hay descripción disponible
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-md p-3 border border-blue-100">
+                <h3 className="text-sm font-semibold text-blue-800 mb-2 flex items-center">
+                  <FaDollarSign className="mr-2 text-green-500" size={14} />
+                  Método de Pago
+                </h3>
+                <div className="text-center py-1">
+                  <span className="text-xl text-green-600">
+                    {selectedPaymentMethod === 'transfer' && 'Transferencia'}
+                    {selectedPaymentMethod === 'materials' &&
+                      'Materiales de apoyo'}
+                    {selectedPaymentMethod === 'cash' && 'Efectivo'}
+                    {selectedPaymentMethod === 'exoneration' && 'Exoneración'}
+                    {!selectedPaymentMethod && 'No especificado'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="border-t border-blue-200 pt-4">
+                <h3 className="text-sm font-semibold text-blue-800 mb-2">
+                  Requerimientos Especiales
+                </h3>
+                <div className="bg-white rounded-md p-3 border border-blue-100">
+                  {selectedSpecialRequirements ? (
+                    <div className="space-y-2">
+                      <div className="flex items-start">
+                        <FaInfoCircle
+                          className="text-green-500 mt-1 mr-2 flex-shrink-0"
+                          size={14}
+                        />
+                        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                          {selectedSpecialRequirements}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic text-center py-2">
+                      No hay requerimientos especiales
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
           <div className="p-5 border-t border-gray-200">

@@ -926,7 +926,7 @@ const AddEventForm = ({ onEventCreated }) => {
     }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return { valid: Object.keys(newErrors).length === 0, errors: newErrors };
   };
 
   // Validación por sección (para navegación)
@@ -1027,15 +1027,67 @@ const AddEventForm = ({ onEventCreated }) => {
     setIsSubmitting(true);
     setError('');
 
-    if (!validate()) {
-      const firstErrorField = Object.keys(errors)[0];
-      const errorElement = document.querySelector(
-        `[name="${firstErrorField}"]`
-      );
-      if (errorElement) {
-        errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        errorElement.focus();
+    const fullValidation = validate();
+    if (!fullValidation.valid) {
+      const firstErrorField = Object.keys(fullValidation.errors || {})[0];
+
+      const fieldToSection = field => {
+        const space = ['roomId'];
+        const basic = [
+          'name',
+          'description',
+          'capacity',
+          'cost',
+          'contact',
+          'paymentMethod',
+        ];
+        const dates = [
+          'eventFrom',
+          'eventTo',
+          'reservationFrom',
+          'reservationTo',
+          'schedules',
+        ];
+        const recurrence = ['recurrenceDays', 'recurrenceUntil'];
+        const image = ['imageFile'];
+
+        if (space.includes(field)) return 'space';
+        if (basic.includes(field)) return 'basic';
+        if (dates.includes(field)) return 'dates';
+        if (recurrence.includes(field)) return 'recurrence';
+        if (image.includes(field)) return 'image';
+        return 'space';
+      };
+
+      const targetSection = fieldToSection(firstErrorField);
+      setActiveSection(targetSection);
+      setShowMobileMenu(false);
+
+      Swal.fire({
+        title: 'Corrige los errores',
+        text: 'Hay errores en el formulario. Revisa los campos marcados en rojo.',
+        icon: 'error',
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 3000,
+      });
+
+      if (firstErrorField) {
+        setTimeout(() => {
+          const errorElement = document.querySelector(
+            `[name="${firstErrorField}"]`
+          );
+          if (errorElement) {
+            errorElement.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center',
+            });
+            errorElement.focus();
+          }
+        }, 300);
       }
+
       setIsSubmitting(false);
       return;
     }
@@ -1112,14 +1164,26 @@ const AddEventForm = ({ onEventCreated }) => {
         data.append('reservationFrom', formData.eventFrom);
         return;
       }
-      if (
-        key === 'reservationTo' &&
-        !formData.reservationTo &&
-        formData.eventTo
-      ) {
-        data.append('reservationTo', formData.eventTo);
-        return;
+
+      if (key === 'reservationTo' && !formData.reservationTo) {
+        // Preferir la fecha de recurrencia si está definida (repeatUntil),
+        // combinada con la hora de eventTo para obtener un datetime.
+        if (recurrenceConfig.repeatUntil) {
+          const timePart = formData.eventTo
+            ? formData.eventTo.split('T')[1]
+            : '23:59';
+          data.append(
+            'reservationTo',
+            `${recurrenceConfig.repeatUntil}T${timePart}`
+          );
+          return;
+        }
+        if (formData.eventTo) {
+          data.append('reservationTo', formData.eventTo);
+          return;
+        }
       }
+
       if (formData[key]) {
         data.append(key, formData[key]);
       }

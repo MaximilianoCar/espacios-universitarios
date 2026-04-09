@@ -1,0 +1,132 @@
+services:
+  espaciosuniversitarios-traefik:
+    image: traefik:v3.3
+    container_name: reservas-traefik
+    restart: unless-stopped
+    command:
+      - '--api.dashboard=true'
+      - '--providers.docker=true'
+      - '--providers.docker.exposedbydefault=false'
+      - '--entrypoints.web.address=:80'
+      - '--entrypoints.websecure.address=:443'
+      - '--entrypoints.web.http.redirections.entrypoint.to=websecure'
+      - '--entrypoints.web.http.redirections.entrypoint.scheme=https'
+      - '--certificatesresolvers.letsencrypt.acme.tlschallenge=true'
+      - '--certificatesresolvers.letsencrypt.acme.email=${TRAEFIK_ACME_EMAIL}'
+      - '--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json'
+      - '--log.level=INFO'
+    ports:
+      - '80:80'
+      - '443:443'
+      - '8080:8080'
+    volumes:
+      - '/var/run/docker.sock:/var/run/docker.sock:ro'
+      - 'traefik-certs:/letsencrypt'
+    networks:
+      - web
+
+  espaciosuniversitarios-db:
+    image: postgres:18
+    container_name: reservas-postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      TZ: ${TZ:-America/Caracas}
+      PGTZ: ${TZ:-America/Caracas}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER} -d ${DB_NAME}']
+      interval: 5s
+      timeout: 5s
+      retries: 8
+    networks:
+      - web
+
+  espaciosuniversitarios-node-app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: reservas-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+      DB_HOST: espaciosuniversitarios-db
+      DB_PORT: 5432
+      TZ: ${TZ:-America/Caracas}
+      NODE_ENV: production
+      ALLOWED_ORIGINS: https://${APP_DOMAIN}
+    volumes:
+      - uploads-data:/app/uploads
+    depends_on:
+      espaciosuniversitarios-db:
+        condition: service_healthy
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.reservas-api.rule=Host(`${APP_DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/uploads`))'
+      - 'traefik.http.routers.reservas-api.entrypoints=websecure'
+      - 'traefik.http.routers.reservas-api.tls=true'
+      - 'traefik.http.routers.reservas-api.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.reservas-api.loadbalancer.server.port=3000'
+    networks:
+      - web
+
+  espaciosuniversitarios-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+        VITE_MEDIA_BASE_URL: /
+    container_name: reservas-frontend
+    restart: unless-stopped
+    depends_on:
+      - espaciosuniversitarios-node-app
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.reservas-web.rule=Host(`${APP_DOMAIN}`)'
+      - 'traefik.http.routers.reservas-web.entrypoints=websecure'
+      - 'traefik.http.routers.reservas-web.tls=true'
+      - 'traefik.http.routers.reservas-web.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.reservas-web.loadbalancer.server.port=80'
+    networks:
+      - web
+
+  espaciosuniversitarios-db-backup:
+    image: postgres:18-alpine
+    container_name: reservas-postgres-backup
+    restart: unless-stopped
+    depends_on:
+      espaciosuniversitarios-db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DB_HOST: espaciosuniversitarios-db
+      DB_PORT: 5432
+      BACKUP_DIR: /backups
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+      TZ: ${TZ:-America/Caracas}
+    volumes:
+      - db-backups:/backups
+      - ./scripts/backup/backup.sh:/backup/backup.sh:ro
+    command: sh /backup/backup.sh
+    networks:
+      - web
+
+networks:
+  web:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  uploads-data:
+  db-backups:
+  traefik-certs:
