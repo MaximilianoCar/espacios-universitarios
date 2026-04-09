@@ -27,7 +27,7 @@ const PreviewEventPage = () => {
       .get(`/events/${id}`)
       .then(resp => {
         setEvent(resp.data);
-        console.log('trayendo evento', resp.data);
+        //console.log('trayendo evento', resp.data);
         setLoading(false);
         // si no es owner y tampoco admin/coordinator redirigir al home
         const isOwner = resp.data?.isOwner;

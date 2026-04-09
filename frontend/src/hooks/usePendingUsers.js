@@ -19,10 +19,10 @@ export const usePendingUsers = ({ enabled = true } = {}) => {
       setError(null);
 
       try {
-        console.log('Solicitando conteo de usuarios pendientes...');
+        //console.log('Solicitando conteo de usuarios pendientes...');
         const response = await axiosInstance.get('/users/pending-count');
 
-        console.log('Conteo de usuarios pendientes recibido:', response.data);
+        //console.log('Conteo de usuarios pendientes recibido:', response.data);
         setPendingUsersCount(response.data.count || 0);
       } catch (error) {
         console.error('Error en usePendingUsers:', {

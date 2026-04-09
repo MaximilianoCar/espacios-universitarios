@@ -11,7 +11,7 @@ const CreateReservationPage = () => {
 
   // Función para manejar la creación del evento y la subida de archivos
   const handleEventCreated = async (event, programFile, agreementFile) => {
-    console.log('Evento creado:', event);
+    //console.log('Evento creado:', event);
 
     // Solo sube archivos si hay archivos seleccionados
     if (programFile || agreementFile) {
@@ -29,7 +29,7 @@ const CreateReservationPage = () => {
             },
           }
         );
-        console.log('Archivos subidos:', response.data);
+        //console.log('Archivos subidos:', response.data);
       } catch (error) {
         console.error('Error al subir archivos:', error);
       }

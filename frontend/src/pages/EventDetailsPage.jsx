@@ -94,7 +94,7 @@ const EventDetailsPage = () => {
               `/rooms/${response.data.roomId}/check-permission`
             );
             setHasCoordinatorPermission(permissionResponse.data.hasPermission);
-            console.log(hasCoordinatorPermission);
+            //console.log(hasCoordinatorPermission);
           } catch (error) {
             console.error('Error checking coordinator permission:', error);
             setHasCoordinatorPermission(false);

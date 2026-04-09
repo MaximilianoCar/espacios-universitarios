@@ -1663,7 +1663,7 @@ const AddEventForm = ({ onEventCreated }) => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     <CurrencyDollarIcon className="inline mr-2 h-4 w-4 text-blue-500" />
-                    Costo <span className="text-red-500">*</span>
+                    Costo ($)<span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -1673,7 +1673,7 @@ const AddEventForm = ({ onEventCreated }) => {
                     className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       errors.cost ? 'border-red-500' : 'border-gray-300'
                     }`}
-                    placeholder="Ej: $1000 o Gratis"
+                    placeholder="Ej: 1000 o 0 (gratis)"
                     maxLength={100}
                   />
                   {errors.cost && (
@@ -1697,7 +1697,7 @@ const AddEventForm = ({ onEventCreated }) => {
                   className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     errors.contact ? 'border-red-500' : 'border-gray-300'
                   }`}
-                  placeholder="Información para contactar al organizador"
+                  placeholder="Información para contactar al organizador (Otro correo, teléfono, redes sociales, etc.)"
                   maxLength={500}
                 />
                 {errors.contact && (
@@ -1770,6 +1770,22 @@ const AddEventForm = ({ onEventCreated }) => {
                   );
                 })()}
               </div>
+
+              {/* Nota informativa según método de pago seleccionado */}
+              {formData.paymentMethod === 'transfer' && (
+                <p className="mt-2 text-sm text-gray-600">
+                  <strong>Transferencia:</strong> Puede cancelar mediante
+                  transferencia; luego de validar su solicitud se contactará con
+                  usted para el pago.
+                </p>
+              )}
+
+              {formData.paymentMethod === 'materials' && (
+                <p className="mt-2 text-sm text-gray-600">
+                  <strong>Materiales:</strong> El método de pago puede ser
+                  materiales en el equivalente al costo.
+                </p>
+              )}
             </div>
           </div>
         )}

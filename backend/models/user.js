@@ -151,7 +151,7 @@ module.exports = (sequelize, DataTypes) => {
       }
 
       const { isCompanyRepresentative, companyName, companyRif, origin } = data;
-      //console.log('Completing external info with data:', data);
+      console.log('Completing external info with data:', data);
       // Marcar si es representante de empresa y validar campos cuando aplique
       this.isCompanyRepresentative =
         isCompanyRepresentative === true || isCompanyRepresentative === 'true';
@@ -304,7 +304,6 @@ module.exports = (sequelize, DataTypes) => {
           // Validación: si no es representante de empresa, limpiar companyRif y companyName
           if (!user.isCompanyRepresentative) {
             user.companyRif = null;
-            user.companyName = null;
           }
 
           // Validación: si es externalvisitor y representante de empresa, verificar que tenga RIF y nombre
@@ -334,7 +333,6 @@ module.exports = (sequelize, DataTypes) => {
           // Asegurar que companyRif y companyName sean null si no es representante de empresa
           if (!user.isCompanyRepresentative) {
             user.companyRif = null;
-            user.companyName = null;
           }
 
           // Guardar rol original si está cambiando a pending
@@ -353,7 +351,6 @@ module.exports = (sequelize, DataTypes) => {
           // Asegurar que companyRif y companyName sean null si no es representante de empresa
           if (!user.isCompanyRepresentative) {
             user.companyRif = null;
-            user.companyName = null;
           }
 
           // Validación: si es externalvisitor y representante de empresa, verificar que tenga RIF y nombre
