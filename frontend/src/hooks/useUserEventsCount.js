@@ -24,10 +24,10 @@ export const useUserEventsCount = ({ enabled = true } = {}) => {
       setError(null);
 
       try {
-        console.log('Solicitando conteo de eventos del usuario...');
+        //console.log('Solicitando conteo de eventos del usuario...');
         const response = await axiosInstance.get('/events/user/count');
 
-        console.log('Conteo de eventos del usuario recibido:', response.data);
+        //console.log('Conteo de eventos del usuario recibido:', response.data);
         setEventsCount(response.data);
       } catch (error) {
         console.error('Error en useUserEventsCount:', {

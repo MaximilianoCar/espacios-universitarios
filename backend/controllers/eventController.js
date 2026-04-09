@@ -1072,8 +1072,8 @@ exports.getApprovedEvents = async (req, res) => {
     const events = await Event.findAll({
       where: {
         status: Event.STATUS.APPROVED,
-        // Solo eventos que NO hayan terminado (eventTo > fecha actual)
-        eventTo: {
+        // Solo eventos que NO hayan terminado (reservationTo > fecha actual)
+        reservationTo: {
           [Op.gt]: currentDate,
         },
       },
@@ -1261,17 +1261,23 @@ exports.updateEvent = async (req, res) => {
         field => normalizeForComparison(req.body[field]) === null
       );
 
-      if (hasInvalidPayloadDate) {
-        await transaction.rollback();
-        return res.status(400).json({
-          error:
-            'Formato de fecha inválido en el payload para un evento recurrente.',
-        });
-      }
+      //if (hasInvalidPayloadDate) {
+      //  console.warn(
+      //    `Evento recurrente (ID: ${event.id}) - formato de fecha inválido detectado en el payload. Campos: ${fechaFields
+      //      .filter(field => normalizeForComparison(req.body[field]) === null)
+      //      .join(', ')}`
+      //  );
+      //  await transaction.rollback();
+      //  return res.status(400).json({
+      //    error:
+      //      'Formato de fecha inválido en el payload para un evento recurrente.',
+      //  });
+      //}
 
       // Regla: el payload siempre trae fechas; si alguna difiere de la almacenada,
       // se considera intento de modificación y se bloquea.
       const hasDateChanges = fechaFields.some(field => {
+        if (!(field in req.body)) return false;
         const incoming = normalizeForComparison(req.body[field]);
         const current = normalizeForComparison(event[field]);
         return incoming !== current;

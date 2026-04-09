@@ -308,6 +308,16 @@ exports.completeExternalUser = async (req, res) => {
       req.body;
     const certificationFile = req.file;
 
+    console.log(
+      'Datos recibidos para completar información de usuario externo:',
+      {
+        isCompanyRepresentative,
+        origin,
+        companyName,
+        companyRif,
+      }
+    );
+
     // Validar archivo
     if (!certificationFile) {
       return res.status(400).json({

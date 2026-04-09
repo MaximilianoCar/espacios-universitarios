@@ -358,7 +358,7 @@ const AdminPendingRequestsPage = () => {
                     </td>
 
                     <td className="py-3 px-4 border-b">
-                      {user.isCompanyRepresentative ? (
+                      {user.isExternal ? (
                         <div className="text-sm">
                           <div className="font-medium">{user.companyName}</div>
                           <div className="text-xs text-gray-600">

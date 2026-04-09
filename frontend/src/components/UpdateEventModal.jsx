@@ -73,6 +73,8 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
   const previousSchedulesHashRef = useRef('');
   const isFirstGenerationRef = useRef(true);
   const lastChangeWasManualRef = useRef(false);
+  // Fechas eliminadas manualmente (dateOnly string) para no regenerarlas
+  const manuallyDeletedDatesRef = useRef(new Set());
 
   const weekDays = [
     { id: 0, label: 'Dom', name: 'Domingo' },
@@ -137,6 +139,44 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
           'Horarios cargados desde event.schedules:',
           event.schedules
         );
+        // Si el evento tiene múltiples schedules asumimos recurrencia
+        if (event.schedules.length > 1) {
+          const days = Array.from(
+            new Set(
+              event.schedules
+                .map(s =>
+                  typeof s.dayOfWeek !== 'undefined'
+                    ? s.dayOfWeek
+                    : s.eventFrom
+                      ? new Date(s.eventFrom).getDay()
+                      : null
+                )
+                .filter(d => d !== null)
+            )
+          );
+          const lastDate = event.schedules
+            .map(
+              s =>
+                s.dateOnly ||
+                (s.eventFrom
+                  ? formatDateForInput(s.eventFrom).split('T')[0]
+                  : null)
+            )
+            .filter(d => d)
+            .sort()
+            .pop();
+
+          setRecurrenceConfig(prev => ({
+            ...prev,
+            active: true,
+            frequency: 'weekly',
+            daysOfWeek:
+              days.length > 0 ? days : [new Date(event.eventFrom).getDay()],
+            repeatUntil: lastDate || '',
+          }));
+        } else {
+          manuallyDeletedDatesRef.current.clear();
+        }
       } else {
         setSchedules([
           {
@@ -298,8 +338,13 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
       }
     });
 
+    // Filtrar horarios manualmente eliminados por el usuario
+    const filtered = generatedSchedules.filter(
+      gs => !manuallyDeletedDatesRef.current.has(gs.dateOnly)
+    );
+
     // Ordenar por fecha (convertir usando formato local)
-    return generatedSchedules.sort(
+    return filtered.sort(
       (a, b) => new Date(a.eventFrom) - new Date(b.eventFrom)
     );
   };
@@ -342,7 +387,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
             );
           });
 
-        if (!wasJustTimeChange && !lastChangeWasManualRef.current) {
+        /*if (!wasJustTimeChange && !lastChangeWasManualRef.current) {
           Swal.fire({
             title: 'Horarios actualizados',
             text: `Se ${generatedSchedules.length === schedules.length ? 'actualizaron' : 'generaron'} ${generatedSchedules.length} horario(s)`,
@@ -351,6 +396,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
             showConfirmButton: false,
           });
         }
+          */
       }
 
       // Si es la primera generación, marcar que ya no es la primera
@@ -462,7 +508,17 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
 
   const removeSchedule = index => {
     lastChangeWasManualRef.current = true;
-    setSchedules(prev => prev.filter((_, i) => i !== index));
+    setSchedules(prev => {
+      const toRemove = prev[index];
+      if (toRemove && toRemove.dateOnly) {
+        try {
+          manuallyDeletedDatesRef.current.add(toRemove.dateOnly);
+        } catch (e) {
+          // ignore
+        }
+      }
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   const validateForm = () => {
@@ -1757,16 +1813,9 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                         Recurrencia:
                       </span>
                       <p className="text-gray-600 text-sm">
-                        {hasRecurringSchedules
-                          ? (() => {
-                              const endDate = schedules.reduce((max, s) => {
-                                const current = new Date(s.eventTo);
-                                return current > max ? current : max;
-                              }, new Date(schedules[0].eventTo));
-
-                              return `Semanal - fecha de fin: ${endDate.toLocaleDateString()}`;
-                            })()
-                          : 'Sin recurrenciaa'}
+                        {recurrenceConfig.active
+                          ? `${recurrenceConfig.frequency === 'weekly' ? 'Semanal' : recurrenceConfig.frequency === 'biweekly' ? 'Quincenal' : 'Mensual'} - ${recurrenceConfig.daysOfWeek.length} día(s)`
+                          : 'Sin recurrencia'}
                       </p>
                     </div>
                     <div>
@@ -1774,7 +1823,7 @@ const UpdateEventModal = ({ isOpen, onClose, event, onEventUpdated }) => {
                         Total de Horarios:
                       </span>
                       <p className="text-gray-600 font-bold text-base">
-                        {(event.schedules || []).length} horario(s)
+                        {schedules.length} horario(s)
                       </p>
                     </div>
                   </div>

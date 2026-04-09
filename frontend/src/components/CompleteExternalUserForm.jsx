@@ -56,7 +56,7 @@ const CompleteExternalUserForm = ({ onClose, onSuccess }) => {
       if (name === 'isCompanyRepresentative' && !checked) {
         setFormData(prev => ({
           ...prev,
-          companyName: '',
+          //companyName: '',
           companyRif: '',
         }));
 
@@ -179,14 +179,15 @@ const CompleteExternalUserForm = ({ onClose, onSuccess }) => {
     setSubmitting(true);
 
     const data = new FormData();
+    data.append('companyName', formData.companyName);
     data.append('origin', formData.companyName); // Usamos companyName como origin
     data.append('isCompanyRepresentative', formData.isCompanyRepresentative);
 
     if (formData.isCompanyRepresentative) {
-      data.append('companyName', formData.companyName);
+      //data.append('companyName', formData.companyName);
       data.append('companyRif', formData.companyRif);
     } else {
-      data.append('companyName', formData.companyName);
+      //data.append('companyName', formData.companyName);
     }
 
     if (formData.ciFile) {

@@ -159,7 +159,7 @@ const AddRoomForm = ({ onRoomCreated, onClose }) => {
       // Agregar el archivo de imagen
       if (imageFile) {
         data.append('image', imageFile);
-        console.log('Imagen agregada:', imageFile.name);
+        //console.log('Imagen agregada:', imageFile.name);
       }
 
       // Dispatch thunk para que Redux cache update

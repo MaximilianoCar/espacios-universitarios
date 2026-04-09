@@ -144,7 +144,7 @@ const RegisterPage = () => {
       axiosInstance
         .post('/users', userData)
         .then(response => {
-          console.log('Usuario registrado:', response.data);
+          //console.log('Usuario registrado:', response.data);
           // Mostrar SweetAlert de éxito
           Swal.fire({
             title: 'Registro Exitoso',
@@ -339,6 +339,7 @@ const RegisterPage = () => {
               value={formData.ci}
               onChange={handleChange}
               placeholder="Ingresa tu cédula de identidad"
+              required
             />
             {errors.ci ? (
               <p className="text-red-500 text-sm mt-1">{errors.ci}</p>

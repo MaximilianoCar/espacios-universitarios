@@ -5,7 +5,7 @@ import Swal from '../../utils/swal';
 // Acción para iniciar sesión
 export const login = (email, password, navigate) => async dispatch => {
   try {
-    console.log('[auth] POST /login (via axiosInstance)');
+    //console.log('[auth] POST /login (via axiosInstance)');
     const response = await axiosInstance.post('/login', { email, password });
 
     // respuesta en distintos formatos: .data.data o .data
