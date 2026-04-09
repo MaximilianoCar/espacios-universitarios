@@ -12,6 +12,7 @@ import {
   FaArrowLeft,
 } from 'react-icons/fa';
 import Swal from '../utils/swal';
+import getMediaUrl from '../utils/media';
 
 const AdminPendingRequestsPage = () => {
   const [users, setUsers] = useState([]);
@@ -345,7 +346,7 @@ const AdminPendingRequestsPage = () => {
                     <td className="py-3 px-4 border-b">
                       {user.certificationPath ? (
                         <a
-                          href={`http://localhost:3000/${user.certificationPath}`}
+                          href={getMediaUrl(user.certificationPath)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center justify-center bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs transition-colors w-20"
@@ -449,7 +450,7 @@ const AdminPendingRequestsPage = () => {
                       </span>
                       {user.certificationPath ? (
                         <a
-                          href={`http://localhost:3000/${user.certificationPath}`}
+                          href={getMediaUrl(user.certificationPath)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs transition-colors"

@@ -1,0 +1,26 @@
+http:
+  routers:
+    reservas-api-local:
+      rule: "PathPrefix(`/api`) || PathPrefix(`/uploads`)"
+      entryPoints:
+        - web
+      service: reservas-api-local
+      priority: 100
+
+    reservas-web-local:
+      rule: "PathPrefix(`/`)"
+      entryPoints:
+        - web
+      service: reservas-web-local
+      priority: 1
+
+  services:
+    reservas-api-local:
+      loadBalancer:
+        servers:
+          - url: "http://espaciosuniversitarios-node-app:3000"
+
+    reservas-web-local:
+      loadBalancer:
+        servers:
+          - url: "http://espaciosuniversitarios-frontend:80"
