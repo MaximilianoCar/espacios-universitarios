@@ -14,6 +14,16 @@ const path = require('path');
 const emailService = require('../services/emailService');
 const googleCalendarService = require('../services/googleCalendarService');
 
+const WEEK_DAYS_ES = [
+  'domingo',
+  'lunes',
+  'martes',
+  'miércoles',
+  'jueves',
+  'viernes',
+  'sábado',
+];
+
 // Normalizar rutas para usar slashes y eliminar prefijos como './'
 const normalizeFilePath = filePath => {
   if (!filePath) return filePath;
@@ -712,17 +722,30 @@ exports.createEvent = async (req, res) => {
 
       // Notificar a las entidades sobre la aprobación automática
       try {
-        const roomName = await getRoomName(newEvent.roomId);
-
-        await emailService.notifyAllEntitiesApproval(
-          roomName,
-          newEvent.reservationFrom,
-          newEvent.reservationTo,
-          newEvent.eventFrom,
-          newEvent.eventTo,
-          newEvent.id,
-          newEvent.name
+        const roomNotificationData = await getRoomNotificationData(
+          newEvent.roomId
         );
+        const recurringInfo = getRecurringInfoFromSchedules(schedulesInput);
+        const creatorUser = await User.findByPk(userId, {
+          attributes: ['id', 'name', 'email'],
+        });
+
+        await emailService.notifyAllEntitiesApproval({
+          spaceName: roomNotificationData.roomName,
+          dependencyName: roomNotificationData.dependencyName,
+          contactName: creatorUser?.name || 'No disponible',
+          contactEmail: creatorUser?.email || 'No disponible',
+          contactRole: userRole === 'admin' ? 'Administrador' : 'Coordinador',
+          reservationFrom: newEvent.reservationFrom,
+          reservationTo: newEvent.reservationTo,
+          eventFrom: newEvent.eventFrom,
+          eventTo: newEvent.eventTo,
+          eventId: newEvent.id,
+          eventName: newEvent.name,
+          isRecurrent: recurringInfo.isRecurrent,
+          recurringDays: recurringInfo.recurringDays,
+          occurrencesCount: recurringInfo.occurrencesCount,
+        });
 
         console.log(
           'Notificación de aprobación automática enviada a todas las entidades'
@@ -893,6 +916,79 @@ const getRoomName = async roomId => {
     console.error('Error obteniendo nombre de la sala:', error);
     return `Sala ${roomId}`;
   }
+};
+
+const getRoomNotificationData = async roomId => {
+  try {
+    const room = await Room.findByPk(roomId, {
+      attributes: ['id', 'name'],
+      include: [
+        {
+          model: Dependency,
+          as: 'dependencies',
+          attributes: ['id', 'name'],
+          through: { attributes: [] },
+        },
+      ],
+    });
+
+    if (!room) {
+      return {
+        roomName: `Sala ${roomId}`,
+        dependencyName: 'No especificada',
+      };
+    }
+
+    const dependencyName =
+      Array.isArray(room.dependencies) && room.dependencies.length > 0
+        ? room.dependencies.map(dep => dep.name).join(', ')
+        : 'No especificada';
+
+    return {
+      roomName: room.name,
+      dependencyName,
+    };
+  } catch (error) {
+    console.error('Error obteniendo datos de notificación de la sala:', error);
+    return {
+      roomName: `Sala ${roomId}`,
+      dependencyName: 'No especificada',
+    };
+  }
+};
+
+const getRecurringInfoFromSchedules = schedules => {
+  if (!Array.isArray(schedules) || schedules.length <= 1) {
+    return {
+      isRecurrent: false,
+      recurringDays: [],
+      occurrencesCount: Array.isArray(schedules) ? schedules.length : 0,
+    };
+  }
+
+  const dayIndexes = new Set();
+  for (const item of schedules) {
+    if (typeof item?.dayOfWeek === 'number') {
+      dayIndexes.add(item.dayOfWeek);
+      continue;
+    }
+
+    const sourceDate = item?.eventFrom ? new Date(item.eventFrom) : null;
+    if (sourceDate && !Number.isNaN(sourceDate.getTime())) {
+      dayIndexes.add(sourceDate.getUTCDay());
+    }
+  }
+
+  const recurringDays = [...dayIndexes]
+    .filter(day => day >= 0 && day <= 6)
+    .sort((a, b) => a - b)
+    .map(day => WEEK_DAYS_ES[day]);
+
+  return {
+    isRecurrent: true,
+    recurringDays,
+    occurrencesCount: schedules.length,
+  };
 };
 
 // Obtener todos los eventos (Read - Get All)
@@ -1672,7 +1768,14 @@ async function sendStatusNotifications(req, event, previousStatus, eventId) {
   ) {
     try {
       const user = await User.findByPk(event.userId);
-      const roomName = await getRoomName(event.roomId);
+      const roomNotificationData = await getRoomNotificationData(event.roomId);
+      const roomName = roomNotificationData.roomName;
+      const actor = req.user?.id
+        ? await User.findByPk(req.user.id, {
+            attributes: ['id', 'name', 'email', 'role'],
+          })
+        : null;
+      const recurringInfo = getRecurringInfoFromSchedules(event.schedules);
 
       if (user) {
         const fecha = event.date
@@ -1695,15 +1798,27 @@ async function sendStatusNotifications(req, event, previousStatus, eventId) {
         // Notificar a las entidades según el estado
         if (req.body.status === Event.STATUS.APPROVED) {
           try {
-            await emailService.notifyAllEntitiesApproval(
-              roomName,
-              event.reservationFrom,
-              event.reservationTo,
-              event.eventFrom,
-              event.eventTo,
+            await emailService.notifyAllEntitiesApproval({
+              spaceName: roomName,
+              dependencyName: roomNotificationData.dependencyName,
+              contactName: actor?.name || 'No disponible',
+              contactEmail: actor?.email || 'No disponible',
+              contactRole:
+                actor?.role === 'admin'
+                  ? 'Administrador'
+                  : actor?.role === 'coordinator'
+                    ? 'Coordinador'
+                    : 'No disponible',
+              reservationFrom: event.reservationFrom,
+              reservationTo: event.reservationTo,
+              eventFrom: event.eventFrom,
+              eventTo: event.eventTo,
               eventId,
-              event.name
-            );
+              eventName: event.name,
+              isRecurrent: recurringInfo.isRecurrent,
+              recurringDays: recurringInfo.recurringDays,
+              occurrencesCount: recurringInfo.occurrencesCount,
+            });
             console.log(
               'Notificación de aprobación enviada a todas las entidades'
             );
@@ -1718,15 +1833,27 @@ async function sendStatusNotifications(req, event, previousStatus, eventId) {
           previousStatus === Event.STATUS.APPROVED
         ) {
           try {
-            await emailService.notifyAllEntitiesCancellation(
-              roomName,
-              event.reservationFrom,
-              event.reservationTo,
-              event.eventFrom,
-              event.eventTo,
+            await emailService.notifyAllEntitiesCancellation({
+              spaceName: roomName,
+              dependencyName: roomNotificationData.dependencyName,
+              contactName: actor?.name || 'No disponible',
+              contactEmail: actor?.email || 'No disponible',
+              contactRole:
+                actor?.role === 'admin'
+                  ? 'Administrador'
+                  : actor?.role === 'coordinator'
+                    ? 'Coordinador'
+                    : 'No disponible',
+              reservationFrom: event.reservationFrom,
+              reservationTo: event.reservationTo,
+              eventFrom: event.eventFrom,
+              eventTo: event.eventTo,
               eventId,
-              event.name
-            );
+              eventName: event.name,
+              isRecurrent: recurringInfo.isRecurrent,
+              recurringDays: recurringInfo.recurringDays,
+              occurrencesCount: recurringInfo.occurrencesCount,
+            });
             console.log(
               'Notificación de cancelación enviada a todas las entidades'
             );

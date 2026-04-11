@@ -390,15 +390,22 @@ const emailTemplates = {
   }),
 
   // noti a todas las entidades externas
-  entitiesApproval: (
+  entitiesApproval: ({
     spaceName,
+    dependencyName,
+    contactName,
+    contactEmail,
+    contactRole,
     reservationFrom,
     reservationTo,
     eventFrom,
     eventTo,
     eventId,
-    eventName
-  ) => ({
+    eventName,
+    isRecurrent = false,
+    recurringDays = [],
+    occurrencesCount = 0,
+  }) => ({
     subject: `Notificación de Reserva Aprobada - ${spaceName}`,
     html: `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -417,7 +424,19 @@ const emailTemplates = {
           eventFrom
         ).toLocaleString()} hasta ${new Date(eventTo).toLocaleString()}</p>
         <p><strong>Espacio:</strong> ${spaceName}</p>
+        <p><strong>Dependencia:</strong> ${dependencyName || 'No especificada'}</p>
         <p><strong>Evento:</strong> ${eventName}</p>
+        <p><strong>Contacto responsable:</strong> ${contactName || 'No disponible'} (${contactEmail || 'No disponible'})</p>
+        <p><strong>Rol del contacto:</strong> ${contactRole || 'No disponible'}</p>
+        <p><strong>Recurrencia:</strong> ${
+          isRecurrent
+            ? `Sí, se repite los ${
+                Array.isArray(recurringDays) && recurringDays.length > 0
+                  ? recurringDays.join(', ')
+                  : 'días no especificados'
+              } (${occurrencesCount} ocurrencias)`
+            : 'No'
+        }</p>
       </div>
 
       <div style="margin-top: 20px; padding: 15px; background: #e9ecef; border-radius: 5px;">
@@ -434,15 +453,22 @@ const emailTemplates = {
   }),
 
   // Notificación a todas las entidades externas sobre evento cancelado
-  entitiesCancellation: (
+  entitiesCancellation: ({
     spaceName,
+    dependencyName,
+    contactName,
+    contactEmail,
+    contactRole,
     reservationFrom,
     reservationTo,
     eventFrom,
     eventTo,
     eventId,
-    eventName
-  ) => ({
+    eventName,
+    isRecurrent = false,
+    recurringDays = [],
+    occurrencesCount = 0,
+  }) => ({
     subject: `Notificación de Cancelación de Reserva - ${spaceName}`,
     html: `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -461,7 +487,19 @@ const emailTemplates = {
           eventFrom
         ).toLocaleString()} hasta ${new Date(eventTo).toLocaleString()}</p>
         <p><strong>Espacio:</strong> ${spaceName}</p>
+        <p><strong>Dependencia:</strong> ${dependencyName || 'No especificada'}</p>
         <p><strong>Evento:</strong> ${eventName}</p>
+        <p><strong>Contacto responsable:</strong> ${contactName || 'No disponible'} (${contactEmail || 'No disponible'})</p>
+        <p><strong>Rol del contacto:</strong> ${contactRole || 'No disponible'}</p>
+        <p><strong>Recurrencia:</strong> ${
+          isRecurrent
+            ? `Sí, se repite los ${
+                Array.isArray(recurringDays) && recurringDays.length > 0
+                  ? recurringDays.join(', ')
+                  : 'días no especificados'
+              } (${occurrencesCount} ocurrencias)`
+            : 'No'
+        }</p>
       </div>
 
       <div style="margin-top: 20px; padding: 15px; background: #f8d7da; border-radius: 5px;">
@@ -639,15 +677,7 @@ class EmailService {
   }
 
   // notificar a entidades sobre evento aprobado
-  async notifyAllEntitiesApproval(
-    spaceName,
-    reservationFrom,
-    reservationTo,
-    eventFrom,
-    eventTo,
-    eventId,
-    eventName
-  ) {
+  async notifyAllEntitiesApproval(notificationData) {
     try {
       const entityEmails = this.getEntityEmails();
 
@@ -662,15 +692,7 @@ class EmailService {
       const result = this.sendEmail(
         process.env.EMAIL_FROM,
         'entitiesApproval',
-        [
-          spaceName,
-          reservationFrom,
-          reservationTo,
-          eventFrom,
-          eventTo,
-          eventId,
-          eventName,
-        ],
+        [notificationData],
         entityEmails
       );
 
@@ -688,15 +710,7 @@ class EmailService {
   }
 
   // Notificar a todas las entidades sobre evento cancelado
-  async notifyAllEntitiesCancellation(
-    spaceName,
-    reservationFrom,
-    reservationTo,
-    eventFrom,
-    eventTo,
-    eventId,
-    eventName
-  ) {
+  async notifyAllEntitiesCancellation(notificationData) {
     try {
       const entityEmails = this.getEntityEmails();
 
@@ -711,15 +725,7 @@ class EmailService {
       const result = this.sendEmail(
         process.env.EMAIL_FROM,
         'entitiesCancellation',
-        [
-          spaceName,
-          reservationFrom,
-          reservationTo,
-          eventFrom,
-          eventTo,
-          eventId,
-          eventName,
-        ],
+        [notificationData],
         entityEmails
       );
 
