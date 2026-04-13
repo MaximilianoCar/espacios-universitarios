@@ -545,9 +545,17 @@ exports.createEvent = async (req, res) => {
       eventData.reservationTo = eventData.eventTo;
     }
 
-    if (req.file) {
+    if (req.files?.imageFile?.[0]) {
       // Si se subió una imagen, agregar la ruta a los datos (normalizada)
+      eventData.imagePath = normalizeFilePath(req.files.imageFile[0].path);
+    } else if (req.file) {
+      // Compatibilidad con middlewares previos de archivo único
       eventData.imagePath = normalizeFilePath(req.file.path);
+    }
+
+    if (req.files?.programPath?.[0]) {
+      // Programación opcional del evento en creación atómica
+      eventData.programPath = normalizeFilePath(req.files.programPath[0].path);
     }
 
     // Usar transacción para crear evento y sus schedules si vienen
@@ -736,6 +744,8 @@ exports.createEvent = async (req, res) => {
           contactName: creatorUser?.name || 'No disponible',
           contactEmail: creatorUser?.email || 'No disponible',
           contactRole: userRole === 'admin' ? 'Administrador' : 'Coordinador',
+          eventDescription: newEvent.description,
+          programPath: newEvent.programPath,
           reservationFrom: newEvent.reservationFrom,
           reservationTo: newEvent.reservationTo,
           eventFrom: newEvent.eventFrom,
@@ -1305,89 +1315,6 @@ exports.updateEvent = async (req, res) => {
     const isRecurrent =
       Array.isArray(event.schedules) && event.schedules.length > 1;
 
-    // Si es recurrente, no permitir cambios en las fechas principales
-    if (isRecurrent) {
-      const fechaFields = [
-        'eventFrom',
-        'eventTo',
-        'reservationFrom',
-        'reservationTo',
-      ];
-
-      const pad2 = n => String(n).padStart(2, '0');
-
-      // Compara fechas en una representación homogénea YYYY-MM-DDTHH:mm
-      // para evitar diferencias por UTC vs datetime-local.
-      const normalizeForComparison = value => {
-        if (value === undefined || value === null || value === '') return null;
-
-        if (typeof value === 'string') {
-          const m = value.match(
-            /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?$/
-          );
-          if (m) {
-            return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}`;
-          }
-        }
-
-        const d = new Date(value);
-        if (Number.isNaN(d.getTime())) return null;
-
-        const parts = new Intl.DateTimeFormat('en-CA', {
-          timeZone: 'America/Caracas',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        }).formatToParts(d);
-
-        const map = {};
-        for (const p of parts) {
-          if (p.type !== 'literal') map[p.type] = p.value;
-        }
-
-        return `${map.year}-${pad2(map.month)}-${pad2(map.day)}T${pad2(
-          map.hour
-        )}:${pad2(map.minute)}`;
-      };
-
-      const hasInvalidPayloadDate = fechaFields.some(
-        field => normalizeForComparison(req.body[field]) === null
-      );
-
-      //if (hasInvalidPayloadDate) {
-      //  console.warn(
-      //    `Evento recurrente (ID: ${event.id}) - formato de fecha inválido detectado en el payload. Campos: ${fechaFields
-      //      .filter(field => normalizeForComparison(req.body[field]) === null)
-      //      .join(', ')}`
-      //  );
-      //  await transaction.rollback();
-      //  return res.status(400).json({
-      //    error:
-      //      'Formato de fecha inválido en el payload para un evento recurrente.',
-      //  });
-      //}
-
-      // Regla: el payload siempre trae fechas; si alguna difiere de la almacenada,
-      // se considera intento de modificación y se bloquea.
-      const hasDateChanges = fechaFields.some(field => {
-        if (!(field in req.body)) return false;
-        const incoming = normalizeForComparison(req.body[field]);
-        const current = normalizeForComparison(event[field]);
-        return incoming !== current;
-      });
-
-      if (hasDateChanges) {
-        await transaction.rollback();
-        return res.status(400).json({
-          error:
-            'Los eventos recurrentes no permiten modificar sus fechas. Si necesitas cambiar las fechas, elimina el evento recurrente y crea uno nuevo.',
-        });
-      }
-    }
-
     // guardar el estado anterior antes de actualizar
     const previousStatus = event.status;
 
@@ -1809,6 +1736,8 @@ async function sendStatusNotifications(req, event, previousStatus, eventId) {
                   : actor?.role === 'coordinator'
                     ? 'Coordinador'
                     : 'No disponible',
+              eventDescription: event.description,
+              programPath: event.programPath,
               reservationFrom: event.reservationFrom,
               reservationTo: event.reservationTo,
               eventFrom: event.eventFrom,
