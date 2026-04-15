@@ -352,6 +352,8 @@ const EventDetailsPage = () => {
   };
 
   const handleUpdateEvent = async () => {
+    const isRecurrentEvent = (event?.schedules?.length || 0) > 1;
+
     const { value: formValues } = await Swal.fire({
       title: 'Actualizar Evento',
       html: `
@@ -406,14 +408,24 @@ const EventDetailsPage = () => {
           <!-- Fechas del Evento -->
           <div class="border-t pt-4">
             <h3 class="text-lg font-semibold text-gray-800 mb-3">Fechas del Evento</h3>
+            ${
+              isRecurrentEvent
+                ? `
+              <div class="mb-3 rounded-md border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+                Evento recurrente: las fechas están bloqueadas en esta edición.
+              </div>
+            `
+                : ''
+            }
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Inicio del Evento</label>
                 <input 
                   id="swal-eventFrom" 
                   type="datetime-local"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isRecurrentEvent ? 'bg-gray-100 cursor-not-allowed' : ''}" 
                   value="${formatDateForInput(event.eventFrom)}"
+                  ${isRecurrentEvent ? 'disabled' : ''}
                 >
               </div>
               <div>
@@ -421,8 +433,9 @@ const EventDetailsPage = () => {
                 <input 
                   id="swal-eventTo" 
                   type="datetime-local"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isRecurrentEvent ? 'bg-gray-100 cursor-not-allowed' : ''}" 
                   value="${formatDateForInput(event.eventTo)}"
+                  ${isRecurrentEvent ? 'disabled' : ''}
                 >
               </div>
             </div>
@@ -437,8 +450,9 @@ const EventDetailsPage = () => {
                 <input 
                   id="swal-reservationFrom" 
                   type="datetime-local"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isRecurrentEvent ? 'bg-gray-100 cursor-not-allowed' : ''}" 
                   value="${formatDateForInput(event.reservationFrom)}"
+                  ${isRecurrentEvent ? 'disabled' : ''}
                 >
               </div>
               <div>
@@ -446,8 +460,9 @@ const EventDetailsPage = () => {
                 <input 
                   id="swal-reservationTo" 
                   type="datetime-local"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${isRecurrentEvent ? 'bg-gray-100 cursor-not-allowed' : ''}" 
                   value="${formatDateForInput(event.reservationTo)}"
+                  ${isRecurrentEvent ? 'disabled' : ''}
                 >
               </div>
             </div>
@@ -467,13 +482,18 @@ const EventDetailsPage = () => {
         const capacity = document.getElementById('swal-capacity').value;
         const cost = document.getElementById('swal-cost').value;
         const contact = document.getElementById('swal-contact').value;
-        const eventFrom = document.getElementById('swal-eventFrom').value;
-        const eventTo = document.getElementById('swal-eventTo').value;
-        const reservationFrom = document.getElementById(
-          'swal-reservationFrom'
-        ).value;
-        const reservationTo =
-          document.getElementById('swal-reservationTo').value;
+        const eventFrom = isRecurrentEvent
+          ? formatDateForInput(event.eventFrom)
+          : document.getElementById('swal-eventFrom').value;
+        const eventTo = isRecurrentEvent
+          ? formatDateForInput(event.eventTo)
+          : document.getElementById('swal-eventTo').value;
+        const reservationFrom = isRecurrentEvent
+          ? formatDateForInput(event.reservationFrom)
+          : document.getElementById('swal-reservationFrom').value;
+        const reservationTo = isRecurrentEvent
+          ? formatDateForInput(event.reservationTo)
+          : document.getElementById('swal-reservationTo').value;
 
         // Validaciones básicas de campos requeridos
         if (!name || !capacity || !cost || !contact) {
@@ -491,7 +511,6 @@ const EventDetailsPage = () => {
         }
 
         // Validaciones de fechas
-        const now = new Date();
         const eventFromDate = new Date(eventFrom);
         const eventToDate = new Date(eventTo);
         const reservationFromDate = new Date(reservationFrom);

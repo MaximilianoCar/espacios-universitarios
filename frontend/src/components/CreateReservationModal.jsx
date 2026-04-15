@@ -38,6 +38,7 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
     reservationFrom: '',
     reservationTo: '',
     imageFile: null,
+    programFile: null,
     paymentMethod: '',
   });
 
@@ -95,6 +96,7 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
       reservationFrom: '',
       reservationTo: '',
       imageFile: null,
+      programFile: null,
       paymentMethod: '',
     });
     setRecurrenceConfig({
@@ -362,14 +364,14 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
         [name]: file,
       });
 
-      // Crear previsualización de la imagen
-      if (file) {
+      // Crear previsualización solo para la imagen del evento
+      if (name === 'imageFile' && file) {
         const reader = new FileReader();
         reader.onloadend = () => {
           setImagePreview(reader.result);
         };
         reader.readAsDataURL(file);
-      } else {
+      } else if (name === 'imageFile') {
         setImagePreview(null);
       }
     } else {
@@ -628,6 +630,27 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
       }
     }
 
+    // Programación del evento (opcional)
+    if (formData.programFile) {
+      const allowedProgramTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      ];
+      const maxProgramSize = 100 * 1024 * 1024; // 100MB
+
+      if (!allowedProgramTypes.includes(formData.programFile.type)) {
+        newErrors.programFile =
+          'Solo se permiten archivos PDF, Word o Excel para la programación';
+      }
+
+      if (formData.programFile.size > maxProgramSize) {
+        newErrors.programFile = 'La programación no debe exceder los 100MB';
+      }
+    }
+
     setErrors(newErrors);
     return { valid: Object.keys(newErrors).length === 0, errors: newErrors };
   };
@@ -851,6 +874,10 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
           setSubmitting(false);
           return;
         }
+      }
+
+      if (formData.programFile) {
+        data.append('programPath', formData.programFile);
       }
 
       const createdEvent = await dispatch(createRequest(data)).unwrap();
@@ -1367,6 +1394,51 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
                   <p className="mt-1 text-xs text-gray-500">
                     Formatos permitidos: JPEG, JPG, PNG, GIF, WebP. Tamaño
                     máximo: 5MB
+                  </p>
+                </div>
+
+                {/* Programación del Evento (Opcional) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <FaFileAlt className="inline mr-2 text-blue-500" />
+                    Programación del Evento
+                    <span className="text-xs text-gray-500 ml-1">
+                      (Opcional)
+                    </span>
+                  </label>
+                  <input
+                    type="file"
+                    name="programFile"
+                    onChange={handleChange}
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-base ${
+                      errors.programFile ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  />
+                  {errors.programFile && (
+                    <p className="mt-1 text-sm text-red-600">
+                      {errors.programFile}
+                    </p>
+                  )}
+                  {formData.programFile ? (
+                    <div className="mt-2 text-sm">
+                      <p className="text-green-600">
+                        ✓ Archivo seleccionado: {formData.programFile.name}
+                      </p>
+                      <p className="text-gray-500">
+                        Tamaño:{' '}
+                        {(formData.programFile.size / 1024 / 1024).toFixed(2)}{' '}
+                        MB
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-sm text-gray-500">
+                      Puedes adjuntar PDF, Word o Excel con la programación.
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs text-gray-500">
+                    Formatos permitidos: PDF, DOC, DOCX, XLS, XLSX. Tamaño
+                    máximo: 100MB
                   </p>
                 </div>
               </div>

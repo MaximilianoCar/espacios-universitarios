@@ -65,6 +65,25 @@ const upsertEventInState = (
   }
 };
 
+const refreshCurrentRequestsQuery = (dispatch, getState) => {
+  dispatch(invalidateRequests());
+
+  const state = getState();
+  const requestsState = state.requests || {};
+  const currentPage = Number(requestsState.currentPage || 1);
+  const pageSize = Number(requestsState.pageSize || 25);
+  const currentSearch = requestsState.currentSearch || '';
+
+  dispatch(
+    fetchRequests({
+      page: currentPage,
+      pageSize,
+      search: currentSearch,
+      force: true,
+    })
+  );
+};
+
 export const fetchRequests = createAsyncThunk(
   'requests/fetchRequests',
   async (
@@ -117,24 +136,7 @@ export const createRequest = createAsyncThunk(
           : { 'Content-Type': 'application/json' },
       });
 
-      // Invalidate cache so next fetchRequests will reload data.
-      dispatch(invalidateRequests());
-
-      // Ensure we fetch updated data immediately for the current query.
-      const state = getState();
-      const requestsState = state.requests || {};
-      const currentPage = Number(requestsState.currentPage || 1);
-      const pageSize = Number(requestsState.pageSize || 25);
-      const currentSearch = requestsState.currentSearch || '';
-
-      dispatch(
-        fetchRequests({
-          page: currentPage,
-          pageSize,
-          search: currentSearch,
-          force: true,
-        })
-      );
+      refreshCurrentRequestsQuery(dispatch, getState);
 
       return response.data;
     } catch (error) {
@@ -145,7 +147,7 @@ export const createRequest = createAsyncThunk(
 
 export const updateRequest = createAsyncThunk(
   'requests/updateRequest',
-  async ({ eventId, payload }, { rejectWithValue }) => {
+  async ({ eventId, payload }, { rejectWithValue, dispatch, getState }) => {
     try {
       const isFormData = payload instanceof FormData;
 
@@ -171,6 +173,8 @@ export const updateRequest = createAsyncThunk(
         } catch (e) {}
       }
 
+      refreshCurrentRequestsQuery(dispatch, getState);
+
       return returned;
     } catch (error) {
       return rejectWithValue(error.response?.data || error.message);
@@ -192,7 +196,7 @@ export const deleteRequest = createAsyncThunk(
 
 export const uploadRequestFiles = createAsyncThunk(
   'requests/uploadRequestFiles',
-  async ({ eventId, payload }, { rejectWithValue }) => {
+  async ({ eventId, payload }, { rejectWithValue, dispatch, getState }) => {
     try {
       const response = await axiosInstance.post(
         `/events/${eventId}/upload-files`,
@@ -201,6 +205,9 @@ export const uploadRequestFiles = createAsyncThunk(
           headers: { 'Content-Type': 'multipart/form-data' },
         }
       );
+
+      refreshCurrentRequestsQuery(dispatch, getState);
+
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data || error.message);

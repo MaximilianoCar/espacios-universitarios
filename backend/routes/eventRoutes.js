@@ -18,7 +18,10 @@ router.post(
   '/events',
   protect, //
   restrictTo('requester', 'admin', 'coordinator'),
-  uploadImages.single('imageFile'), // Nombre del campo de imagen en el formulario
+  uploadFiles.fields([
+    { name: 'imageFile', maxCount: 1 },
+    { name: 'programPath', maxCount: 1 },
+  ]),
   eventController.createEvent
 );
 

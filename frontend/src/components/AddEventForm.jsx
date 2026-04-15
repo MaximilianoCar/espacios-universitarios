@@ -158,6 +158,7 @@ const AddEventForm = ({ onEventCreated }) => {
     paymentMethod: '',
   });
   const [imageFile, setImageFile] = useState(null);
+  const [programFile, setProgramFile] = useState(null);
   const [error, setError] = useState('');
   const [errors, setErrors] = useState({});
   const [roomsError, setRoomsError] = useState(null);
@@ -747,6 +748,15 @@ const AddEventForm = ({ onEventCreated }) => {
     }
   };
 
+  const handleProgramChange = e => {
+    const file = e.target.files[0];
+    setProgramFile(file || null);
+
+    if (errors.programFile) {
+      setErrors(prev => ({ ...prev, programFile: '' }));
+    }
+  };
+
   const getMinDateTime = () => {
     const now = new Date();
     now.setHours(now.getHours() + 1);
@@ -925,6 +935,27 @@ const AddEventForm = ({ onEventCreated }) => {
       }
     }
 
+    // Programación del evento (opcional)
+    if (programFile) {
+      const allowedProgramTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      ];
+      const maxProgramSize = 10 * 1024 * 1024; // 10MB
+
+      if (!allowedProgramTypes.includes(programFile.type)) {
+        newErrors.programFile =
+          'Solo se permiten archivos PDF, Word o Excel para la programación';
+      }
+
+      if (programFile.size > maxProgramSize) {
+        newErrors.programFile = 'La programación no debe exceder los 10MB';
+      }
+    }
+
     setErrors(newErrors);
     return { valid: Object.keys(newErrors).length === 0, errors: newErrors };
   };
@@ -949,7 +980,7 @@ const AddEventForm = ({ onEventCreated }) => {
         'schedules',
       ],
       recurrence: ['recurrenceDays', 'recurrenceUntil'],
-      image: ['imageFile'],
+      image: ['imageFile', 'programFile'],
       review: [],
     };
 
@@ -1049,7 +1080,7 @@ const AddEventForm = ({ onEventCreated }) => {
           'schedules',
         ];
         const recurrence = ['recurrenceDays', 'recurrenceUntil'];
-        const image = ['imageFile'];
+        const image = ['imageFile', 'programFile'];
 
         if (space.includes(field)) return 'space';
         if (basic.includes(field)) return 'basic';
@@ -1190,6 +1221,7 @@ const AddEventForm = ({ onEventCreated }) => {
     });
 
     if (imageFile) data.append('imageFile', imageFile);
+    if (programFile) data.append('programPath', programFile);
 
     const schedulesToSend = schedules.map(s => ({
       eventFrom: s.eventFrom,
@@ -1248,7 +1280,7 @@ const AddEventForm = ({ onEventCreated }) => {
             }
             <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-4 text-left">
               <p class="text-sm text-blue-700">
-                <strong>Puede subir la programación del evento</strong> para que se tenga en cuenta en su solicitud.
+                <strong>La programación es opcional:</strong> si no la subes ahora y el evento es complejo, puedes cargarla luego. También será tomada en cuenta para la aprobación o no de la solicitud.
               </p>
             </div>
             <p class="text-sm text-gray-600">
@@ -1277,6 +1309,7 @@ const AddEventForm = ({ onEventCreated }) => {
         roomId: '',
       });
       setImageFile(null);
+      setProgramFile(null);
       setImagePreview(null);
       setSchedules([]);
       setRecurrenceConfig({
@@ -2320,6 +2353,49 @@ const AddEventForm = ({ onEventCreated }) => {
               {errors.imageFile && (
                 <p className="mt-2 text-sm text-red-600">{errors.imageFile}</p>
               )}
+
+              <div className="mt-6 border-t border-gray-200 pt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <DocumentTextIcon className="inline mr-2 h-4 w-4 text-blue-500" />
+                  Programación del Evento
+                  <span className="text-xs text-gray-500 ml-1">(Opcional)</span>
+                </label>
+
+                <input
+                  type="file"
+                  name="programFile"
+                  onChange={handleProgramChange}
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className={`w-full px-4 py-3 sm:py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    errors.programFile ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                />
+
+                {errors.programFile && (
+                  <p className="mt-1 text-sm text-red-600">
+                    {errors.programFile}
+                  </p>
+                )}
+
+                {programFile ? (
+                  <div className="mt-2 text-sm">
+                    <p className="text-green-600">✓ {programFile.name}</p>
+                    <p className="text-gray-500">
+                      {(programFile.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs sm:text-sm text-gray-500">
+                    Paso opcional: en eventos complejos puedes subir la
+                    programación ahora o luego. Se tomará en cuenta para la
+                    aprobación o no.
+                  </p>
+                )}
+
+                <p className="mt-1 text-xs text-gray-500">
+                  Formatos permitidos: PDF, DOC, DOCX, XLS, XLSX. Máx: 10MB
+                </p>
+              </div>
             </div>
 
             <div className="bg-blue-50 p-3 sm:p-4 rounded-lg">
@@ -2463,6 +2539,27 @@ const AddEventForm = ({ onEventCreated }) => {
                   </div>
                 </div>
               )}
+
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="font-bold text-gray-800 mb-2 text-base">
+                  Programación del Evento
+                </h4>
+                {programFile ? (
+                  <div>
+                    <p className="text-sm text-green-700">
+                      ✓ Archivo seleccionado
+                    </p>
+                    <p className="text-sm text-gray-600 break-all">
+                      {programFile.name}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-600">
+                    No adjuntada (opcional). Si el evento es complejo, puedes
+                    subirla luego y se tomará en cuenta para la aprobación o no.
+                  </p>
+                )}
+              </div>
 
               {selectedRoomIsCUC && (
                 <div className="bg-yellow-50 border-l-4 border-yellow-400 p-3 sm:p-4 rounded-lg">
