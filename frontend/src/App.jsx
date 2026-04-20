@@ -70,6 +70,7 @@ const AdminPendingRequestsPage = lazy(
   () => import('./pages/AdminPendingRequestsPage')
 );
 const PreviewEventPage = lazy(() => import('./pages/PreviewEventPage'));
+const MyUserPage = lazy(() => import('./pages/MyUser'));
 
 function App() {
   const dispatch = useDispatch();
@@ -124,6 +125,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <EventDetailsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/my-user"
+            element={
+              <ProtectedRoute>
+                <MyUserPage />
               </ProtectedRoute>
             }
           />

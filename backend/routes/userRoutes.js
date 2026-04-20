@@ -51,6 +51,9 @@ router.get(
   restrictTo('admin'),
   userController.getPendingUsers
 );
+// Cambio de contraseña (usuario autenticado)
+router.put('/users/change-password', protect, userController.changePassword);
+
 router.get(
   '/users/:id',
   protect,

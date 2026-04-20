@@ -342,6 +342,13 @@ const HomePage = () => {
         >
           {' '}
           {cards}
+          {/* Card universal: Mi Usuario (siempre al final) */}
+          <MenuCard
+            title="Mi Usuario"
+            description="Ver datos y cambiar contraseña"
+            link="/my-user"
+            icon={<KeyIcon className="w-12 h-12 text-blue-500" />}
+          />
         </div>
       </div>
 

@@ -1163,6 +1163,62 @@ exports.resetPassword = async (req, res) => {
   }
 };
 
+// Cambio de contraseña para usuario autenticado
+exports.changePassword = async (req, res) => {
+  try {
+    // Debug: validar que el middleware de auth haya poblado req.user
+    console.log('changePassword middleware req.user ->', req.user);
+    if (!req.user || !req.user.id) {
+      console.warn('changePassword: req.user o req.user.id no definido');
+      return res.status(401).json({ error: 'No autorizado.' });
+    }
+
+    const userId = req.user.id;
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res
+        .status(400)
+        .json({ error: 'Todos los campos son requeridos.' });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res
+        .status(400)
+        .json({ error: 'La nueva contraseña y la confirmación no coinciden.' });
+    }
+
+    if (newPassword.length < 6) {
+      return res
+        .status(400)
+        .json({ error: 'La contraseña debe tener al menos 6 caracteres.' });
+    }
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado.' });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Contraseña actual incorrecta.' });
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    user.password = hashed;
+    await user.save();
+
+    return res
+      .status(200)
+      .json({ message: 'Contraseña actualizada correctamente.' });
+  } catch (error) {
+    console.error('changePassword error:', error);
+    return res
+      .status(500)
+      .json({ error: 'Error interno al cambiar la contraseña.' });
+  }
+};
+
 // notis de usuarios pendientes a ser solicitantes
 exports.getPendingUsersCount = async (req, res) => {
   try {

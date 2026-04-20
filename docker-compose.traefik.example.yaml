@@ -1,20 +1,195 @@
 services:
-  node-app:
+  traefik:
+    image: traefik:v3.3
+    restart: unless-stopped
+    command:
+      - '--api.dashboard=true' # Enable the dashboard
+      - '--api.insecure=true' # Allow insecure dashboard (for local testing)
+      - '--providers.docker=true' # Enable Docker provider
+      - '--providers.docker.exposedbydefault=false' # Don't expose containers by default
+      - '--entrypoints.web.address=:80' # Define entrypoint for HTTP
+      - '--entrypoints.websecure.address=:443' # Enable HTTPS
+      - '--log.level=DEBUG' # Set log level to warn
+    ports:
+      - '80:80' # Expose HTTP
+      - '443:443' # Expose HTTPS
+      - '8080:8080' # Expose Traefik dashboard (optional)
+    volumes:
+      - '/var/run/docker.sock:/var/run/docker.sock:ro' # Allow Traefik to talk to Docker
+    networks:
+      - web
+  landing:
+    build:
+      context: './landing'
+      dockerfile: 'Dockerfile'
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      RAILS_ENV: production
+      PORT: 3000
+      RAILS_LOG_TO_STDOUT: '1'
+      RAILS_SERVE_STATIC_FILES: '1'
+      RAILS_FORCE_SSL: ${RAILS_FORCE_SSL:-false}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+      DEU_SEED_PASSWORD: ${DEU_SEED_PASSWORD:-123123}
+      DEU_SUPER_ADMIN_EMAILS: ${DEU_SUPER_ADMIN_EMAILS:-danielito.moros03@gmail.com}
+    command: ['./bin/rails', 'server', '-b', '0.0.0.0', '-p', '3000']
+    volumes:
+      - landing_storage:/rails/storage
     labels:
-      - traefik.enable=true
-      - traefik.http.routers.reservas-api.rule=Host(`api.tu-dominio.com`)
-      - traefik.http.routers.reservas-api.entrypoints=websecure
-      - traefik.http.routers.reservas-api.tls=true
-      - traefik.http.services.reservas-api.loadbalancer.server.port=3000
-
-  frontend:
+      - 'traefik.enable=true' # Enable Traefik for this service
+      - 'traefik.http.routers.landing.rule=Host(`extension.ucv.ve`)' # Route based on hostname
+      - 'traefik.http.routers.landing.entrypoints=web' # Use the web entrypoint
+      - 'traefik.http.services.landing.loadbalancer.server.port=80' # Target container's port
+    networks:
+      - web
+  diplomados:
+    build:
+      context: './diplomados'
+      dockerfile: 'Dockerfile'
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - db
     labels:
-      - traefik.enable=true
-      - traefik.http.routers.reservas-web.rule=Host(`tu-dominio.com`)
-      - traefik.http.routers.reservas-web.entrypoints=websecure
-      - traefik.http.routers.reservas-web.tls=true
-      - traefik.http.services.reservas-web.loadbalancer.server.port=8080
+      - 'traefik.enable=true' # Enable Traefik for this service
+      - 'traefik.http.routers.formacion.rule=Host(`formacion.extension.ucv.ve`)' # Route based on hostname
+      - 'traefik.http.routers.formacion.entrypoints=web' # Use the web entrypoint
+      - 'traefik.http.services.formacion.loadbalancer.server.port=80' # Target container's port
+    networks:
+      - web
+  grupos:
+    build:
+      context: './grupos/gsu_ucv'
+      dockerfile: 'Dockerfile'
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - db
+    labels:
+      - 'traefik.enable=true' # Enable Traefik for this service
+      - 'traefik.http.routers.grupos.rule=Host(`grupos.extension.ucv.ve`)' # Route based on hostname
+      - 'traefik.http.routers.grupos.entrypoints=web' # Use the web entrypoint
+      - 'traefik.http.services.grupos.loadbalancer.server.port=80' # Target container's port
+    networks:
+      - web
+  backend:
+    build:
+      context: './backend'
+      dockerfile: 'Dockerfile'
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - ${HTTP_SERVE_PORT}:${HTTP_SERVE_PORT}
+    env_file:
+      - .env
+    secrets:
+      - b2_key_id
+      - b2_application_key
+    links:
+      - 'db'
+    labels:
+      - 'traefik.enable=false'
+      - 'traefik.http.routers.backend.rule=Host(`api.extension.ucv.ve`)'
+      - 'traefik.http.routers.backend.entrypoints=web' # Use the web entrypoint
+      - 'traefik.http.services.backend.loadbalancer.server.port=80' # Target container's port
+    networks:
+      - web
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgresql:/docker-entrypoint-initdb.d
+    env_file:
+      - .env
+    networks:
+      - web
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $POSTGRES_USER -d $POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  espacios-db:
+    image: postgres:18
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      TZ: ${TZ:-America/Caracas}
+      PGTZ: ${TZ:-America/Caracas}
+    volumes:
+      - espacios_postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${DB_USER} -d $${DB_NAME}']
+      interval: 5s
+      timeout: 5s
+      retries: 8
+    networks:
+      - web
 
+  espacios-backend:
+    build:
+      context: './espacios-universitarios/backend'
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: 3000
+      DB_HOST: espacios-db
+      DB_PORT: 5432
+      TZ: ${TZ:-America/Caracas}
+      NODE_ENV: production
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://${APP_DOMAIN},http://${APP_DOMAIN}}
+    volumes:
+      - espacios_uploads:/app/uploads
+    depends_on:
+      espacios-db:
+        condition: service_healthy
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.espacios-api.rule=Host(`${APP_DOMAIN}`) && (PathPrefix(`/api`) || PathPrefix(`/uploads`))'
+      - 'traefik.http.routers.espacios-api.entrypoints=web'
+      - 'traefik.http.services.espacios-api.loadbalancer.server.port=3000'
+    networks:
+      - web
+
+  espacios-frontend:
+    build:
+      context: './espacios-universitarios/frontend'
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+        VITE_MEDIA_BASE_URL: /
+    restart: unless-stopped
+    depends_on:
+      - espacios-backend
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.espacios-web.rule=Host(`${APP_DOMAIN}`)'
+      - 'traefik.http.routers.espacios-web.entrypoints=web'
+      - 'traefik.http.services.espacios-web.loadbalancer.server.port=80'
+    networks:
+      - web
+volumes:
+  postgres_data:
+  landing_storage:
+  espacios_postgres_data:
+  espacios_uploads:
 networks:
-  app-network:
-    external: false
+  web:
+    driver: bridge
+secrets:
+  b2_key_id:
+    file: ./secrets/b2_key_id
+  b2_application_id:
+    file: ./secrets/b2_application_id
