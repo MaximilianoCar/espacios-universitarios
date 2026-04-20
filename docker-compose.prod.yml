@@ -61,7 +61,7 @@ services:
       DB_PORT: 5432
       TZ: ${TZ:-America/Caracas}
       NODE_ENV: production
-      ALLOWED_ORIGINS: https://${APP_DOMAIN}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://${APP_DOMAIN},http://${APP_DOMAIN}}
     volumes:
       - uploads-data:/app/uploads
     depends_on:
