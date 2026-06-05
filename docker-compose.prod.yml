@@ -98,29 +98,6 @@ services:
     networks:
       - web
 
-  espaciosuniversitarios-db-backup:
-    image: postgres:18-alpine
-    container_name: reservas-postgres-backup
-    restart: unless-stopped
-    depends_on:
-      espaciosuniversitarios-db:
-        condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      DB_HOST: espaciosuniversitarios-db
-      DB_PORT: 5432
-      BACKUP_DIR: /backups
-      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
-      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
-      TZ: ${TZ:-America/Caracas}
-    volumes:
-      - db-backups:/backups
-      - ./scripts/backup/backup.sh:/backup/backup.sh:ro
-    command: sh /backup/backup.sh
-    networks:
-      - web
-
 networks:
   web:
     driver: bridge
