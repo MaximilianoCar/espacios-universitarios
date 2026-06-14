@@ -8,10 +8,12 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import HeroSection from '../components/HeroSection';
 import Modal from '../components/Modal';
+import Modal2 from '../components/Modal2';
 import ModalMobile from '../components/ModalMobile';
 import RequestUpgradeForm from '../components/RequestUpgradeForm';
 import CompleteExternalUserForm from '../components/CompleteExternalUserForm';
 import MenuCard from '../components/MenuCard';
+import EntitiesModal from '../components/EntitiesModal';
 import { usePendingReservations } from '../hooks/usePendingReservations';
 import { usePendingUsers } from '../hooks/usePendingUsers';
 import { useUserEventsCount } from '../hooks/useUserEventsCount';
@@ -45,6 +47,7 @@ const HomePage = () => {
   // Estado para controlar el modal de completar información de usuario externo
   const [showCompleteExternalModal, setShowCompleteExternalModal] =
     useState(false);
+  const [showEntitiesModal, setShowEntitiesModal] = useState(false);
 
   // Estado para detectar si es móvil
   const [isMobile, setIsMobile] = useState(false);
@@ -157,6 +160,14 @@ const HomePage = () => {
         icon={<ClipboardDocumentListIcon className="w-12 h-12 text-blue-500" />}
         badgeCount={pendingUsersCount}
         badgeLoading={pendingUsersLoading}
+      />
+      <MenuCard
+        title="Gestión de Entidades"
+        description="Crear, editar y eliminar entidades (nombre y correo)."
+        onClick={() => setShowEntitiesModal(true)}
+        icon={<BuildingOfficeIcon className="w-12 h-12 text-blue-500" />}
+        isButton={true}
+        disabled={false}
       />
     </>
   );
@@ -316,6 +327,15 @@ const HomePage = () => {
     );
   };
 
+  const renderModal2 = (Component, props, onClose) => {
+    const ModalComponent = isMobile ? ModalMobile : Modal2;
+    return (
+      <ModalComponent onClose={onClose}>
+        <Component {...props} />
+      </ModalComponent>
+    );
+  };
+
   return (
     <div className="min-h-screen grid grid-rows-[auto_auto_1fr_auto] bg-gray-50">
       <Header />
@@ -353,6 +373,14 @@ const HomePage = () => {
       </div>
 
       <Footer />
+
+      {/* Modal de Entidades (solo admin) */}
+      {showEntitiesModal &&
+        renderModal2(
+          EntitiesModal,
+          { onClose: () => setShowEntitiesModal(false) },
+          () => setShowEntitiesModal(false)
+        )}
 
       {/* Modal para completar información de usuario externo */}
       {showCompleteExternalModal &&

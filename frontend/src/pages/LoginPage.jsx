@@ -75,7 +75,7 @@ const LoginPage = () => {
                 Inicio de Sesión
               </h2>
               <p className="text-gray-600">
-                Accede a tu cuenta para gestionar tus reservas
+                Registrate o inicia sesión para reservar espacios
               </p>
             </div>
 

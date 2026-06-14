@@ -21,10 +21,12 @@ const Header = () => {
 
   // Obtener datos del usuario y autenticación del estado de Redux
   const { user, role, isAuthenticated } = useSelector(state => state.auth);
-  const showSpacesLink = role !== 'visitor' && role !== 'pending';
-
-  // Verificar si estamos en la página de login
+  // Mostrar enlace a Espacios: también para usuarios no autenticados
   const isLoginPage = location.pathname === '/login';
+  const showSpacesLink =
+    isLoginPage ||
+    !isAuthenticated ||
+    (role && role !== 'visitor' && role !== 'pending');
 
   // Manejar el cierre de sesión
   const handleLogout = () => {
@@ -73,32 +75,32 @@ const Header = () => {
           </span>
         </button>
 
-        {/* Menú de escritorio*/}
-        {isAuthenticated && (
-          <div className="hidden md:flex absolute left-1/2 transform -translate-x-1/2 space-x-8">
-            {/* Eventos */}
-            <Link to="/events" className={getNavLinkClasses('/events')}>
-              <FaCalendarAlt className="mr-2" />
-              Eventos
+        {/* Menú de escritorio: siempre mostrar enlaces (Panel solo si autenticado) */}
+        <div className="hidden md:flex absolute left-1/2 transform -translate-x-1/2 space-x-8">
+          {/* Eventos */}
+          <Link to="/events" className={getNavLinkClasses('/events')}>
+            <FaCalendarAlt className="mr-2" />
+            Eventos
+          </Link>
+
+          {/* Espacios (condicional) */}
+          {showSpacesLink && (
+            <Link to="/rooms" className={getNavLinkClasses('/rooms')}>
+              <FaDoorOpen className="mr-2" />
+              Espacios
             </Link>
+          )}
 
-            {/* Espacios (condicional) */}
-            {showSpacesLink && (
-              <Link to="/rooms" className={getNavLinkClasses('/rooms')}>
-                <FaDoorOpen className="mr-2" />
-                Espacios
-              </Link>
-            )}
-
-            {/* Panel */}
+          {/* Panel (solo para usuarios autenticados) */}
+          {isAuthenticated && (
             <Link to="/home" className={getNavLinkClasses('/home')}>
               <FaHome className="mr-2" />
               Panel
             </Link>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* cierre de sesión */}
+        {/* cierre de sesión y toggle móvil */}
         <div className="ml-auto flex items-center">
           {isAuthenticated ? (
             <>
@@ -109,14 +111,6 @@ const Header = () => {
               >
                 <FaSignOutAlt className="mr-2" />
                 <span className="font-semibold">Cerrar Sesión</span>
-              </button>
-
-              {/* Botón del menú móvil */}
-              <button
-                className="md:hidden text-white p-2 ml-2 transition-transform duration-300 hover:scale-110"
-                onClick={() => setMenuOpen(!menuOpen)}
-              >
-                {menuOpen ? <FaTimes size={20} /> : <FaBars size={20} />}
               </button>
             </>
           ) : (
@@ -130,43 +124,51 @@ const Header = () => {
               </Link>
             )
           )}
+
+          {/* Botón del menú móvil (siempre disponible) */}
+          <button
+            className="md:hidden text-white p-2 ml-2 transition-transform duration-300 hover:scale-110"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            {menuOpen ? <FaTimes size={20} /> : <FaBars size={20} />}
+          </button>
         </div>
       </div>
 
-      {/* Menú móvil - solo se muestra si está autenticado y el menú esta abierto */}
-      {isAuthenticated && (
-        <div
-          className={`md:hidden bg-[#3969B1] transition-all duration-300 ease-in-out ${
-            menuOpen
-              ? 'max-h-96 opacity-100'
-              : 'max-h-0 opacity-0 overflow-hidden'
-          }`}
-        >
-          <div className="py-2 border-t border-white/20">
+      {/* Menú móvil - siempre disponible (links dentro pueden variar según auth) */}
+      <div
+        className={`md:hidden bg-[#3969B1] transition-all duration-300 ease-in-out ${
+          menuOpen
+            ? 'max-h-96 opacity-100'
+            : 'max-h-0 opacity-0 overflow-hidden'
+        }`}
+      >
+        <div className="py-2 border-t border-white/20">
+          <Link
+            to="/events"
+            className={`flex items-center px-6 py-3 text-white font-medium transition-all duration-300 hover:bg-white/10 hover:translate-x-2 ${
+              isActivePath('/events') ? 'bg-white/20 font-bold' : ''
+            }`}
+            onClick={() => setMenuOpen(false)}
+          >
+            <FaCalendarAlt className="mr-3" />
+            Eventos
+          </Link>
+
+          {showSpacesLink && (
             <Link
-              to="/events"
+              to="/rooms"
               className={`flex items-center px-6 py-3 text-white font-medium transition-all duration-300 hover:bg-white/10 hover:translate-x-2 ${
-                isActivePath('/events') ? 'bg-white/20 font-bold' : ''
+                isActivePath('/rooms') ? 'bg-white/20 font-bold' : ''
               }`}
               onClick={() => setMenuOpen(false)}
             >
-              <FaCalendarAlt className="mr-3" />
-              Eventos
+              <FaDoorOpen className="mr-3" />
+              Espacios
             </Link>
+          )}
 
-            {showSpacesLink && (
-              <Link
-                to="/rooms"
-                className={`flex items-center px-6 py-3 text-white font-medium transition-all duration-300 hover:bg-white/10 hover:translate-x-2 ${
-                  isActivePath('/rooms') ? 'bg-white/20 font-bold' : ''
-                }`}
-                onClick={() => setMenuOpen(false)}
-              >
-                <FaDoorOpen className="mr-3" />
-                Espacios
-              </Link>
-            )}
-
+          {isAuthenticated && (
             <Link
               to="/home"
               className={`flex items-center px-6 py-3 text-white font-medium transition-all duration-300 hover:bg-white/10 hover:translate-x-2 ${
@@ -177,7 +179,9 @@ const Header = () => {
               <FaHome className="mr-3" />
               Panel
             </Link>
+          )}
 
+          {isAuthenticated ? (
             <button
               onClick={() => {
                 handleLogout();
@@ -188,9 +192,21 @@ const Header = () => {
               <FaSignOutAlt className="mr-3" />
               Cerrar Sesión
             </button>
-          </div>
+          ) : (
+            // Si no está autenticado, mostrar enlace a login en el menú móvil (salvo en /login)
+            !isLoginPage && (
+              <Link
+                to="/login"
+                className="flex items-center px-6 py-3 text-white font-medium transition-all duration-300 hover:bg-white/10 hover:translate-x-2"
+                onClick={() => setMenuOpen(false)}
+              >
+                <FaSignOutAlt className="mr-3" />
+                Iniciar Sesión
+              </Link>
+            )
+          )}
         </div>
-      )}
+      </div>
     </nav>
   );
 };
