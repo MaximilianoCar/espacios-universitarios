@@ -25,11 +25,11 @@ router.post(
   roomController.createRoom
 );
 
-// Obtener todas las salas
-router.get('/rooms', protect, roomController.getRooms);
+// Obtener todas las salas - pública
+router.get('/rooms', roomController.getRooms);
 
-// Obtener una sala por ID
-router.get('/rooms/:id', protect, roomController.getRoomById);
+// Obtener una sala por ID - pública
+router.get('/rooms/:id', roomController.getRoomById);
 
 // Actualizar una sala existente con imagen
 router.put(

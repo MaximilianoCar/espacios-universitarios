@@ -111,23 +111,9 @@ function App() {
             }
           />
 
-          <Route
-            path="/events"
-            element={
-              <ProtectedRoute>
-                <EventsPage />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/events" element={<EventsPage />} />
 
-          <Route
-            path="/events/:id"
-            element={
-              <ProtectedRoute>
-                <EventDetailsPage />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/events/:id" element={<EventDetailsPage />} />
 
           <Route
             path="/my-user"
@@ -147,23 +133,9 @@ function App() {
             }
           />
 
-          <Route
-            path="/rooms"
-            element={
-              <ProtectedRoute>
-                <RoomsPage />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/rooms" element={<RoomsPage />} />
 
-          <Route
-            path="/rooms/:id"
-            element={
-              <ProtectedRoute>
-                <RoomDetailsPage />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/rooms/:id" element={<RoomDetailsPage />} />
 
           {/* Rutas para REQUESTER (y admin/coord) */}
           <Route

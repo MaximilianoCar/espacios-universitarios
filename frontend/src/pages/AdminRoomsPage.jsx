@@ -6,6 +6,8 @@ import {
   selectRooms,
   selectRoomsLoading,
   selectRoomsLastFetched,
+  invalidateRooms,
+  //updateRoom as updateRoomThunk,
 } from '../features/rooms/roomsSlice';
 import {
   FaEdit,
@@ -48,9 +50,13 @@ const AdminRoomsPage = () => {
   const loading = useSelector(selectRoomsLoading);
   const lastFetched = useSelector(selectRoomsLastFetched);
 
+  const totalPages = useSelector(state => state.rooms.totalPages);
+  const totalRooms = useSelector(state => state.rooms.totalRooms);
+  const pageSize = useSelector(state => state.rooms.pageSize);
+
   const [filteredRooms, setFilteredRooms] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
   const [currentSearch, setCurrentSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
 
   // para modales
   const [showDataModal, setShowDataModal] = useState(false);
@@ -92,10 +98,13 @@ const AdminRoomsPage = () => {
 
   // Obtener las salas desde Redux
   useEffect(() => {
-    if (!lastFetched) {
-      dispatch(fetchRooms());
-    }
-    // Detectar tamaño de pantalla
+    dispatch(
+      fetchRooms({ page: currentPage, pageSize, search: currentSearch })
+    );
+  }, [dispatch, currentPage, currentSearch, pageSize]);
+
+  // Detectar tamaño de pantalla
+  useEffect(() => {
     const checkScreenSize = () => {
       setIsMobile(window.innerWidth < 1024);
     };
@@ -104,7 +113,7 @@ const AdminRoomsPage = () => {
     window.addEventListener('resize', checkScreenSize);
 
     return () => window.removeEventListener('resize', checkScreenSize);
-  }, [dispatch, lastFetched]);
+  }, []);
 
   useEffect(() => {
     setFilteredRooms(rooms);
@@ -121,23 +130,39 @@ const AdminRoomsPage = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openMenuId]);
 
+  const handleRoomCreated = () => {
+    // Invalidar caché para forzar datos frescos (opcional pero recomendado)
+    dispatch(invalidateRooms());
+    // Recargar los espacios con la página, tamaño y búsqueda actuales
+    dispatch(
+      fetchRooms({
+        page: currentPage,
+        pageSize: pageSize,
+        search: currentSearch,
+      })
+    );
+    // Cerrar el modal
+    setShowCreateRoomModal(false);
+  };
+
+  const handleRoomUpdated = () => {
+    // Forzar la recarga de los datos del servidor
+    dispatch(
+      fetchRooms({
+        page: currentPage,
+        pageSize,
+        search: currentSearch,
+      })
+    );
+    setShowUpdateRoomModal(false);
+    setSelectedRoom(null);
+  };
+
   // Manejar el cambio en el término de búsqueda
   const handleSearch = term => {
-    setSearchTerm(term);
-    setCurrentSearch(term);
-
-    const filtered = rooms.filter(room => {
-      const lowerCaseTerm = term.toLowerCase();
-      const searchableFields = `${room.name} ${room.description} ${
-        room.location
-      } ${room.staffowner} ${
-        room.dependencies?.map(d => d.name).join(' ') || ''
-      } ${room.cost || ''}`.toLowerCase();
-
-      return searchableFields.includes(lowerCaseTerm);
-    });
-
-    setFilteredRooms(filtered);
+    // Búsqueda por servidor: actualizar estado y reiniciar página
+    setCurrentSearch(term || '');
+    setCurrentPage(1);
   };
 
   // Manejar la eliminación de una sala
@@ -177,6 +202,14 @@ const AdminRoomsPage = () => {
         '¡Eliminada!',
         `La sala "${roomName}" ha sido eliminada exitosamente.`,
         'success'
+      );
+      dispatch(invalidateRooms());
+      dispatch(
+        fetchRooms({
+          page: currentPage,
+          pageSize: pageSize,
+          search: currentSearch,
+        })
       );
     } catch (error) {
       console.error('Error al eliminar la sala:', error);
@@ -643,6 +676,33 @@ const AdminRoomsPage = () => {
             </div>
           )}
         </div>
+
+        {filteredRooms.length > 0 && (
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mt-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+            <p className="text-sm text-gray-600">
+              Mostrando {filteredRooms.length} de {totalRooms} espacios (Pág.{' '}
+              {currentPage} de {totalPages})
+            </p>
+            <div className="space-x-2">
+              <button
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <button
+                onClick={() =>
+                  setCurrentPage(Math.min(totalPages || 1, currentPage + 1))
+                }
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       <Footer />
 
@@ -814,9 +874,7 @@ const AdminRoomsPage = () => {
         <CreateRoomModal
           isOpen={showCreateRoomModal}
           onClose={() => setShowCreateRoomModal(false)}
-          onRoomCreated={() => {
-            setShowCreateRoomModal(false);
-          }}
+          onRoomCreated={handleRoomCreated}
         />
       )}
 
@@ -829,8 +887,7 @@ const AdminRoomsPage = () => {
           }}
           room={selectedRoom}
           onRoomUpdated={() => {
-            setShowUpdateRoomModal(false);
-            setSelectedRoom(null);
+            handleRoomUpdated();
           }}
         />
       )}

@@ -400,6 +400,38 @@ const AdminReservationsPage = () => {
             'La reserva ha sido aprobada exitosamente.',
             'success'
           );
+          // Preguntar si desea notificar a las entidades
+          try {
+            const entitiesResp = await axiosInstance.get('/entities');
+            const entities = Array.isArray(entitiesResp.data)
+              ? entitiesResp.data
+              : [];
+            const listHtml = entities.length
+              ? `<ul style="text-align:left; max-height:200px; overflow:auto;">${entities
+                  .map(e => `<li>${e.name} — ${e.email}</li>`)
+                  .join('')}</ul>`
+              : '<p>No hay entidades configuradas.</p>';
+
+            const notify = await Swal.fire({
+              title: '¿Enviar notificación a entidades?',
+              html: `<p>¿Deseas enviar una notificación a las entidades sobre esta aprobación?</p>${listHtml}`,
+              icon: 'question',
+              showCancelButton: true,
+              confirmButtonText: 'Enviar',
+              cancelButtonText: 'No enviar',
+            });
+
+            if (notify.isConfirmed) {
+              await axiosInstance.post(`/events/${eventId}/notify-entities`);
+              Swal.fire(
+                'Enviado',
+                'Notificación enviada a las entidades.',
+                'success'
+              );
+            }
+          } catch (err) {
+            console.warn('No se pudo notificar a entidades:', err);
+          }
         } catch (error) {
           console.error('Error updating event status:', error);
           Swal.fire(
@@ -498,6 +530,38 @@ const AdminReservationsPage = () => {
             'La reserva ha sido rechazada y se notificó al usuario.',
             'success'
           );
+          // Preguntar si desea notificar a las entidades sobre la cancelación
+          try {
+            const entitiesResp = await axiosInstance.get('/entities');
+            const entities = Array.isArray(entitiesResp.data)
+              ? entitiesResp.data
+              : [];
+            const listHtml = entities.length
+              ? `<ul style="text-align:left; max-height:200px; overflow:auto;">${entities
+                  .map(e => `<li>${e.name} — ${e.email}</li>`)
+                  .join('')}</ul>`
+              : '<p>No hay entidades configuradas.</p>';
+
+            const notify = await Swal.fire({
+              title: '¿Enviar notificación a entidades?',
+              html: `<p>¿Deseas enviar una notificación a las entidades sobre esta cancelación?</p>${listHtml}`,
+              icon: 'question',
+              showCancelButton: true,
+              confirmButtonText: 'Enviar',
+              cancelButtonText: 'No enviar',
+            });
+
+            if (notify.isConfirmed) {
+              await axiosInstance.post(`/events/${eventId}/notify-entities`);
+              Swal.fire(
+                'Enviado',
+                'Notificación enviada a las entidades.',
+                'success'
+              );
+            }
+          } catch (err) {
+            console.warn('No se pudo notificar a entidades:', err);
+          }
         } catch (error) {
           console.error('Error updating event status:', error);
           Swal.fire(

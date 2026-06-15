@@ -25,8 +25,8 @@ router.post(
   eventController.createEvent
 );
 
-// Obtener solo eventos aprobados (para usuarios normales)
-router.get('/events', protect, eventController.getApprovedEvents);
+// Obtener solo eventos aprobados (para usuarios normales) - pública
+router.get('/events', eventController.getApprovedEvents);
 
 // Rutas para admin: obtener todos los eventos (protegido)
 router.get(
@@ -51,8 +51,10 @@ router.get(
   eventController.getUserEventsCount
 );
 
-// Obtener un evento por ID
-router.get('/events/:eventId', protect, eventController.getEventById);
+// Obtener un evento por ID - pública
+router.get('/events/:eventId', eventController.getEventById);
+
+router.get('/events/my-event/:eventId', protect, eventController.getEventById);
 
 // Actualizar un evento existente con imagen
 router.put(
@@ -127,6 +129,14 @@ router.post(
   protect,
   restrictTo('admin', 'coordinator', 'requester'),
   eventController.checkConflictsPayload
+);
+
+// Endpoint para que el frontend pida notificar a las entidades sobre un evento
+router.post(
+  '/events/:eventId/notify-entities',
+  protect,
+  restrictTo('admin', 'coordinator'),
+  eventController.notifyEntitiesForEvent
 );
 
 // Subir banner opcional para el evento (carpeta uploads/events/banners)

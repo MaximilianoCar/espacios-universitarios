@@ -10,6 +10,7 @@ const userRoutes = require('./routes/userRoutes');
 const roomRoutes = require('./routes/roomRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const dependencyRoutes = require('./routes/dependencyRoutes');
+const entityRoutes = require('./routes/entityRoutes');
 
 const app = express();
 app.set('trust proxy', true);
@@ -94,5 +95,6 @@ app.use('/api', userRoutes);
 app.use('/api', roomRoutes);
 app.use('/api', eventRoutes);
 app.use('/api', dependencyRoutes);
+app.use('/api', entityRoutes);
 
 startServer();

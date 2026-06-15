@@ -738,28 +738,34 @@ exports.createEvent = async (req, res) => {
           attributes: ['id', 'name', 'email'],
         });
 
-        await emailService.notifyAllEntitiesApproval({
-          spaceName: roomNotificationData.roomName,
-          dependencyName: roomNotificationData.dependencyName,
-          contactName: creatorUser?.name || 'No disponible',
-          contactEmail: creatorUser?.email || 'No disponible',
-          contactRole: userRole === 'admin' ? 'Administrador' : 'Coordinador',
-          eventDescription: newEvent.description,
-          programPath: newEvent.programPath,
-          reservationFrom: newEvent.reservationFrom,
-          reservationTo: newEvent.reservationTo,
-          eventFrom: newEvent.eventFrom,
-          eventTo: newEvent.eventTo,
-          eventId: newEvent.id,
-          eventName: newEvent.name,
-          isRecurrent: recurringInfo.isRecurrent,
-          recurringDays: recurringInfo.recurringDays,
-          occurrencesCount: recurringInfo.occurrencesCount,
-        });
+        if (req.body && req.body.notifyEntities) {
+          await emailService.notifyAllEntitiesApproval({
+            spaceName: roomNotificationData.roomName,
+            dependencyName: roomNotificationData.dependencyName,
+            contactName: creatorUser?.name || 'No disponible',
+            contactEmail: creatorUser?.email || 'No disponible',
+            contactRole: userRole === 'admin' ? 'Administrador' : 'Coordinador',
+            eventDescription: newEvent.description,
+            programPath: newEvent.programPath,
+            reservationFrom: newEvent.reservationFrom,
+            reservationTo: newEvent.reservationTo,
+            eventFrom: newEvent.eventFrom,
+            eventTo: newEvent.eventTo,
+            eventId: newEvent.id,
+            eventName: newEvent.name,
+            isRecurrent: recurringInfo.isRecurrent,
+            recurringDays: recurringInfo.recurringDays,
+            occurrencesCount: recurringInfo.occurrencesCount,
+          });
 
-        console.log(
-          'Notificación de aprobación automática enviada a todas las entidades'
-        );
+          console.log(
+            'Notificación de aprobación automática enviada a todas las entidades'
+          );
+        } else {
+          console.log(
+            'notifyEntities flag no presente: omitiendo notificación a entidades (create).'
+          );
+        }
       } catch (approvalError) {
         console.error(
           'Error enviando notificación de aprobación automática a entidades:',
@@ -1722,8 +1728,12 @@ async function sendStatusNotifications(req, event, previousStatus, eventId) {
           `Notificación de estado (${req.body.status}) enviada a: ${user.email}`
         );
 
-        // Notificar a las entidades según el estado
-        if (req.body.status === Event.STATUS.APPROVED) {
+        // Notificar a las entidades según el estado (solo si el frontend pidió notifyEntities)
+        if (
+          req.body &&
+          req.body.notifyEntities &&
+          req.body.status === Event.STATUS.APPROVED
+        ) {
           try {
             await emailService.notifyAllEntitiesApproval({
               spaceName: roomName,
@@ -1758,6 +1768,8 @@ async function sendStatusNotifications(req, event, previousStatus, eventId) {
             );
           }
         } else if (
+          req.body &&
+          req.body.notifyEntities &&
           req.body.status === Event.STATUS.DENIED &&
           previousStatus === Event.STATUS.APPROVED
         ) {
@@ -2137,6 +2149,90 @@ exports.deleteEvent = async (req, res) => {
     }
 
     res.status(500).json({ error: 'Error al eliminar el evento.' });
+  }
+};
+
+// Endpoint: disparar notificación a entidades para un evento existente
+exports.notifyEntitiesForEvent = async (req, res) => {
+  try {
+    const eventId = req.params.eventId;
+    const event = await Event.findByPk(eventId, {
+      include: [{ model: EventSchedule, as: 'schedules' }],
+    });
+
+    if (!event)
+      return res.status(404).json({ message: 'Evento no encontrado.' });
+
+    const roomNotificationData = await getRoomNotificationData(event.roomId);
+    const recurringInfo = getRecurringInfoFromSchedules(event.schedules);
+
+    const actor = req.user?.id
+      ? await User.findByPk(req.user.id, {
+          attributes: ['id', 'name', 'email', 'role'],
+        })
+      : null;
+
+    if (event.status === Event.STATUS.APPROVED) {
+      await emailService.notifyAllEntitiesApproval({
+        spaceName: roomNotificationData.roomName,
+        dependencyName: roomNotificationData.dependencyName,
+        contactName: actor?.name || 'No disponible',
+        contactEmail: actor?.email || 'No disponible',
+        contactRole:
+          actor?.role === 'admin'
+            ? 'Administrador'
+            : actor?.role === 'coordinator'
+              ? 'Coordinador'
+              : 'No disponible',
+        eventDescription: event.description,
+        programPath: event.programPath,
+        reservationFrom: event.reservationFrom,
+        reservationTo: event.reservationTo,
+        eventFrom: event.eventFrom,
+        eventTo: event.eventTo,
+        eventId: event.id,
+        eventName: event.name,
+        isRecurrent: recurringInfo.isRecurrent,
+        recurringDays: recurringInfo.recurringDays,
+        occurrencesCount: recurringInfo.occurrencesCount,
+      });
+
+      return res.json({
+        success: true,
+        message: 'Notificación de aprobación encolada.',
+      });
+    }
+
+    // Si no está aprobado, consideramos una cancelación/denegación
+    await emailService.notifyAllEntitiesCancellation({
+      spaceName: roomNotificationData.roomName,
+      dependencyName: roomNotificationData.dependencyName,
+      contactName: actor?.name || 'No disponible',
+      contactEmail: actor?.email || 'No disponible',
+      contactRole:
+        actor?.role === 'admin'
+          ? 'Administrador'
+          : actor?.role === 'coordinator'
+            ? 'Coordinador'
+            : 'No disponible',
+      reservationFrom: event.reservationFrom,
+      reservationTo: event.reservationTo,
+      eventFrom: event.eventFrom,
+      eventTo: event.eventTo,
+      eventId: event.id,
+      eventName: event.name,
+      isRecurrent: recurringInfo.isRecurrent,
+      recurringDays: recurringInfo.recurringDays,
+      occurrencesCount: recurringInfo.occurrencesCount,
+    });
+
+    return res.json({
+      success: true,
+      message: 'Notificación de cancelación encolada.',
+    });
+  } catch (error) {
+    console.error('Error en notifyEntitiesForEvent:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 };
 

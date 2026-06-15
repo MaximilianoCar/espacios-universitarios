@@ -24,7 +24,7 @@ const PreviewEventPage = () => {
 
   useEffect(() => {
     axiosInstance
-      .get(`/events/${id}`)
+      .get(`/events/my-event/${id}`)
       .then(resp => {
         setEvent(resp.data);
         //console.log('trayendo evento', resp.data);

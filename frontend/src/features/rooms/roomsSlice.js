@@ -2,10 +2,20 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axiosInstance from '../../axiosConfig';
 
-export const fetchRooms = createAsyncThunk('rooms/fetchRooms', async () => {
-  const res = await axiosInstance.get('/rooms');
-  return res.data || [];
-});
+const buildQueryKey = ({ page = 1, pageSize = 12, search = '' } = {}) =>
+  `${page}|${pageSize}|${String(search || '')
+    .trim()
+    .toLowerCase()}`;
+
+export const fetchRooms = createAsyncThunk(
+  'rooms/fetchRooms',
+  async ({ page = 1, pageSize = 12, search = '' } = {}) => {
+    const res = await axiosInstance.get('/rooms', {
+      params: { page, pageSize, search },
+    });
+    return { ...(res.data || {}), query: { page, pageSize, search } };
+  }
+);
 
 export const createRoom = createAsyncThunk(
   'rooms/createRoom',
@@ -66,6 +76,11 @@ const roomsSlice = createSlice({
     loading: false,
     lastFetched: null,
     error: null,
+    totalRooms: 0,
+    totalPages: 1,
+    currentPage: 1,
+    pageSize: 12,
+    lastQueryKey: null,
   },
   reducers: {
     invalidateRooms(state) {
@@ -80,7 +95,19 @@ const roomsSlice = createSlice({
       })
       .addCase(fetchRooms.fulfilled, (state, action) => {
         state.loading = false;
-        state.items = action.payload;
+        const payload = action.payload || {};
+        const rooms = Array.isArray(payload.rooms)
+          ? payload.rooms
+          : Array.isArray(payload)
+            ? payload
+            : [];
+        state.items = rooms;
+        state.totalRooms = Number(payload.totalRooms || 0);
+        state.totalPages = Number(payload.totalPages || 1);
+        const query = payload.query || {};
+        state.currentPage = Number(query.page || 1);
+        state.pageSize = Number(query.pageSize || state.pageSize || 12);
+        state.lastQueryKey = buildQueryKey(query);
         state.lastFetched = Date.now();
       })
       .addCase(fetchRooms.rejected, (state, action) => {
@@ -109,5 +136,10 @@ export const { invalidateRooms } = roomsSlice.actions;
 export const selectRooms = state => state.rooms.items;
 export const selectRoomsLoading = state => state.rooms.loading;
 export const selectRoomsLastFetched = state => state.rooms.lastFetched;
+
+export const selectRoomsTotalPages = state => state.rooms.totalPages;
+export const selectRoomsTotalRooms = state => state.rooms.totalRooms;
+export const selectRoomsCurrentPage = state => state.rooms.currentPage;
+export const selectRoomsPageSize = state => state.rooms.pageSize;
 
 export default roomsSlice.reducer;

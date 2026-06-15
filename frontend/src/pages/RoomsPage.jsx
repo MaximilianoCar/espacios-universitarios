@@ -12,7 +12,7 @@ import {
 } from '../features/rooms/roomsSlice';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import SearchBar from '../components/SearchBar';
+import SearchBar from '../components/SearchBar2';
 import HeroSection from '../components/HeroSection';
 import AddRoomForm from '../components/AddRoomForm';
 import ManageDependenciesModal from '../components/ManageDependenciesModal';
@@ -37,12 +37,16 @@ import getMediaUrl from '../utils/media';
 const RoomsPage = () => {
   const rooms = useSelector(selectRooms);
   const loading = useSelector(selectRoomsLoading);
+  const totalPages = useSelector(state => state.rooms.totalPages);
+  const totalRooms = useSelector(state => state.rooms.totalRooms);
+  const pageSizeSelector = useSelector(state => state.rooms.pageSize);
   const [filteredRooms, setFilteredRooms] = useState([]);
   const dispatch = useDispatch();
   const [showAddRoomForm, setShowAddRoomForm] = useState(false);
   const [showManageDepsModal, setShowManageDepsModal] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const PAGE_SIZE = 12;
 
   // Obtener el rol del usuario desde Redux
   const { role } = useSelector(state => state.auth);
@@ -56,50 +60,45 @@ const RoomsPage = () => {
     }
   };
 
-  // Fetch rooms using Redux cache
-  const roomsLastFetched = useSelector(state => state.rooms.lastFetched);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [currentSearch, setCurrentSearch] = useState('');
+
+  // Fetch rooms según página/búsqueda
   useEffect(() => {
-    if (!roomsLastFetched) dispatch(fetchRooms());
-  }, [dispatch, roomsLastFetched]);
+    dispatch(
+      fetchRooms({
+        page: currentPage,
+        pageSize: pageSizeSelector || 12,
+        search: currentSearch,
+      })
+    );
+  }, [dispatch, currentPage, currentSearch, pageSizeSelector]);
 
   useEffect(() => {
     setFilteredRooms(rooms || []);
   }, [rooms]);
 
   const handleSearch = searchTerm => {
-    if (!searchTerm.trim()) {
-      setFilteredRooms(rooms);
-      return;
-    }
-
-    const lowerCaseTerm = searchTerm.toLowerCase();
-    const filtered = rooms.filter(
-      room =>
-        room.name.toLowerCase().includes(lowerCaseTerm) ||
-        room.description?.toLowerCase().includes(lowerCaseTerm) ||
-        room.location?.toLowerCase().includes(lowerCaseTerm)
-    );
-    setFilteredRooms(filtered);
+    setCurrentSearch(searchTerm || '');
+    setCurrentPage(1);
   };
 
   const handleAddRoom = () => {
     setShowAddRoomForm(true);
   };
 
-  const handleRoomCreated = async newRoom => {
-    // If AddRoomForm returns created room, optimistically add it via thunk
-    if (newRoom) {
-      try {
-        await dispatch(createRoomThunk(newRoom)).unwrap();
-      } catch (err) {
-        console.error('Error creating room:', err);
-      }
-    } else {
-      // force refetch if creation happened elsewhere
-      dispatch(invalidateRooms());
-      dispatch(fetchRooms());
-    }
-
+  const handleRoomCreated = () => {
+    // Invalidar caché para que el próximo fetch traiga datos frescos
+    dispatch(invalidateRooms());
+    // Recargar los espacios con la página, tamaño y búsqueda actuales
+    dispatch(
+      fetchRooms({
+        page: currentPage,
+        pageSize: pageSizeSelector,
+        search: currentSearch,
+      })
+    );
+    // Cerrar el formulario
     setShowAddRoomForm(false);
   };
 
@@ -210,8 +209,8 @@ const RoomsPage = () => {
         ) : (
           // Mostrar el buscador, los botones y las tarjetas
           <>
-            <div className="flex justify-between items-start mb-6">
-              <div className="flex items-center flex-wrap">
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4">
+              <div className="flex items-center flex-wrap w-full lg:w-auto">
                 <button
                   onClick={handleBack}
                   className="flex items-center text-gray-800 hover:text-gray-600 transition-colors mr-4 mb-3 lg:mb-0"
@@ -219,11 +218,8 @@ const RoomsPage = () => {
                 >
                   <FaArrowLeft size={24} />
                 </button>
-                <div className="min-w-[250px]">
-                  <SearchBar
-                    placeholder="Buscar espacios por nombre, descripción o ubicación..."
-                    onSearch={handleSearch}
-                  />
+                <div className="min-w-[250px] w-full lg:w-auto">
+                  <SearchBar placeholder="Buscar..." onSearch={handleSearch} />
                 </div>
               </div>
 
@@ -248,10 +244,41 @@ const RoomsPage = () => {
               )}
             </div>
 
-            {/* Indicador de resultados */}
-            {filteredRooms.length > 0 && (
-              <div className="mb-4 text-sm text-gray-600">
-                Mostrando {filteredRooms.length} de {rooms.length} espacios
+            {currentSearch && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex justify-between items-center gap-3">
+                  <p className="text-sm text-blue-700">
+                    Mostrando resultados para:{' '}
+                    <strong>"{currentSearch}"</strong>
+                    {filteredRooms.length > 0 && (
+                      <span className="ml-2 text-blue-600">
+                        ({filteredRooms.length} resultado
+                        {filteredRooms.length !== 1 ? 's' : ''})
+                      </span>
+                    )}
+                  </p>
+                  <button
+                    onClick={() => handleSearch('')}
+                    className="text-blue-500 hover:text-blue-700 underline text-sm font-medium"
+                  >
+                    Limpiar búsqueda
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {currentSearch && filteredRooms.length === 0 && !loading && (
+              <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-center">
+                <p className="text-yellow-700">
+                  No se encontraron resultados para:{' '}
+                  <strong>"{currentSearch}"</strong>
+                </p>
+                <button
+                  onClick={() => handleSearch('')}
+                  className="mt-2 text-yellow-600 hover:text-yellow-800 underline text-sm"
+                >
+                  Ver todos los espacios
+                </button>
               </div>
             )}
 
@@ -360,6 +387,32 @@ const RoomsPage = () => {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* PAGINACIÓN */}
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-3 mt-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+              <p className="text-sm text-gray-600">
+                Mostrando {filteredRooms.length} de {totalRooms} espacios (Pág.{' '}
+                {currentPage} de {totalPages})
+              </p>
+              <div className="space-x-2">
+                <button
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+                >
+                  Anterior
+                </button>
+                <button
+                  onClick={() =>
+                    setCurrentPage(Math.min(totalPages || 1, currentPage + 1))
+                  }
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  className="px-3 py-1 text-sm rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50"
+                >
+                  Siguiente
+                </button>
+              </div>
             </div>
 
             {/* Mensaje para administradores si no hay espacios */}

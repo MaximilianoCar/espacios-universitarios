@@ -180,59 +180,67 @@ exports.createRoom = async (req, res) => {
 
 exports.getRooms = async (req, res) => {
   try {
-    const userRole = req.user.role;
-    const userId = req.user.id;
+    const userRole = req.user && req.user.role ? req.user.role : 'visitor';
+    const userId = req.user && req.user.id ? req.user.id : null;
 
-    console.log('Usuario autenticado:', { userId, userRole });
+    // Paginación y búsqueda
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const pageSize = Math.max(1, parseInt(req.query.pageSize || '12', 10));
+    const search = (req.query.search || '').trim();
+    const offset = (page - 1) * pageSize;
 
-    let rooms;
+    const where = {};
+    if (search) {
+      // búsqueda en nombre, descripción y ubicación
+      where[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { description: { [Op.iLike]: `%${search}%` } },
+        { location: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
 
+    // Construir filtros por rol
     if (userRole === 'admin') {
-      rooms = await Room.findAll({
-        include: [
-          {
-            model: Dependency,
-            as: 'dependencies',
-            through: { attributes: [] },
-          },
-        ],
-        order: [['name', 'ASC']],
-      });
+      // sin filtros adicionales
     } else if (userRole === 'coordinator') {
-      // obtener dependencias que el coordinador maneja
-      const coordDeps = await CoordinatorDependencies.findAll({
-        where: { UserId: userId },
-      });
-      const dependencyIds = coordDeps.map(cd => cd.DependencyId);
-
-      if (dependencyIds.length === 0) {
-        rooms = [];
+      const allowedRoomIds = await getAllowedRoomIds(userId, userRole);
+      if (allowedRoomIds.length > 0) {
+        where.id = { [Op.in]: allowedRoomIds };
       } else {
-        // buscar salas que pertenezcan a esas dependencias
-        rooms = await Room.findAll({
-          include: [
-            {
-              model: Dependency,
-              as: 'dependencies',
-              where: { id: dependencyIds },
-              through: { attributes: [] },
-            },
-          ],
-          order: [['name', 'ASC']],
+        // no tiene salas asignadas
+        return res.json({
+          rooms: [],
+          totalRooms: 0,
+          totalPages: 0,
+          page,
+          pageSize,
         });
       }
     } else {
-      rooms = await Room.findAll({
-        include: [
-          {
-            model: Dependency,
-            as: 'dependencies',
-            through: { attributes: [] },
-          },
-        ],
-      });
+      // visitante: mostrar todas las salas públicas (mismo comportamiento previo)
+      // no añadimos restricciones adicionales aquí
     }
-    res.status(200).json(rooms);
+
+    const result = await Room.findAndCountAll({
+      where,
+      include: [
+        {
+          model: Dependency,
+          as: 'dependencies',
+          through: { attributes: [] },
+        },
+      ],
+      order: [['name', 'ASC']],
+      offset,
+      limit: pageSize,
+    });
+
+    const totalRooms = result.count || 0;
+    const totalPages = Math.max(0, Math.ceil(totalRooms / pageSize));
+
+    res
+      .status(200)
+      .json({ rooms: result.rows, totalRooms, totalPages, page, pageSize });
   } catch (error) {
     console.error('Error fetching rooms:', error);
     res.status(500).json({
@@ -245,12 +253,17 @@ exports.getRooms = async (req, res) => {
 
 exports.getRoomById = async (req, res) => {
   try {
-    const userRole = req.user.role;
-    const userId = req.user.id;
+    const userRole = req.user && req.user.role ? req.user.role : 'visitor';
+    const userId = req.user && req.user.id ? req.user.id : null;
     const roomId = req.params.id;
 
     // Verificar permisos
-    const hasPermission = await checkRoomPermission(userId, userRole, roomId);
+    // Si es visitante, permitimos el acceso público a la sala (detalles públicos)
+    let hasPermission = true;
+    if (userRole !== 'visitor') {
+      hasPermission = await checkRoomPermission(userId, userRole, roomId);
+    }
+
     if (!hasPermission) {
       return res.status(404).json({
         error: 'Sala no encontrada o no tienes permisos para acceder a ella.',

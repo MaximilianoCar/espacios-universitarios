@@ -35,6 +35,9 @@ const limiter = new Bottleneck({
   minTime: emailRateMs,
 });
 
+// Acceso a modelos
+const { Entity } = require('../models');
+
 const emailTemplates = {
   // Notificación para admins - Solicitud de upgrade a solicitante
   upgradeRequest: (userEmail, userName) => ({
@@ -727,9 +730,9 @@ class EmailService {
   // notificar a entidades sobre evento aprobado
   async notifyAllEntitiesApproval(notificationData) {
     try {
-      const entityEmails = this.getEntityEmails();
+      const entityEmails = await this.getEntityEmails();
 
-      if (entityEmails.length === 0) {
+      if (!Array.isArray(entityEmails) || entityEmails.length === 0) {
         console.log('No hay emails de entidades configurados');
         return {
           success: false,
@@ -765,9 +768,9 @@ class EmailService {
   // Notificar a todas las entidades sobre evento cancelado
   async notifyAllEntitiesCancellation(notificationData) {
     try {
-      const entityEmails = this.getEntityEmails();
+      const entityEmails = await this.getEntityEmails();
 
-      if (entityEmails.length === 0) {
+      if (!Array.isArray(entityEmails) || entityEmails.length === 0) {
         console.log('No hay emails de entidades configurados');
         return {
           success: false,
@@ -830,14 +833,17 @@ class EmailService {
   }
 
   // método auxiliar
-  getEntityEmails() {
-    return [
-      process.env.BomberosMail,
-      process.env.SeguridadMail,
-      process.env.mantenimientoMail,
-      process.env.JefeDeProtocoloMail,
-      process.env.COPREDMail,
-    ].filter(email => email && email.trim() !== ''); // Filtrar emails vacíos
+  async getEntityEmails() {
+    try {
+      const entities = await Entity.findAll({ attributes: ['email'] });
+      const emails = entities
+        .map(e => (e && e.email ? e.email.trim() : null))
+        .filter(email => email && email !== '');
+      return emails;
+    } catch (error) {
+      console.error('Error leyendo emails de entidades desde BD:', error);
+      return [];
+    }
   }
 
   // Notificar código de recuperación

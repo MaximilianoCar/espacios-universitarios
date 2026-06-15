@@ -298,7 +298,9 @@ const UpdateRoomModal = ({ isOpen, onClose, room, onRoomUpdated }) => {
     if (formData.imageFile) data.append('image', formData.imageFile);
 
     try {
-      await dispatch(updateRoomThunk({ id: room.id, data })).unwrap();
+      const updatedRoom = await dispatch(
+        updateRoomThunk({ id: room.id, data })
+      ).unwrap();
 
       Swal.fire({
         title: '¡Éxito!',
@@ -308,7 +310,7 @@ const UpdateRoomModal = ({ isOpen, onClose, room, onRoomUpdated }) => {
         showConfirmButton: false,
       });
 
-      if (onRoomUpdated) onRoomUpdated();
+      if (onRoomUpdated) onRoomUpdated(updatedRoom);
       onClose();
     } catch (error) {
       console.error('Error updating room:', error);

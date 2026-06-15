@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import axiosInstance from '../axiosConfig';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import Swal from '../utils/swal';
 import { createRequest } from '../features/requests/requestsSlice';
 import {
@@ -22,6 +22,7 @@ import {
 
 const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
   const dispatch = useDispatch();
+  const { role } = useSelector(state => state.auth);
   const [rooms, setRooms] = useState([]);
   const [loadingRooms, setLoadingRooms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -121,7 +122,8 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
     setLoadingRooms(true);
     try {
       const response = await axiosInstance.get('/rooms');
-      setRooms(response.data || []);
+      const roomsArray = response.data.rooms || [];
+      setRooms(roomsArray);
     } catch (error) {
       console.error('Error al cargar las salas:', error);
       Swal.fire({
@@ -896,6 +898,43 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
       // Notificar al componente padre para refrescar
       if (onReservationCreated) {
         onReservationCreated(createdEvent);
+      }
+
+      // Preguntar si desea notificar a las entidades (solo para admin/coordinator)
+      if (role === 'admin' || role === 'coordinator') {
+        try {
+          const entitiesResp = await axiosInstance.get('/entities');
+          const entities = Array.isArray(entitiesResp.data)
+            ? entitiesResp.data
+            : [];
+          const listHtml = entities.length
+            ? `<ul style="text-align:left; max-height:200px; overflow:auto;">${entities
+                .map(e => `<li>${e.name} — ${e.email}</li>`)
+                .join('')}</ul>`
+            : '<p>No hay entidades configuradas.</p>';
+
+          const notify = await Swal.fire({
+            title: 'Enviar notificación a entidades?',
+            html: `<p>¿Deseas enviar una notificación a las entidades sobre esta reserva?</p>${listHtml}`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Enviar',
+            cancelButtonText: 'No enviar',
+          });
+
+          if (notify.isConfirmed) {
+            await axiosInstance.post(
+              `/events/${createdEvent.id}/notify-entities`
+            );
+            Swal.fire(
+              'Enviado',
+              'Notificación enviada a las entidades.',
+              'success'
+            );
+          }
+        } catch (err) {
+          console.warn('No se pudo notificar a entidades tras crear:', err);
+        }
       }
 
       onClose();
