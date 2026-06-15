@@ -413,7 +413,7 @@ const AdminReservationsPage = () => {
               : '<p>No hay entidades configuradas.</p>';
 
             const notify = await Swal.fire({
-              title: 'Enviar notificación a entidades?',
+              title: '¿Enviar notificación a entidades?',
               html: `<p>¿Deseas enviar una notificación a las entidades sobre esta aprobación?</p>${listHtml}`,
               icon: 'question',
               showCancelButton: true,
@@ -543,7 +543,7 @@ const AdminReservationsPage = () => {
               : '<p>No hay entidades configuradas.</p>';
 
             const notify = await Swal.fire({
-              title: 'Enviar notificación a entidades?',
+              title: '¿Enviar notificación a entidades?',
               html: `<p>¿Deseas enviar una notificación a las entidades sobre esta cancelación?</p>${listHtml}`,
               icon: 'question',
               showCancelButton: true,

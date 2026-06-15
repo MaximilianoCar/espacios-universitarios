@@ -124,7 +124,7 @@ const EntitiesModal = ({ onClose }) => {
               name="name"
               value={form.name}
               onChange={handleChange}
-              placeholder="Ej. Juan Pérez"
+              placeholder="Ej. Seguridad"
               className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
               required
             />

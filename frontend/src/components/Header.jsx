@@ -83,13 +83,11 @@ const Header = () => {
             Eventos
           </Link>
 
-          {/* Espacios (condicional) */}
-          {showSpacesLink && (
-            <Link to="/rooms" className={getNavLinkClasses('/rooms')}>
-              <FaDoorOpen className="mr-2" />
-              Espacios
-            </Link>
-          )}
+          {/* Espacios  */}
+          <Link to="/rooms" className={getNavLinkClasses('/rooms')}>
+            <FaDoorOpen className="mr-2" />
+            Espacios
+          </Link>
 
           {/* Panel (solo para usuarios autenticados) */}
           {isAuthenticated && (

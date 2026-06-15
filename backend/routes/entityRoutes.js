@@ -8,7 +8,7 @@ const restrictTo = require('../middlewares/restrictTo');
 router.get(
   '/entities',
   protect,
-  restrictTo('admin'),
+  restrictTo('admin', 'coordinator'),
   entityController.getEntities
 );
 router.post(
