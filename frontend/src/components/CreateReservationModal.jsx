@@ -122,7 +122,8 @@ const CreateReservationModal = ({ isOpen, onClose, onReservationCreated }) => {
     setLoadingRooms(true);
     try {
       const response = await axiosInstance.get('/rooms');
-      setRooms(response.data || []);
+      const roomsArray = response.data.rooms || [];
+      setRooms(roomsArray);
     } catch (error) {
       console.error('Error al cargar las salas:', error);
       Swal.fire({

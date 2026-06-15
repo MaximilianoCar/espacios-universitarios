@@ -87,20 +87,18 @@ const RoomsPage = () => {
     setShowAddRoomForm(true);
   };
 
-  const handleRoomCreated = async newRoom => {
-    // If AddRoomForm returns created room, optimistically add it via thunk
-    if (newRoom) {
-      try {
-        await dispatch(createRoomThunk(newRoom)).unwrap();
-      } catch (err) {
-        console.error('Error creating room:', err);
-      }
-    } else {
-      // force refetch if creation happened elsewhere
-      dispatch(invalidateRooms());
-      dispatch(fetchRooms());
-    }
-
+  const handleRoomCreated = () => {
+    // Invalidar caché para que el próximo fetch traiga datos frescos
+    dispatch(invalidateRooms());
+    // Recargar los espacios con la página, tamaño y búsqueda actuales
+    dispatch(
+      fetchRooms({
+        page: currentPage,
+        pageSize: pageSizeSelector,
+        search: currentSearch,
+      })
+    );
+    // Cerrar el formulario
     setShowAddRoomForm(false);
   };
 

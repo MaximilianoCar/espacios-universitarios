@@ -6,6 +6,7 @@ import {
   selectRooms,
   selectRoomsLoading,
   selectRoomsLastFetched,
+  invalidateRooms,
   //updateRoom as updateRoomThunk,
 } from '../features/rooms/roomsSlice';
 import {
@@ -129,6 +130,21 @@ const AdminRoomsPage = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openMenuId]);
 
+  const handleRoomCreated = () => {
+    // Invalidar caché para forzar datos frescos (opcional pero recomendado)
+    dispatch(invalidateRooms());
+    // Recargar los espacios con la página, tamaño y búsqueda actuales
+    dispatch(
+      fetchRooms({
+        page: currentPage,
+        pageSize: pageSize,
+        search: currentSearch,
+      })
+    );
+    // Cerrar el modal
+    setShowCreateRoomModal(false);
+  };
+
   const handleRoomUpdated = () => {
     // Forzar la recarga de los datos del servidor
     dispatch(
@@ -186,6 +202,14 @@ const AdminRoomsPage = () => {
         '¡Eliminada!',
         `La sala "${roomName}" ha sido eliminada exitosamente.`,
         'success'
+      );
+      dispatch(invalidateRooms());
+      dispatch(
+        fetchRooms({
+          page: currentPage,
+          pageSize: pageSize,
+          search: currentSearch,
+        })
       );
     } catch (error) {
       console.error('Error al eliminar la sala:', error);
@@ -850,9 +874,7 @@ const AdminRoomsPage = () => {
         <CreateRoomModal
           isOpen={showCreateRoomModal}
           onClose={() => setShowCreateRoomModal(false)}
-          onRoomCreated={() => {
-            setShowCreateRoomModal(false);
-          }}
+          onRoomCreated={handleRoomCreated}
         />
       )}
 
