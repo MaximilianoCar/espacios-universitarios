@@ -46,7 +46,7 @@ const RoomsPage = () => {
   const [showManageDepsModal, setShowManageDepsModal] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const PAGE_SIZE = 2;
+  const PAGE_SIZE = 12;
 
   // Obtener el rol del usuario desde Redux
   const { role } = useSelector(state => state.auth);
@@ -68,7 +68,7 @@ const RoomsPage = () => {
     dispatch(
       fetchRooms({
         page: currentPage,
-        pageSize: pageSizeSelector || 2,
+        pageSize: pageSizeSelector || 12,
         search: currentSearch,
       })
     );
