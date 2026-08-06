@@ -5,6 +5,7 @@ const {
   Dependency,
   DependencyRooms,
 } = require('../models');
+const jwt = require('jsonwebtoken');
 const {
   ForeignKeyConstraintError,
   UniqueConstraintError,
@@ -13,6 +14,41 @@ const {
 const { Op } = require('sequelize');
 const path = require('path');
 const fs = require('fs/promises');
+
+const getRequestUser = req => {
+  if (req.user) {
+    console.error('[rooms:getRequestUser] usando req.user existente:', {
+      id: req.user.id,
+      role: req.user.role,
+    });
+    return req.user;
+  }
+
+  const authHeader = req.headers.authorization || '';
+  console.error('[rooms:getRequestUser] authHeader presente:', {
+    hasAuthHeader: Boolean(authHeader),
+    startsWithBearer: authHeader.startsWith('Bearer '),
+  });
+  if (!authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.error('[rooms:getRequestUser] token decodificado:', {
+      id: decoded.id,
+      role: decoded.role,
+    });
+    return decoded;
+  } catch (error) {
+    console.error(
+      '[rooms:getRequestUser] error verificando token:',
+      error.message
+    );
+    return null;
+  }
+};
 
 // Función auxiliar para verificar permisos
 const checkRoomPermission = async (userId, userRole, roomId) => {
@@ -48,6 +84,40 @@ const checkRoomPermission = async (userId, userRole, roomId) => {
   }
 
   return false;
+};
+
+const getAllowedRoomIds = async (userId, userRole) => {
+  if (userRole === 'admin') {
+    const allRooms = await Room.findAll({ attributes: ['id'] });
+    return allRooms.map(room => room.id);
+  }
+
+  if (userRole === 'coordinator') {
+    const coordDeps = await CoordinatorDependencies.findAll({
+      where: { UserId: userId },
+    });
+    const dependencyIds = coordDeps.map(cd => cd.DependencyId);
+
+    if (dependencyIds.length === 0) {
+      return [];
+    }
+
+    const rooms = await Room.findAll({
+      include: [
+        {
+          model: Dependency,
+          as: 'dependencies',
+          where: { id: dependencyIds },
+          through: { attributes: [] },
+        },
+      ],
+      attributes: ['id'],
+    });
+
+    return rooms.map(room => room.id);
+  }
+
+  return [];
 };
 
 exports.checkRoomPermission = async (req, res) => {
@@ -180,9 +250,19 @@ exports.createRoom = async (req, res) => {
 
 exports.getRooms = async (req, res) => {
   try {
-    const userRole = req.user && req.user.role ? req.user.role : 'visitor';
-    const userId = req.user && req.user.id ? req.user.id : null;
-
+    console.error('[rooms:getRooms] request recibida', {
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+      search: req.query.search,
+      hasAuthorization: Boolean(req.headers.authorization),
+    });
+    const user = getRequestUser(req);
+    const userRole = user && user.role ? user.role : 'visitor';
+    const userId = user && user.id ? user.id : null;
+    console.error('[rooms:getRooms] usuario resuelto', {
+      userRole,
+      userId,
+    });
     // Paginación y búsqueda
     const page = Math.max(1, parseInt(req.query.page || '1', 10));
     const pageSize = Math.max(1, parseInt(req.query.pageSize || '12', 10));
@@ -203,7 +283,11 @@ exports.getRooms = async (req, res) => {
     if (userRole === 'admin') {
       // sin filtros adicionales
     } else if (userRole === 'coordinator') {
+      console.error('[rooms:getRooms] coordinador detectado', {
+        userId,
+      });
       const allowedRoomIds = await getAllowedRoomIds(userId, userRole);
+      console.error('[rooms:getRooms] allowedRoomIds', allowedRoomIds);
       if (allowedRoomIds.length > 0) {
         where.id = { [Op.in]: allowedRoomIds };
       } else {
